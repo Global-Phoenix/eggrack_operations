@@ -1,0 +1,26 @@
+@model LoginViewModel
+@{ Layout = "_AccountLayout"; ViewData["Title"] = "安全登录"; }
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+            <img src="~/images/eggracks-logo.png" alt="Eggrack" height="48" class="mb-3" />
+            <h1 class="h4 mb-1">运营管理中心</h1>
+            <p class="text-secondary mb-0">使用内部人员账号登录</p>
+        </div>
+        <form method="post" asp-action="Login">
+            <input asp-for="ReturnUrl" type="hidden" />
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2" role="alert"></div>
+            <div class="mb-3">
+                <label asp-for="UserName" class="form-label"></label>
+                <input asp-for="UserName" class="form-control" autocomplete="username" autofocus />
+                <span asp-validation-for="UserName" class="text-danger small"></span>
+            </div>
+            <div class="mb-4">
+                <label asp-for="Password" class="form-label"></label>
+                <input asp-for="Password" class="form-control" autocomplete="current-password" />
+                <span asp-validation-for="Password" class="text-danger small"></span>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">登录</button>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,16 @@
+@model TwoFactorLoginViewModel
+@{ Layout = "_AccountLayout"; ViewData["Title"] = "双因素验证"; }
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-4 p-md-5">
+        <h1 class="h4">双因素验证</h1>
+        <p class="text-secondary">请输入身份验证器当前显示的 6 位动态验证码。</p>
+        <form method="post" asp-action="LoginWithTwoFactor">
+            <input asp-for="ReturnUrl" type="hidden" />
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2"></div>
+            <label asp-for="Code" class="form-label"></label>
+            <input asp-for="Code" class="form-control form-control-lg text-center font-monospace" inputmode="numeric" autocomplete="one-time-code" autofocus />
+            <span asp-validation-for="Code" class="text-danger small"></span>
+            <button class="btn btn-primary w-100 mt-4" type="submit">验证并登录</button>
+        </form>
+    </div>
+</div>
