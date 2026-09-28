@@ -1,0 +1,31 @@
+@model ModuleListPageViewModel
+@{ ViewData["Title"] = Model.Title; }
+@await Component.InvokeAsync("PageHeader", new { title = Model.Title, subtitle = Model.Subtitle, parentTitle = Model.ParentTitle, parentUrl = "/", statusText = "页面框架", statusTone = "warning", primaryText = Model.PrimaryText, primaryUrl = "#" })
+
+<section class="module-list-page" data-module-list>
+    <div class="ui-toolbar">
+        <label class="module-search"><i class="bi bi-search"></i><input class="form-control" type="search" data-search placeholder="@Model.SearchPlaceholder" /></label>
+        <select class="form-select module-status" data-status aria-label="状态筛选"><option value="">全部状态</option>@foreach (var status in Model.StatusOptions) { <option value="@status">@status</option> }</select>
+        <button class="btn btn-outline-secondary" type="button" data-reset><i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+        <span class="ms-auto small text-secondary" data-count></span>
+    </div>
+    <div class="ui-data-table">
+        <table class="table table-hover align-middle">
+            <thead><tr>@foreach (var column in Model.Columns) { <th style="@(column.Width is null ? null : $"width:{column.Width}")">@column.Title</th> }<th>状态</th><th class="text-end">操作</th></tr></thead>
+            <tbody>
+            @foreach (var row in Model.Rows) {
+                <tr data-row data-status="@row.Status" data-id="@row.Id">
+                    @foreach (var column in Model.Columns) { <td data-label="@column.Title">@(row.Values.TryGetValue(column.Key, out var value) ? value : "—")</td> }
+                    <td><span class="ui-status ui-status-@row.StatusTone"><i></i>@row.Status</span></td>
+                    <td><div class="module-actions"><button type="button" title="查看" data-detail><i class="bi bi-eye"></i></button><button type="button" title="编辑"><i class="bi bi-pencil"></i></button></div></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <div data-empty hidden>@await Component.InvokeAsync("EmptyState", new { title = "没有找到相关数据", description = "请调整搜索关键词或状态条件", icon = Model.Icon })</div>
+    </div>
+    <div class="ui-pagination"><span>前端页面框架数据</span><span>第 1 页</span></div>
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="moduleDetail"><div class="offcanvas-header border-bottom"><div><small class="text-secondary">@Model.ParentTitle</small><h5 class="offcanvas-title mt-1" data-detail-title>@Model.Title</h5></div><button class="btn-close" data-bs-dismiss="offcanvas"></button></div><div class="offcanvas-body" data-detail-body></div></div>
+</section>
+@section Styles { <link rel="stylesheet" href="~/css/pages/module-list.css" asp-append-version="true" /> }
+@section Scripts { <script src="~/js/pages/module-list.js" asp-append-version="true"></script> }
