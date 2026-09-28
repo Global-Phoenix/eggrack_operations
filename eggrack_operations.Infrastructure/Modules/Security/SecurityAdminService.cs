@@ -105,6 +105,56 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         }
     }
 
+    public async Task CreateStaffAsync(
+        string staffRef,
+        string staffName,
+        string email,
+        long roleId,
+        long? departmentId,
+        string operatorRef,
+        CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        var roles = await session.QueryAsync<RoleRule>(
+            "SELECT role_code Code FROM eggrack_auth_role WHERE id=@RoleId AND status=1",
+            new { RoleId = roleId }, cancellationToken: cancellationToken);
+        var role = roles.SingleOrDefault() ?? throw new InvalidOperationException("角色不存在或已停用");
+        var globalRole = role.Code is "super_admin" or "boss";
+        if (globalRole && departmentId.HasValue) throw new InvalidOperationException("全局角色不能指定部门");
+        if (!globalRole && !departmentId.HasValue) throw new InvalidOperationException("部门角色必须指定部门");
+
+        await session.BeginTransactionAsync(cancellationToken: cancellationToken);
+        try
+        {
+            const string insertStaff = """
+                INSERT INTO eggrack_auth_staff(staff_ref,staff_name,email,status,auth_version)
+                VALUES(@StaffRef,@StaffName,@Email,1,1)
+                """;
+            await session.ExecuteAsync(insertStaff, new { StaffRef = staffRef, StaffName = staffName, Email = email }, cancellationToken: cancellationToken);
+            var staffId = (await session.QueryAsync<InsertedId>(
+                "SELECT LAST_INSERT_ID() Id",
+                cancellationToken: cancellationToken)).Single().Id;
+            const string assignRole = """
+                INSERT INTO eggrack_auth_staff_role(staff_id,role_id,department_id,granted_by)
+                SELECT @StaffId,@RoleId,@DepartmentId,g.id
+                FROM eggrack_auth_staff g WHERE g.staff_ref=@OperatorRef
+                """;
+            if (await session.ExecuteAsync(assignRole, new { StaffId = staffId, RoleId = roleId, DepartmentId = departmentId, OperatorRef = operatorRef }, cancellationToken: cancellationToken) != 1)
+                throw new InvalidOperationException("无法识别当前操作人员");
+            await session.ExecuteAsync(
+                "INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.staff.create','staff',@TargetRef,@AfterData)",
+                new { OperatorRef = operatorRef, TargetRef = staffId.ToString(), AfterData = JsonSerializer.Serialize(new { staffName, email, roleId, departmentId }) },
+                cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await session.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     private sealed record RoleRule(string Code);
+    private sealed record InsertedId(long Id);
 }
 

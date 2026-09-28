@@ -3,7 +3,7 @@
 
 <div class="page-heading">
   <div><h1>人员权限</h1><p>将登录账号映射为内部人员，并按部门授予角色</p></div>
-  <a class="btn btn-outline-secondary" asp-action="Index">返回概览</a>
+  <div class="d-flex gap-2"><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createStaff">新增人员</button><a class="btn btn-outline-secondary" asp-action="Index">返回概览</a></div>
 </div>
 
 @if (TempData["Success"] is string success) { <div class="alert alert-success">@success</div> }
@@ -54,5 +54,24 @@
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="modal fade" id="createStaff" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <form asp-action="CreateStaff" method="post">
+      <div class="modal-header"><h2 class="modal-title fs-5">新增登录人员</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-6"><label class="form-label">用户名</label><input class="form-control" name="UserName" required autocomplete="off" /></div>
+          <div class="col-6"><label class="form-label">姓名</label><input class="form-control" name="StaffName" required /></div>
+          <div class="col-12"><label class="form-label">邮箱</label><input class="form-control" name="Email" type="email" required /></div>
+          <div class="col-12"><label class="form-label">初始密码</label><input class="form-control" name="Password" type="password" required autocomplete="new-password" /><div class="form-text">至少 12 位，包含大小写字母、数字和特殊字符。</div></div>
+          <div class="col-12"><label class="form-label">初始角色</label><select class="form-select" name="RoleId" required><option value="">请选择角色</option>@foreach (var role in Model.Roles) { <option value="@role.Id">@role.Name（@role.DefaultScope）</option> }</select></div>
+          <div class="col-12"><label class="form-label">所属部门</label><select class="form-select" name="DepartmentId"><option value="">全局（仅超级管理员、老板）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select></div>
+        </div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">创建账号</button></div>
+    </form>
+  </div></div>
 </div>
 
