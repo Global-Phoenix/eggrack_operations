@@ -24,46 +24,6 @@
     statusTone = "secondary"
 })
 
-<style>
-.file-center{--fc-accent:#e99523;--fc-border:#e5e8ed;display:grid;grid-template-columns:220px minmax(0,1fr);gap:14px}
-.fc-sidebar{align-self:start;overflow:hidden;border:1px solid var(--fc-border);border-radius:7px;background:#fff}
-.fc-sidebar-header{height:50px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf0f4;font-size:13px;font-weight:650}
-.fc-sidebar-header i{margin-right:7px;color:#8d96a3}
-.fc-category-list{padding:7px}
-.fc-category{width:100%;height:39px;padding:0 10px;display:flex;align-items:center;justify-content:space-between;border:0;border-radius:5px;background:transparent;color:#566171;text-align:left;font-size:12px}
-.fc-category:hover{background:#f6f7f9;color:#303b4b}
-.fc-category.active{background:#fff3df;color:#a55f0a;font-weight:650}
-.fc-category-name{display:flex;align-items:center;gap:9px}
-.fc-category-name i{font-size:14px}
-.fc-category small{min-width:22px;padding:1px 6px;border-radius:9px;background:#f0f2f5;color:#7f8996;text-align:center}
-.fc-category.active small{background:#fff;color:#a55f0a}
-.fc-content{min-width:0}
-.fc-tabs{height:47px;padding:0 12px;display:flex;align-items:end;gap:4px;border:1px solid var(--fc-border);border-bottom:0;border-radius:7px 7px 0 0;background:#fff}
-.fc-tab{height:46px;padding:0 13px;border:0;border-bottom:2px solid transparent;background:transparent;color:#747f8e;font-size:12px;font-weight:600}
-.fc-tab i{margin-right:6px}
-.fc-tab.active{border-color:var(--fc-accent);color:#a9620b}
-.fc-content .ui-toolbar{border-radius:0}
-.fc-policy{margin-left:auto;white-space:nowrap}
-.fc-file{display:flex;align-items:center;gap:10px;min-width:250px}
-.fc-file-icon{width:34px;height:38px;display:grid;place-items:center;border-radius:6px;background:#edf1f6;color:#647083;font-size:16px}
-.fc-file-icon.pdf{background:#feeeee;color:#ad4d4d}
-.fc-file-icon.xlsx{background:#e9f6ed;color:#2f8051}
-.fc-file-icon.docx{background:#eaf1fb;color:#4673b5}
-.fc-file-icon.zip{background:#f3eefb;color:#7459a5}
-.fc-file strong{display:block;font-size:12px;font-weight:650}
-.fc-file small,.file-center td small{display:block;margin-top:2px;color:#8a94a1;font-size:10px}
-.fc-state{padding:3px 7px;border-radius:10px;background:#eef2f6;color:#637083;font-size:10px}
-.fc-state.review{background:#fff1d8;color:#93600e}
-.fc-state.warning{background:#ffeded;color:#a84b4b}
-.fc-empty{display:none}
-.fc-preview{height:150px;margin:18px 0;display:grid;place-items:center;border:1px dashed #d1d6dd;border-radius:7px;background:#f8f9fb;color:#9aa2ad}
-.fc-preview i{display:block;margin-bottom:6px;font-size:30px;color:#b7bec7}
-.fc-meta{display:grid;grid-template-columns:96px 1fr;padding:11px 0;border-bottom:1px solid #edf0f3;font-size:12px}
-.fc-meta span{color:#7b8593}
-.file-center .offcanvas{--bs-offcanvas-width:420px}
-@@media(max-width:991.98px){.file-center{grid-template-columns:1fr}.fc-sidebar{display:flex;overflow:auto}.fc-sidebar-header{display:none}.fc-category-list{display:flex;gap:4px}.fc-category{width:auto;min-width:max-content}.fc-policy{margin-left:0}}
-@@media(max-width:575.98px){.fc-tabs{overflow:auto}.fc-tab{min-width:max-content}.file-center .ui-toolbar{padding:8px}.fc-policy{width:100%}}
-</style>
 
 <section class="file-center" data-file-center>
     <aside class="fc-sidebar">
@@ -128,6 +88,8 @@
         </div>
     </div>
 </section>
+
+@section Styles { <link rel="stylesheet" href="~/css/pages/file-center.css" asp-append-version="true" /> }
 
 @section Scripts {
 <script>
