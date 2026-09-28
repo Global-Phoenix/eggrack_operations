@@ -1,14 +1,20 @@
 @model eggrack_operations.ViewComponents.TopbarViewModel
 <header class="topbar">
-    <div class="workspace-tabs">
+    <div class="workspace-tabs" id="workspaceTabs" data-current-path="@Model.CurrentPath" data-current-title="@Model.Title">
         <button class="mobile-menu" id="mobileMenu" type="button" aria-label="打开导航"><i class="bi bi-list"></i></button>
-        <a class="workspace-tab home-tab" asp-controller="Home" asp-action="Index"><i class="bi bi-house-door"></i><span>首页</span></a>
-        <span class="tab-divider"></span>
-        <div class="workspace-tab active"><span>@Model.Title</span>@if (Model.Title != "工作台") { <button type="button" aria-label="关闭标签">×</button> }</div>
-        <button class="new-tab-button" type="button" aria-label="新建标签"><i class="bi bi-plus-lg"></i></button>
+        <a class="workspace-tab home-tab" data-home-tab href="/"><i class="bi bi-house-door"></i><span>首页</span></a>
+        <div class="dynamic-tabs" id="dynamicTabs">
+            @if (Model.CurrentPath != "/")
+            {
+                <a class="workspace-tab active" href="@Model.CurrentPath" data-tab-path="@Model.CurrentPath">
+                    <span>@Model.Title</span><button class="tab-close" type="button" aria-label="关闭 @Model.Title">×</button>
+                </a>
+            }
+        </div>
+        <button class="new-tab-button" type="button" aria-label="打开首页" title="打开首页"><i class="bi bi-plus-lg"></i></button>
     </div>
     <div class="topbar-actions">
-        <button class="assistant-button" type="button">AI助手</button>
+        <button class="assistant-button" type="button"><i class="bi bi-stars"></i> AI助手</button>
         <button class="topbar-link" type="button">新功能</button>
         <button class="icon-button" type="button" title="任务"><i class="bi bi-clock-history"></i><span class="notification-dot">@Model.TaskCount</span></button>
         <button class="icon-button" type="button" title="消息"><i class="bi bi-bell"></i><span class="notification-dot">@Model.MessageCount</span></button>

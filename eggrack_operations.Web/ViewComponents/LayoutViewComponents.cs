@@ -25,12 +25,13 @@ public sealed class NavigationViewComponent(NavigationService navigationService)
         RouteData.Values["action"]?.ToString()));
 }
 
-public sealed record TopbarViewModel(string Title, string DisplayName, int TaskCount, int MessageCount);
+public sealed record TopbarViewModel(string Title, string CurrentPath, string DisplayName, int TaskCount, int MessageCount);
 
 public sealed class TopbarViewComponent : ViewComponent
 {
     public IViewComponentResult Invoke(string? title = null) => View(new TopbarViewModel(
         title ?? "工作台",
+        HttpContext.Request.Path.Value ?? "/",
         User.Identity?.IsAuthenticated == true ? User.Identity.Name ?? "用户" : "管理员",
         0,
         0));
@@ -58,4 +59,6 @@ public sealed class ModuleGridViewComponent : ViewComponent
 
     public IViewComponentResult Invoke() => View(Modules);
 }
+
+
 
