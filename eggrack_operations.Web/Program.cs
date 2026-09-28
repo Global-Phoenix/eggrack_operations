@@ -1,5 +1,6 @@
 using Eggrack.Operations.Application.Navigation;
 using Eggrack.Operations.Infrastructure;
+using Eggrack.Operations.Infrastructure.Modules.Wholesale;
 using eggrack_operations.Areas.Security;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,6 +9,7 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 builder.Services.AddControllersWithViews();
 builder.Services.AddSingleton<NavigationService>();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddWholesaleProcurement();
 builder.Services.AddSecurityArea();
 builder.Services.AddHttpContextAccessor();
 
