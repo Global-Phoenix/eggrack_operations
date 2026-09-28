@@ -2,8 +2,8 @@
 <div class="module-grid">
     @foreach (var module in Model)
     {
-        <a href="#" class="module-card">
-            <span class="module-icon @module.Theme">@module.Code</span>
+        <a href="@module.Url" class="module-card">
+            <span class="module-icon @module.Theme"><i class="bi @module.Icon"></i></span>
             <strong>@module.Title</strong><small>@module.Description</small>
         </a>
     }
