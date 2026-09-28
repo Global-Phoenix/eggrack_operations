@@ -60,4 +60,21 @@
     save();
     render();
     tabsHost.querySelector('.new-tab-button')?.addEventListener('click', () => { window.location.href = '/'; });
+    const removeTabs = paths => {
+        const targets = new Set(paths.filter(path => path !== '/'));
+        const currentIndex = tabs.findIndex(tab => tab.path === currentPath);
+        const closesCurrent = targets.has(currentPath);
+        tabs = tabs.filter(tab => !targets.has(tab.path));
+        save();
+        if (closesCurrent) window.location.href = tabs[Math.max(0, currentIndex - 1)]?.path || tabs.at(-1)?.path || '/';
+        else render();
+    };
+    tabsHost.querySelectorAll('[data-tab-command]').forEach(button => button.addEventListener('click', () => {
+        const command = button.dataset.tabCommand;
+        if (command === 'refresh') return window.location.reload();
+        const currentIndex = tabs.findIndex(tab => tab.path === currentPath);
+        if (command === 'right') return removeTabs(tabs.slice(currentIndex + 1).map(tab => tab.path));
+        if (command === 'other') return removeTabs(tabs.filter(tab => tab.path !== currentPath).map(tab => tab.path));
+        if (command === 'all') return removeTabs(tabs.map(tab => tab.path));
+    }));
 })();
