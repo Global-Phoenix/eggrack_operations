@@ -5,6 +5,10 @@
     <ProjectReference Include="..\eggrack_operations.Infrastructure\eggrack_operations.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.15.0" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
