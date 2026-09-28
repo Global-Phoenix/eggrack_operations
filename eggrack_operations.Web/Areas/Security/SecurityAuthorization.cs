@@ -44,25 +44,26 @@ public sealed class InternalPermissionFilter(
     {
         if (context.HttpContext.User.Identity?.IsAuthenticated != true)
         {
-            context.Result = new ChallengeResult();
+            context.Result = new UnauthorizedResult();
             return;
         }
 
         var authorization = await currentStaff.LoadAsync(context.HttpContext.RequestAborted);
         if (authorization is null)
         {
-            context.Result = new ForbidResult();
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             return;
         }
 
         var decision = evaluator.Evaluate(authorization, permissionCode);
         if (!decision.Allowed)
         {
-            context.Result = new ForbidResult();
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             return;
         }
 
         context.HttpContext.Items["InternalAuthorization"] = decision;
     }
 }
+
 

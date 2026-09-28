@@ -7,7 +7,8 @@ public sealed record NavigationItem(
     string? Controller = null,
     string? Action = null,
     string? Permission = null,
-    IReadOnlyList<NavigationItem>? Children = null);
+    IReadOnlyList<NavigationItem>? Children = null,
+    string? Area = null);
 
 public sealed class NavigationService
 {
@@ -24,8 +25,8 @@ public sealed class NavigationService
         new("logs", "日志中心", "bi-journal-text", "Logs", "Index", "logs.view"),
         new("system", "系统管理", "bi-gear", Children:
         [
-            new("system.users", "用户管理", "bi-people", "Users", "Index", "system.user.view"),
-            new("system.roles", "角色权限", "bi-shield-lock", "Roles", "Index", "system.role.view"),
+            new("system.users", "用户管理", "bi-people", "Security", "Staff", "auth.staff.read", Area: "Security"),
+            new("system.roles", "角色权限", "bi-shield-lock", "Security", "Roles", "auth.role.read", Area: "Security"),
             new("system.menus", "菜单管理", "bi-menu-button-wide", "Menus", "Index", "system.menu.view"),
             new("system.email-templates", "邮件模板", "bi-envelope-paper", "EmailTemplates", "Index", "system.email-template.view")
         ])
@@ -33,3 +34,5 @@ public sealed class NavigationService
 
     public IReadOnlyList<NavigationItem> GetMainNavigation() => Items;
 }
+
+
