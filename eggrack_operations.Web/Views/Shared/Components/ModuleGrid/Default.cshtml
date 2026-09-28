@@ -1,0 +1,10 @@
+@model IReadOnlyList<eggrack_operations.ViewComponents.ModuleCard>
+<div class="module-grid">
+    @foreach (var module in Model)
+    {
+        <a href="#" class="module-card">
+            <span class="module-icon @module.Theme">@module.Code</span>
+            <strong>@module.Title</strong><small>@module.Description</small>
+        </a>
+    }
+</div>

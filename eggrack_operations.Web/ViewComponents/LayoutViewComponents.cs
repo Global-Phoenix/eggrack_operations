@@ -1,0 +1,61 @@
+using Eggrack.Operations.Application.Navigation;
+using Microsoft.AspNetCore.Mvc;
+
+namespace eggrack_operations.ViewComponents;
+
+public sealed record NavigationViewModel(
+    IReadOnlyList<NavigationItem> Items,
+    string? CurrentController,
+    string? CurrentAction)
+{
+    public bool IsActive(NavigationItem item) =>
+        string.Equals(item.Controller, CurrentController, StringComparison.OrdinalIgnoreCase) &&
+        (string.IsNullOrEmpty(item.Action) ||
+         string.Equals(item.Action, CurrentAction, StringComparison.OrdinalIgnoreCase));
+
+    public bool IsGroupActive(NavigationItem item) =>
+        item.Children?.Any(IsActive) == true;
+}
+
+public sealed class NavigationViewComponent(NavigationService navigationService) : ViewComponent
+{
+    public IViewComponentResult Invoke() => View(new NavigationViewModel(
+        navigationService.GetMainNavigation(),
+        RouteData.Values["controller"]?.ToString(),
+        RouteData.Values["action"]?.ToString()));
+}
+
+public sealed record TopbarViewModel(string Title, string DisplayName, int TaskCount, int MessageCount);
+
+public sealed class TopbarViewComponent : ViewComponent
+{
+    public IViewComponentResult Invoke(string? title = null) => View(new TopbarViewModel(
+        title ?? "工作台",
+        User.Identity?.IsAuthenticated == true ? User.Identity.Name ?? "用户" : "管理员",
+        0,
+        0));
+}
+
+public sealed class BreadcrumbViewComponent : ViewComponent
+{
+    public IViewComponentResult Invoke(string? title = null) => View("Default", title ?? "工作台");
+}
+
+public sealed record ModuleCard(string Code, string Title, string Description, string Theme);
+
+public sealed class ModuleGridViewComponent : ViewComponent
+{
+    private static readonly IReadOnlyList<ModuleCard> Modules =
+    [
+        new("批", "批发管理", "采购计划、批发订单", "orange"),
+        new("权", "权限管理", "用户、角色、权限", "blue"),
+        new("文", "文件中心", "上传、下载、归档", "green"),
+        new("任", "任务中心", "导入、导出、后台任务", "purple"),
+        new("志", "日志中心", "操作与异常追踪", "slate"),
+        new("单", "菜单管理", "动态菜单与排序", "cyan"),
+        new("邮", "邮件模板", "模板与变量配置", "red")
+    ];
+
+    public IViewComponentResult Invoke() => View(Modules);
+}
+

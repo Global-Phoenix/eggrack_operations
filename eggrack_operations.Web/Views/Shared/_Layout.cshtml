@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Eggrack 运营管理中心</title>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<div class="admin-shell" id="adminShell">
+    @await Component.InvokeAsync("Navigation")
+    <div class="main-panel">
+        @await Component.InvokeAsync("Topbar", new { title = ViewData["Title"]?.ToString() })
+        <main class="content-area">
+            @await Component.InvokeAsync("Breadcrumb", new { title = ViewData["Title"]?.ToString() })
+            @RenderBody()
+        </main>
+        <footer class="app-footer">Eggrack Operations · ASP.NET Core 8 MVC</footer>
+    </div>
+</div>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

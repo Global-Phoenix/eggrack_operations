@@ -1,0 +1,10 @@
+@model string
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb small mb-3">
+        <li class="breadcrumb-item"><a asp-controller="Home" asp-action="Index">首页</a></li>
+        @if (!string.Equals(Model, "工作台", StringComparison.Ordinal))
+        {
+            <li class="breadcrumb-item active" aria-current="page">@Model</li>
+        }
+    </ol>
+</nav>

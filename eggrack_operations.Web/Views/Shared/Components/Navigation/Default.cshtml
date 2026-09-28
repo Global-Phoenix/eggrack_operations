@@ -1,0 +1,38 @@
+@model eggrack_operations.ViewComponents.NavigationViewModel
+<aside class="sidebar" id="sidebar">
+    <a class="brand" asp-controller="Home" asp-action="Index">
+        <span class="brand-logo">E</span>
+        <span class="brand-text"><strong>eggracks</strong><small>运营管理中心</small></span>
+    </a>
+    <nav class="sidebar-nav" aria-label="主导航">
+        @foreach (var item in Model.Items)
+        {
+            if (item.Children is { Count: > 0 })
+            {
+                var groupId = $"nav-{item.Code.Replace('.', '-')}";
+                var groupActive = Model.IsGroupActive(item);
+                <button class="nav-group-toggle @(groupActive ? "active" : string.Empty)" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#@groupId" aria-expanded="@groupActive.ToString().ToLowerInvariant()">
+                    <span class="nav-symbol">@item.Title[..1]</span><span class="nav-label">@item.Title</span><span class="nav-chevron">›</span>
+                </button>
+                <div id="@groupId" class="collapse nav-children @(groupActive ? "show" : string.Empty)">
+                    @foreach (var child in item.Children)
+                    {
+                        <a class="nav-link @(Model.IsActive(child) ? "active" : string.Empty)" asp-controller="@child.Controller" asp-action="@child.Action">
+                            <span class="nav-dot"></span><span>@child.Title</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <a class="nav-link root-link @(Model.IsActive(item) ? "active" : string.Empty)" asp-controller="@item.Controller" asp-action="@item.Action">
+                    <span class="nav-symbol">@item.Title[..1]</span><span class="nav-label">@item.Title</span>
+                </a>
+            }
+        }
+    </nav>
+    <button class="sidebar-collapse" id="sidebarToggle" type="button" aria-label="收起或展开导航">
+        <span>‹</span><span class="nav-label">收起导航</span>
+    </button>
+</aside>

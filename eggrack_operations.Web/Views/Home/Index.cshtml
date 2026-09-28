@@ -1,0 +1,17 @@
+@{
+    ViewData["Title"] = "工作台";
+}
+<div class="page-heading">
+    <div><h1>运营工作台</h1><p>批发业务与系统运营的统一入口</p></div>
+    <span class="status-chip"><span></span> 系统运行正常</span>
+</div>
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card"><span>待处理任务</span><strong>0</strong><small>任务中心</small></div></div>
+    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card"><span>批发计划</span><strong>—</strong><small>数据库配置后显示</small></div></div>
+    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card"><span>文件数量</span><strong>0</strong><small>文件中心</small></div></div>
+    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card"><span>今日操作</span><strong>0</strong><small>日志中心</small></div></div>
+</div>
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white border-0 px-4 pt-4 pb-2"><h2 class="h5 mb-1">功能模块</h2><p class="text-secondary small mb-0">模块功能将在后续步骤逐项实现</p></div>
+    <div class="card-body p-4">@await Component.InvokeAsync("ModuleGrid")</div>
+</div>
