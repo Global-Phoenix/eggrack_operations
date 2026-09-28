@@ -31,10 +31,13 @@ public sealed class AccountController(
         if (!ModelState.IsValid)
             return View(model);
 
-        var user = await userManager.FindByNameAsync(model.UserName.Trim());
+        var login = model.UserName.Trim();
+        var user = login.Contains('@')
+            ? await userManager.FindByEmailAsync(login)
+            : await userManager.FindByNameAsync(login);
         if (user is null)
         {
-            ModelState.AddModelError(string.Empty, "用户名或密码不正确");
+            ModelState.AddModelError(string.Empty, "邮箱、用户名或密码不正确");
             return View(model);
         }
 
@@ -52,12 +55,9 @@ public sealed class AccountController(
 
         if (!result.Succeeded)
         {
-            ModelState.AddModelError(string.Empty, "用户名或密码不正确");
+            ModelState.AddModelError(string.Empty, "邮箱、用户名或密码不正确");
             return View(model);
         }
-
-        if (user.MustEnableTwoFactor || !await userManager.GetTwoFactorEnabledAsync(user))
-            return RedirectToAction(nameof(EnableAuthenticator));
 
         return LocalRedirect(SafeReturnUrl(model.ReturnUrl));
     }

@@ -4,8 +4,8 @@ namespace eggrack_operations.Models;
 
 public sealed class LoginViewModel
 {
-    [Required(ErrorMessage = "请输入用户名")]
-    [Display(Name = "用户名")]
+    [Required(ErrorMessage = "请输入邮箱或用户名")]
+    [Display(Name = "邮箱或用户名")]
     public string UserName { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "请输入密码")]

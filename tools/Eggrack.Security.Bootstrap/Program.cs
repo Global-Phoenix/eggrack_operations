@@ -44,7 +44,7 @@ var user = new InternalIdentityUser
     EmailConfirmed = true,
     DisplayName = arguments.DisplayName,
     StaffRef = $"bootstrap-{Guid.NewGuid():N}",
-    MustEnableTwoFactor = true,
+    MustEnableTwoFactor = false,
     LockoutEnabled = true
 };
 
@@ -107,7 +107,7 @@ catch (Exception exception)
 Console.WriteLine();
 Console.WriteLine("超级管理员创建成功。");
 Console.WriteLine($"用户名：{arguments.UserName}");
-Console.WriteLine("首次登录必须绑定 TOTP 双因素认证。");
+Console.WriteLine("可登录账户中心按需启用 TOTP 双因素认证。");
 return 0;
 
 static string ReadSecret(string prompt)
