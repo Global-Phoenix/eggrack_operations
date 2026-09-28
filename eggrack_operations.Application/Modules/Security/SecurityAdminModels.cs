@@ -1,0 +1,7 @@
+namespace Eggrack.Operations.Application.Modules.Security;
+
+public sealed record SecurityDashboard(int StaffCount, int EnabledStaffCount, int DepartmentCount, int RoleCount);
+public sealed record StaffListItem(long Id, string StaffRef, string StaffName, string? Email, bool IsEnabled, string Departments, string Roles);
+public sealed record RoleListItem(long Id, string Code, string Name, int Level, string DefaultScope, bool IsEnabled, int StaffCount, int PermissionCount);
+public sealed record DepartmentOption(long Id, string Name);
+

@@ -9,6 +9,7 @@ public static class SecurityModuleServices
     {
         services.AddSingleton<PermissionEvaluator>();
         services.AddScoped<StaffAuthorizationQuery>();
+        services.AddScoped<SecurityAdminService>();
         return services;
     }
 }

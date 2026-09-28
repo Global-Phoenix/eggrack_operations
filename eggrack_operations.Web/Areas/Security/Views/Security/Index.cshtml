@@ -1,0 +1,53 @@
+@model SecurityOverviewViewModel
+@{ ViewData["Title"] = "权限管理"; }
+
+<div class="page-heading">
+  <div><h1>权限管理</h1><p>统一管理内部人员、部门角色与业务数据范围</p></div>
+  <a class="btn btn-dark" asp-action="Staff">管理人员权限</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl-3"><div class="metric-card"><span>内部人员</span><strong>@Model.Dashboard.StaffCount</strong><small>已映射账号</small></div></div>
+  <div class="col-6 col-xl-3"><div class="metric-card"><span>启用人员</span><strong>@Model.Dashboard.EnabledStaffCount</strong><small>可参与授权</small></div></div>
+  <div class="col-6 col-xl-3"><div class="metric-card"><span>有效部门</span><strong>@Model.Dashboard.DepartmentCount</strong><small>组织数据范围</small></div></div>
+  <div class="col-6 col-xl-3"><div class="metric-card"><span>系统角色</span><strong>@Model.Dashboard.RoleCount</strong><small>五级内部角色</small></div></div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white border-0 p-4 d-flex justify-content-between align-items-center">
+        <div><h2 class="h5 mb-1">最近人员</h2><p class="text-secondary small mb-0">账号映射与当前角色概览</p></div>
+        <a asp-action="Staff" class="btn btn-sm btn-outline-secondary">查看全部</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light"><tr><th class="ps-4">人员</th><th>部门</th><th>角色</th><th>状态</th></tr></thead>
+          <tbody>
+          @foreach (var item in Model.RecentStaff) {
+            <tr><td class="ps-4"><strong>@item.StaffName</strong><div class="small text-secondary">@item.StaffRef</div></td>
+              <td>@item.Departments</td><td>@item.Roles</td>
+              <td><span class="badge @(item.IsEnabled ? "text-bg-success" : "text-bg-secondary")">@(item.IsEnabled ? "启用" : "停用")</span></td></tr>
+          }
+          @if (Model.RecentStaff.Count == 0) { <tr><td colspan="4" class="text-center text-secondary py-5">尚未映射内部人员</td></tr> }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-xl-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white border-0 p-4"><h2 class="h5 mb-1">角色层级</h2><p class="text-secondary small mb-0">数字越小，管理层级越高</p></div>
+      <div class="card-body pt-0">
+      @foreach (var role in Model.Roles) {
+        <div class="d-flex align-items-center gap-3 border rounded-3 p-3 mb-2">
+          <span class="badge rounded-pill text-bg-dark">@role.Level</span>
+          <div class="flex-grow-1"><strong>@role.Name</strong><div class="small text-secondary">@role.Code · @role.DefaultScope</div></div>
+          <span class="small text-secondary">@role.StaffCount 人</span>
+        </div>
+      }
+      </div>
+    </div>
+  </div>
+</div>
+
