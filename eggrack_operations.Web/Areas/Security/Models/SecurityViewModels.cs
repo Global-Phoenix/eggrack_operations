@@ -39,3 +39,16 @@ public sealed class CreateStaffAccountInput
     public long? DepartmentId { get; set; }
 }
 
+public sealed class SetStaffStatusInput
+{
+    public long StaffId { get; set; }
+    [Required] public string StaffRef { get; set; } = string.Empty;
+    public bool Enabled { get; set; }
+}
+
+public sealed class ResetStaffPasswordInput
+{
+    [Required] public string StaffRef { get; set; } = string.Empty;
+    [Required, DataType(DataType.Password)] public string NewPassword { get; set; } = string.Empty;
+}
+

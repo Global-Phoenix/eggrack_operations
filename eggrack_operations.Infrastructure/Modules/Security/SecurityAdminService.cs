@@ -154,6 +154,38 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         }
     }
 
+    public async Task SetStaffEnabledAsync(
+        long staffId,
+        bool enabled,
+        string operatorRef,
+        CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        await session.BeginTransactionAsync(cancellationToken: cancellationToken);
+        try
+        {
+            var changed = await session.ExecuteAsync(
+                "UPDATE eggrack_auth_staff SET status=@Status,auth_version=auth_version+1 WHERE id=@StaffId AND deleted_at IS NULL",
+                new { StaffId = staffId, Status = enabled ? 1 : 0 }, cancellationToken: cancellationToken);
+            if (changed != 1) throw new InvalidOperationException("人员不存在或已删除");
+            await session.ExecuteAsync(
+                "INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,@ActionCode,'staff',@TargetRef,@AfterData)",
+                new
+                {
+                    OperatorRef = operatorRef,
+                    ActionCode = enabled ? "auth.staff.enable" : "auth.staff.disable",
+                    TargetRef = staffId.ToString(),
+                    AfterData = JsonSerializer.Serialize(new { enabled })
+                }, cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await session.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     private sealed record RoleRule(string Code);
     private sealed record InsertedId(long Id);
 }

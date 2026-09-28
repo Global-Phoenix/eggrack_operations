@@ -23,10 +23,11 @@
       <tbody>
       @foreach (var item in Model.Staff) {
         var modalId = $"assign-{item.Id}";
+        var passwordModalId = $"password-{item.Id}";
         <tr><td class="ps-4"><strong>@item.StaffName</strong><div class="small text-secondary">@item.StaffRef</div></td>
           <td>@item.Departments</td><td>@item.Roles</td>
           <td><span class="badge @(item.IsEnabled ? "text-bg-success" : "text-bg-secondary")">@(item.IsEnabled ? "启用" : "停用")</span></td>
-          <td class="text-end pe-4"><button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">授予角色</button></td></tr>
+          <td class="text-end pe-4"><div class="d-inline-flex gap-1"><button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">授予角色</button><button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#@passwordModalId">重置密码</button><form asp-action="SetStaffStatus" method="post"><input type="hidden" name="StaffId" value="@item.Id" /><input type="hidden" name="StaffRef" value="@item.StaffRef" /><input type="hidden" name="Enabled" value="@(!item.IsEnabled)" /><button class="btn btn-sm @(item.IsEnabled ? "btn-outline-danger" : "btn-outline-success")" type="submit">@(item.IsEnabled ? "停用" : "启用")</button></form></div></td></tr>
         <div class="modal fade" id="@modalId" tabindex="-1">
           <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
             <form asp-action="AssignRole" method="post">
@@ -46,6 +47,15 @@
                 <div class="form-text">部门管理员、部门主管、部门员工必须选择部门。</div>
               </div>
               <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-dark" type="submit">确认授权</button></div>
+            </form>
+          </div></div>
+        </div>
+        <div class="modal fade" id="@passwordModalId" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+            <form asp-action="ResetStaffPassword" method="post">
+              <div class="modal-header"><h2 class="modal-title fs-5">重置 @item.StaffName 的密码</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+              <div class="modal-body"><input type="hidden" name="StaffRef" value="@item.StaffRef" /><label class="form-label">新密码</label><input class="form-control" name="NewPassword" type="password" autocomplete="new-password" required /><div class="form-text">至少 12 位，包含大小写字母、数字和特殊字符。保存后旧会话会失效。</div></div>
+              <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">确认重置</button></div>
             </form>
           </div></div>
         </div>

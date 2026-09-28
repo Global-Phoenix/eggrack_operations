@@ -2,6 +2,7 @@ using eggrack_operations.Areas.Security.Models;
 using Eggrack.Operations.Infrastructure.Modules.Security;
 using Eggrack.Operations.Infrastructure.Modules.Security.Identity;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 
 namespace eggrack_operations.Areas.Security.Controllers;
@@ -114,6 +115,74 @@ public sealed class SecurityController(
         {
             await users.DeleteAsync(user);
             TempData["Error"] = $"人员创建失败，登录账号已回滚：{exception.Message}";
+        }
+        return RedirectToAction(nameof(Staff));
+    }
+
+    [HttpPost("staff/status")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.staff.disable")]
+    public async Task<IActionResult> SetStaffStatus(SetStaffStatusInput input, CancellationToken cancellationToken)
+    {
+        var operatorRef = currentStaff.GetStaffRef();
+        if (string.IsNullOrWhiteSpace(operatorRef)) return Challenge();
+        if (operatorRef == input.StaffRef)
+        {
+            TempData["Error"] = "不能停用或启用当前登录账号。";
+            return RedirectToAction(nameof(Staff));
+        }
+
+        var user = await users.Users.SingleOrDefaultAsync(x => x.StaffRef == input.StaffRef, cancellationToken);
+        if (user is null)
+        {
+            TempData["Error"] = "未找到对应登录账号。";
+            return RedirectToAction(nameof(Staff));
+        }
+
+        var previousLockout = user.LockoutEnd;
+        var identityResult = await users.SetLockoutEndDateAsync(
+            user, input.Enabled ? null : DateTimeOffset.MaxValue);
+        if (!identityResult.Succeeded)
+        {
+            TempData["Error"] = string.Join("；", identityResult.Errors.Select(x => x.Description));
+            return RedirectToAction(nameof(Staff));
+        }
+        await users.UpdateSecurityStampAsync(user);
+
+        try
+        {
+            await admin.SetStaffEnabledAsync(input.StaffId, input.Enabled, operatorRef, cancellationToken);
+            TempData["Success"] = input.Enabled ? "人员账号已启用。" : "人员账号已停用，现有会话已失效。";
+        }
+        catch (Exception exception)
+        {
+            await users.SetLockoutEndDateAsync(user, previousLockout);
+            TempData["Error"] = $"人员状态更新失败，登录状态已回滚：{exception.Message}";
+        }
+        return RedirectToAction(nameof(Staff));
+    }
+
+    [HttpPost("staff/reset-password")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.staff.update")]
+    public async Task<IActionResult> ResetStaffPassword(ResetStaffPasswordInput input, CancellationToken cancellationToken)
+    {
+        var user = await users.Users.SingleOrDefaultAsync(x => x.StaffRef == input.StaffRef, cancellationToken);
+        if (user is null)
+        {
+            TempData["Error"] = "未找到对应登录账号。";
+            return RedirectToAction(nameof(Staff));
+        }
+        var token = await users.GeneratePasswordResetTokenAsync(user);
+        var result = await users.ResetPasswordAsync(user, token, input.NewPassword);
+        if (result.Succeeded)
+        {
+            await users.UpdateSecurityStampAsync(user);
+            TempData["Success"] = $"{user.DisplayName} 的密码已重置，旧会话已失效。";
+        }
+        else
+        {
+            TempData["Error"] = string.Join("；", result.Errors.Select(x => x.Description));
         }
         return RedirectToAction(nameof(Staff));
     }
