@@ -1,5 +1,18 @@
+@model FileCenterIndexViewModel
+@using System.Text.Json
 @{
     ViewData["Title"] = "文件中心";
+    var purchaseData = Model.PurchaseFiles.Select(file => new object[]
+    {
+        file.OriginalName,
+        file.FileType,
+        file.FileSizeText,
+        file.DepartmentName,
+        file.SourceNumber,
+        file.UploadedBy,
+        file.UploadedAtUtc.ToString("yyyy-MM-dd"),
+        file.StatusLabel
+    });
 }
 
 @await Component.InvokeAsync("PageHeader", new {
@@ -85,7 +98,7 @@
 
         <div class="ui-data-table">
             <table class="table table-hover align-middle">
-                <thead><tr><th>文件</th><th data-group-head>采购申请</th><th>上传人</th><th>上传时间</th><th>状态</th><th class="text-end"></th></tr></thead>
+                <thead><tr><th>文件</th><th data-group-head>来源单号</th><th>上传人</th><th>上传时间</th><th>状态</th><th class="text-end"></th></tr></thead>
                 <tbody data-rows></tbody>
             </table>
             <div class="fc-empty" data-empty>
@@ -121,19 +134,13 @@
 (() => {
   const root=document.querySelector('[data-file-center]'); if(!root)return;
   const data={
-    purchase:[
-      ['设备采购技术规格说明.pdf','PDF','2.4 MB','信息技术部','PR-2026-0928-018','陈嘉','2026-09-28','审批中'],
-      ['供应商比价表.xlsx','XLSX','846 KB','行政部','PR-2026-0927-012','刘静','2026-09-27','已归档'],
-      ['办公家具采购清单.xlsx','XLSX','1.1 MB','行政部','PR-2026-0925-006','王悦','2026-09-25','已归档'],
-      ['冷链运输服务合同.docx','DOCX','728 KB','供应链部','PR-2026-0924-021','周航','2026-09-24','审批中'],
-      ['门店物料设计源文件.zip','ZIP','184 MB','市场部','PR-2026-0922-009','许岚','2026-09-22','已归档']],
-    member:[
-      ['营业执照副本.pdf','PDF','3.2 MB','华东鲜选','MB-10028','赵然','2026-09-26','长期保留'],
-      ['门店信息登记表.xlsx','XLSX','422 KB','华东鲜选','MB-10028','赵然','2026-09-26','长期保留'],
-      ['会员合作协议.pdf','PDF','4.8 MB','北方优品','MB-10016','沈宜','2026-09-18','还剩 81 天'],
-      ['食品经营许可证.pdf','PDF','2.1 MB','湾区食集','MB-10031','林晓宇','2026-09-12','还剩 75 天'],
-      ['历史对账附件.zip','ZIP','76 MB','北方优品','MB-10016','系统迁移','2026-06-10','7 天后清理']]};
-  const groups={purchase:['全部部门','行政部','信息技术部','供应链部','市场部'],member:['全部会员','华东鲜选','北方优品','湾区食集']};
+    purchase:@Html.Raw(JsonSerializer.Serialize(purchaseData)),
+    member:[]
+  };
+  const groups={
+    purchase:['全部部门',...new Set(data.purchase.map(file=>file[3]))],
+    member:['全部会员']
+  };
   const icons={PDF:'bi-file-earmark-pdf',XLSX:'bi-file-earmark-spreadsheet',DOCX:'bi-file-earmark-word',ZIP:'bi-file-earmark-zip'};
   let mode='purchase',group='全部部门'; const q=s=>root.querySelector(s);
 
@@ -172,7 +179,7 @@
     mode=next;group=groups[next][0];
     root.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x.dataset.mode===next));
     q('[data-tree-title]').textContent=next==='purchase'?'计划部门':'会员分类';
-    q('[data-group-head]').textContent=next==='purchase'?'采购申请':'所属会员';
+    q('[data-group-head]').textContent=next==='purchase'?'来源单号':'所属会员';
     q('[data-search]').placeholder=next==='purchase'?'搜索文件名或申请编号':'搜索文件名或会员编号';
     q('[data-policy]').style.display=next==='member'?'block':'none';categories();render();
   }

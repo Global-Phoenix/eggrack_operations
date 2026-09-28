@@ -1,6 +1,7 @@
 using Eggrack.Operations.Application.Navigation;
 using Eggrack.Operations.Infrastructure;
 using Eggrack.Operations.Infrastructure.Modules.Wholesale;
+using Eggrack.Operations.Infrastructure.Modules.Files;
 using eggrack_operations.Areas.Security;
 using Eggrack.Operations.Infrastructure.Modules.Security.Identity;
 
@@ -11,6 +12,7 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddSingleton<NavigationService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddWholesaleProcurement();
+builder.Services.AddFileCenter();
 builder.Services.AddSecurityArea();
 builder.Services.AddInternalIdentity(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
