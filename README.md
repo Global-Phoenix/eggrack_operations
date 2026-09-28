@@ -6,8 +6,8 @@
 
 1. 安装 VS2022 17.8 或更高版本及“ASP.NET 和 Web 开发”工作负载。
 2. 打开 `eggrack_operations.sln`。
-3. 将 `eggrack_operations.Web` 设为启动项目。
-4. 选择 `https` 或 `IIS Express` 配置并按 F5。
+3. VS2022 17.11 及以上选择共享启动配置 `Eggrack Operations Web`；旧版 VS 将 `eggrack_operations.Web` 设为启动项目。
+4. 首次建议选择 Web 项目的 `http` 配置并按 F5；确认运行后再使用 `https` 或 `IIS Express`。
 
 项目默认不连接数据库，可直接启动界面。数据库连接串使用 User Secrets；配置说明见 `docs/architecture.md`。
 
@@ -21,3 +21,4 @@ dotnet run --project .\eggrack_operations.Web --launch-profile https
 ```
 
 数据库初始化脚本：`database/sqlserver/001_initial_platform.sql`。
+

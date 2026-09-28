@@ -1,0 +1,11 @@
+[
+  {
+    "Name": "Eggrack Operations Web",
+    "Projects": [
+      {
+        "Path": "eggrack_operations.Web\\eggrack_operations.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
