@@ -1,41 +1,38 @@
 @model eggrack_operations.ViewComponents.TopbarViewModel
 <header class="topbar">
     <div class="workspace-tabs" id="workspaceTabs" data-current-path="@Model.CurrentPath" data-current-title="@Model.Title">
-        <button class="mobile-menu" id="mobileMenu" type="button" aria-label="打开导航"><i class="bi bi-list"></i></button>
-        <a class="workspace-tab home-tab" data-home-tab href="/"><i class="bi bi-house-door"></i><span>首页</span></a>
-        <div class="dynamic-tabs" id="dynamicTabs">
-            @if (Model.CurrentPath != "/")
-            {
-                <a class="workspace-tab active" href="@Model.CurrentPath" data-tab-path="@Model.CurrentPath">
-                    <span>@Model.Title</span><button class="tab-close" type="button" aria-label="关闭 @Model.Title">×</button>
-                </a>
-            }
-        </div>
+        <button class="mobile-menu top-tool" id="mobileMenu" type="button" aria-label="打开导航"><i class="bi bi-list"></i></button>
+        <a class="workspace-tab home-tab" data-home-tab href="/" title="工作台"><i class="bi bi-house-door"></i><span>首页</span></a>
+        <div class="dynamic-tabs" id="dynamicTabs"></div>
         <button class="new-tab-button" type="button" aria-label="打开首页" title="打开首页"><i class="bi bi-plus-lg"></i></button>
         <div class="dropdown tab-actions-dropdown">
-            <button class="tab-actions-button" type="button" data-bs-toggle="dropdown" aria-label="标签页操作"><i class="bi bi-chevron-down"></i></button>
+            <button class="tab-actions-button" type="button" data-bs-toggle="dropdown" aria-label="标签页操作" title="标签页操作"><i class="bi bi-chevron-down"></i></button>
             <ul class="dropdown-menu shadow-sm">
-                <li><button class="dropdown-item" type="button" data-tab-command="refresh">刷新当前页</button></li>
-                <li><button class="dropdown-item" type="button" data-tab-command="right">关闭右侧标签</button></li>
-                <li><button class="dropdown-item" type="button" data-tab-command="other">关闭其他标签</button></li>
+                <li><button class="dropdown-item" type="button" data-tab-command="refresh"><i class="bi bi-arrow-clockwise"></i><span>刷新当前页</span></button></li>
+                <li><button class="dropdown-item" type="button" data-tab-command="right"><i class="bi bi-layout-sidebar-reverse"></i><span>关闭右侧标签</span></button></li>
+                <li><button class="dropdown-item" type="button" data-tab-command="other"><i class="bi bi-subtract"></i><span>关闭其他标签</span></button></li>
                 <li><hr class="dropdown-divider" /></li>
-                <li><button class="dropdown-item" type="button" data-tab-command="all">关闭全部标签</button></li>
+                <li><button class="dropdown-item" type="button" data-tab-command="all"><i class="bi bi-x-square"></i><span>关闭全部标签</span></button></li>
             </ul>
         </div>
     </div>
     <div class="topbar-actions">
-        <button class="assistant-button" type="button"><i class="bi bi-stars"></i> AI助手</button>
-        <button class="topbar-link" type="button">新功能</button>
-        <button class="icon-button" type="button" title="任务"><i class="bi bi-clock-history"></i><span class="notification-dot">@Model.TaskCount</span></button>
-        <button class="icon-button" type="button" title="消息"><i class="bi bi-bell"></i><span class="notification-dot">@Model.MessageCount</span></button>
+        <span class="workspace-label"><i></i>运营工作台</span>
+        <a class="top-tool" href="/UiKit" title="组件示例" aria-label="组件示例"><i class="bi bi-grid"></i></a>
+        <button class="top-tool" id="fullscreenToggle" type="button" title="全屏" aria-label="切换全屏"><i class="bi bi-arrows-fullscreen"></i></button>
+        <button class="top-tool" type="button" title="任务中心" aria-label="任务中心"><i class="bi bi-clock-history"></i>@if (Model.TaskCount > 0) { <span class="notification-dot">@Model.TaskCount</span> }</button>
+        <button class="top-tool" type="button" title="通知中心" aria-label="通知中心"><i class="bi bi-bell"></i>@if (Model.MessageCount > 0) { <span class="notification-dot">@Model.MessageCount</span> }</button>
+        <span class="toolbar-divider"></span>
         <div class="dropdown">
-            <button class="user-button dropdown-toggle" data-bs-toggle="dropdown" type="button">
-                <span class="avatar">@Model.DisplayName[..1]</span><span>@Model.DisplayName</span>
+            <button class="user-button dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">
+                <span class="avatar">@Model.DisplayName[..1]</span><span class="user-name">@Model.DisplayName</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                <li><a class="dropdown-item" href="#">账号中心</a></li>
+                <li><h6 class="dropdown-header">当前账号</h6></li>
+                <li><a class="dropdown-item" href="#"><i class="bi bi-person"></i><span>账号中心</span></a></li>
+                <li><a class="dropdown-item" href="#"><i class="bi bi-gear"></i><span>个人设置</span></a></li>
                 <li><hr class="dropdown-divider" /></li>
-                <li><a class="dropdown-item" href="#">退出登录</a></li>
+                <li><a class="dropdown-item" href="#"><i class="bi bi-box-arrow-right"></i><span>退出登录</span></a></li>
             </ul>
         </div>
     </div>

@@ -12,6 +12,13 @@
         if (!event.target.closest('#sidebar') && !event.target.closest('#mobileMenu')) shell.classList.remove('mobile-sidebar-open');
     });
 
+    const fullscreenToggle = document.getElementById('fullscreenToggle');
+    fullscreenToggle?.addEventListener('click', async () => {
+        try {
+            if (document.fullscreenElement) await document.exitFullscreen();
+            else await document.documentElement.requestFullscreen();
+        } catch { /* Browser may deny fullscreen without changing the page. */ }
+    });
     const tabsHost = document.getElementById('workspaceTabs');
     const dynamicTabs = document.getElementById('dynamicTabs');
     if (!tabsHost || !dynamicTabs) return;
