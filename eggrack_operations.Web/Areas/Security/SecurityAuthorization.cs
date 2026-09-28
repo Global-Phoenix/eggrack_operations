@@ -23,9 +23,7 @@ public sealed class CurrentStaffAccessor(
     {
         var user = httpContextAccessor.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true) return null;
-        return user.FindFirstValue("http://schemas.microsoft.com/identity/claims/objectidentifier")
-            ?? user.FindFirstValue("oid")
-            ?? user.FindFirstValue("sub");
+        return user.FindFirstValue(ClaimTypes.NameIdentifier);
     }
 
     public Task<StaffAuthorization?> LoadAsync(CancellationToken cancellationToken = default)
@@ -46,21 +44,21 @@ public sealed class InternalPermissionFilter(
     {
         if (context.HttpContext.User.Identity?.IsAuthenticated != true)
         {
-            context.Result = new ChallengeResult();
+            context.Result = new UnauthorizedResult();
             return;
         }
 
         var authorization = await currentStaff.LoadAsync(context.HttpContext.RequestAborted);
         if (authorization is null)
         {
-            context.Result = new ForbidResult();
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             return;
         }
 
         var decision = evaluator.Evaluate(authorization, permissionCode);
         if (!decision.Allowed)
         {
-            context.Result = new ForbidResult();
+            context.Result = new StatusCodeResult(StatusCodes.Status403Forbidden);
             return;
         }
 
