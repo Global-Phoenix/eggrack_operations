@@ -2,6 +2,7 @@ using Eggrack.Operations.Application.Navigation;
 using Eggrack.Operations.Infrastructure;
 using Eggrack.Operations.Infrastructure.Modules.Wholesale;
 using eggrack_operations.Areas.Security;
+using Eggrack.Operations.Infrastructure.Modules.Security.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,7 @@ builder.Services.AddSingleton<NavigationService>();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddWholesaleProcurement();
 builder.Services.AddSecurityArea();
+builder.Services.AddInternalIdentity(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
@@ -24,6 +26,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(
