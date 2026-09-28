@@ -50,6 +50,11 @@ public sealed class SecurityController(
     public async Task<IActionResult> Roles(CancellationToken cancellationToken) =>
         View(await admin.GetRolesAsync(cancellationToken));
 
+    [HttpGet("departments")]
+    [InternalPermission("auth.department.read")]
+    public async Task<IActionResult> Departments(CancellationToken cancellationToken) =>
+        View(new DepartmentIndexViewModel(await admin.GetDepartmentListAsync(cancellationToken)));
+
     [HttpPost("staff/assign-role")]
     [ValidateAntiForgeryToken]
     [InternalPermission("auth.role.assign")]
@@ -206,6 +211,29 @@ public sealed class SecurityController(
             TempData["Error"] = exception.Message;
         }
         return RedirectToAction(nameof(Staff));
+    }
+
+    [HttpPost("departments/save")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.department.manage")]
+    public async Task<IActionResult> SaveDepartment(SaveDepartmentInput input, CancellationToken cancellationToken)
+    {
+        var operatorRef=currentStaff.GetStaffRef(); if(string.IsNullOrWhiteSpace(operatorRef)) return Challenge();
+        if(!ModelState.IsValid){TempData["Error"]="请填写部门编码和名称。";return RedirectToAction(nameof(Departments));}
+        try{await admin.SaveDepartmentAsync(input.Id,input.Code.Trim(),input.Name.Trim(),input.ParentId,input.SortOrder,operatorRef,cancellationToken);TempData["Success"]="部门信息已保存。";}
+        catch(Exception exception) when(exception is InvalidOperationException or MySqlConnector.MySqlException){TempData["Error"]=$"部门保存失败：{exception.Message}";}
+        return RedirectToAction(nameof(Departments));
+    }
+
+    [HttpPost("departments/status")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.department.manage")]
+    public async Task<IActionResult> SetDepartmentStatus(SetDepartmentStatusInput input, CancellationToken cancellationToken)
+    {
+        var operatorRef=currentStaff.GetStaffRef(); if(string.IsNullOrWhiteSpace(operatorRef)) return Challenge();
+        try{await admin.SetDepartmentEnabledAsync(input.Id,input.Enabled,operatorRef,cancellationToken);TempData["Success"]=input.Enabled?"部门已启用。":"部门已停用。";}
+        catch(InvalidOperationException exception){TempData["Error"]=exception.Message;}
+        return RedirectToAction(nameof(Departments));
     }
 }
 

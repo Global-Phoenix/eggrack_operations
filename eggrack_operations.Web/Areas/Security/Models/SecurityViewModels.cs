@@ -58,3 +58,21 @@ public sealed class RevokeRoleInput
     public long AssignmentId { get; set; }
 }
 
+public sealed record DepartmentIndexViewModel(IReadOnlyList<DepartmentListItem> Departments);
+
+public sealed class SaveDepartmentInput
+{
+    public long? Id { get; set; }
+    [Required, StringLength(64)] public string Code { get; set; } = string.Empty;
+    [Required, StringLength(128)] public string Name { get; set; } = string.Empty;
+    public long? ParentId { get; set; }
+    public int SortOrder { get; set; }
+}
+
+public sealed class SetDepartmentStatusInput
+{
+    public long Id { get; set; }
+    public bool Enabled { get; set; }
+}
+public sealed record DepartmentFormViewModel(string Code,string Name,long? ParentId,int SortOrder,IReadOnlyList<DepartmentListItem> Departments,long? CurrentId);
+

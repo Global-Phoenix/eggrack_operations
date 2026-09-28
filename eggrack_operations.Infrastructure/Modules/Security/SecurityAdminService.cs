@@ -70,6 +70,59 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         return await session.QueryAsync<DepartmentOption>(sql, cancellationToken: cancellationToken);
     }
 
+    public async Task<IReadOnlyList<DepartmentListItem>> GetDepartmentListAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT d.id,d.parent_id ParentId,d.department_code Code,d.department_name Name,p.department_name ParentName,
+              d.sort_order SortOrder,d.status=1 IsEnabled,
+              COUNT(DISTINCT sd.staff_id) StaffCount,COUNT(DISTINCT sr.id) RoleCount
+            FROM eggrack_auth_department d
+            LEFT JOIN eggrack_auth_department p ON p.id=d.parent_id
+            LEFT JOIN eggrack_auth_staff_department sd ON sd.department_id=d.id
+            LEFT JOIN eggrack_auth_staff_role sr ON sr.department_id=d.id
+            WHERE d.deleted_at IS NULL
+            GROUP BY d.id,d.parent_id,d.department_code,d.department_name,p.department_name,d.sort_order,d.status
+            ORDER BY d.sort_order,d.department_name
+            """;
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        return await session.QueryAsync<DepartmentListItem>(sql, cancellationToken: cancellationToken);
+    }
+
+    public async Task SaveDepartmentAsync(long? id, string code, string name, long? parentId, int sortOrder, string operatorRef, CancellationToken cancellationToken = default)
+    {
+        if (id.HasValue && parentId == id) throw new InvalidOperationException("部门不能将自己设为上级部门");
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        await session.BeginTransactionAsync(cancellationToken: cancellationToken);
+        try
+        {
+            if (id.HasValue)
+            {
+                var changed = await session.ExecuteAsync("UPDATE eggrack_auth_department SET department_code=@Code,department_name=@Name,parent_id=@ParentId,sort_order=@SortOrder WHERE id=@Id AND deleted_at IS NULL", new { Id = id.Value, Code = code, Name = name, ParentId = parentId, SortOrder = sortOrder }, cancellationToken: cancellationToken);
+                if (changed != 1) throw new InvalidOperationException("部门不存在或已删除");
+            }
+            else
+            {
+                await session.ExecuteAsync("INSERT INTO eggrack_auth_department(department_code,department_name,parent_id,sort_order,status) VALUES(@Code,@Name,@ParentId,@SortOrder,1)", new { Code = code, Name = name, ParentId = parentId, SortOrder = sortOrder }, cancellationToken: cancellationToken);
+            }
+            await session.ExecuteAsync("INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.department.manage','department',@TargetRef,@AfterData)", new { OperatorRef = operatorRef, TargetRef = id?.ToString() ?? code, AfterData = JsonSerializer.Serialize(new { code, name, parentId, sortOrder }) }, cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
+        }
+        catch { await session.RollbackAsync(cancellationToken); throw; }
+    }
+
+    public async Task SetDepartmentEnabledAsync(long id, bool enabled, string operatorRef, CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        if (!enabled)
+        {
+            var usage = (await session.QueryAsync<CountRow>("SELECT (SELECT COUNT(*) FROM eggrack_auth_staff_department WHERE department_id=@Id)+(SELECT COUNT(*) FROM eggrack_auth_staff_role WHERE department_id=@Id)+(SELECT COUNT(*) FROM eggrack_auth_department WHERE parent_id=@Id AND deleted_at IS NULL) Value", new { Id = id }, cancellationToken: cancellationToken)).Single().Value;
+            if (usage > 0) throw new InvalidOperationException("该部门仍有关联人员、角色授权或下级部门，不能停用");
+        }
+        var changed = await session.ExecuteAsync("UPDATE eggrack_auth_department SET status=@Status WHERE id=@Id AND deleted_at IS NULL", new { Id = id, Status = enabled ? 1 : 0 }, cancellationToken: cancellationToken);
+        if (changed != 1) throw new InvalidOperationException("部门不存在或已删除");
+        await session.ExecuteAsync("INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.department.status','department',@TargetRef,@AfterData)", new { OperatorRef = operatorRef, TargetRef = id.ToString(), AfterData = JsonSerializer.Serialize(new { enabled }) }, cancellationToken: cancellationToken);
+    }
+
     public async Task<IReadOnlyList<StaffRoleAssignment>> GetRoleAssignmentsAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
