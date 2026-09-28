@@ -76,3 +76,14 @@ public sealed class SetDepartmentStatusInput
 }
 public sealed record DepartmentFormViewModel(string Code,string Name,long? ParentId,int SortOrder,IReadOnlyList<DepartmentListItem> Departments,long? CurrentId);
 
+public sealed record RoleIndexViewModel(
+    IReadOnlyList<RoleListItem> Roles,
+    IReadOnlyList<PermissionListItem> Permissions,
+    IReadOnlyList<RolePermissionGrant> Grants);
+
+public sealed class SaveRolePermissionsInput
+{
+    public long RoleId { get; set; }
+    public long[] PermissionIds { get; set; } = [];
+}
+

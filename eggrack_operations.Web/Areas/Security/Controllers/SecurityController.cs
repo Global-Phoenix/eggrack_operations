@@ -47,8 +47,12 @@ public sealed class SecurityController(
 
     [HttpGet("roles")]
     [InternalPermission("auth.role.read")]
-    public async Task<IActionResult> Roles(CancellationToken cancellationToken) =>
-        View(await admin.GetRolesAsync(cancellationToken));
+    public async Task<IActionResult> Roles(CancellationToken cancellationToken)
+    {
+        var roles=admin.GetRolesAsync(cancellationToken);var permissions=admin.GetPermissionsAsync(cancellationToken);var grants=admin.GetRolePermissionGrantsAsync(cancellationToken);
+        await Task.WhenAll(roles,permissions,grants);
+        return View(new RoleIndexViewModel(await roles,await permissions,await grants));
+    }
 
     [HttpGet("departments")]
     [InternalPermission("auth.department.read")]
@@ -234,6 +238,17 @@ public sealed class SecurityController(
         try{await admin.SetDepartmentEnabledAsync(input.Id,input.Enabled,operatorRef,cancellationToken);TempData["Success"]=input.Enabled?"部门已启用。":"部门已停用。";}
         catch(InvalidOperationException exception){TempData["Error"]=exception.Message;}
         return RedirectToAction(nameof(Departments));
+    }
+
+    [HttpPost("roles/permissions")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.permission.manage")]
+    public async Task<IActionResult> SaveRolePermissions(SaveRolePermissionsInput input, CancellationToken cancellationToken)
+    {
+        var operatorRef=currentStaff.GetStaffRef();if(string.IsNullOrWhiteSpace(operatorRef))return Challenge();
+        try{await admin.SaveRolePermissionsAsync(input.RoleId,input.PermissionIds,operatorRef,cancellationToken);TempData["Success"]="角色权限已保存，相关人员权限版本已更新。";}
+        catch(InvalidOperationException exception){TempData["Error"]=exception.Message;}
+        return RedirectToAction(nameof(Roles));
     }
 }
 

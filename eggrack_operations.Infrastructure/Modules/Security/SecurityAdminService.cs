@@ -63,6 +63,44 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         return await session.QueryAsync<RoleListItem>(sql, cancellationToken: cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PermissionListItem>> GetPermissionsAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = "SELECT id,permission_code Code,permission_name Name,resource_type ResourceType,status=1 IsEnabled FROM eggrack_auth_permission ORDER BY resource_type,permission_code";
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        return await session.QueryAsync<PermissionListItem>(sql, cancellationToken: cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<RolePermissionGrant>> GetRolePermissionGrantsAsync(CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        return await session.QueryAsync<RolePermissionGrant>("SELECT role_id RoleId,permission_id PermissionId FROM eggrack_auth_role_permission WHERE effect='ALLOW'", cancellationToken: cancellationToken);
+    }
+
+    public async Task SaveRolePermissionsAsync(long roleId, IReadOnlyCollection<long> permissionIds, string operatorRef, CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        var role = (await session.QueryAsync<RoleRule>("SELECT role_code Code FROM eggrack_auth_role WHERE id=@RoleId AND status=1", new { RoleId = roleId }, cancellationToken: cancellationToken)).SingleOrDefault()
+            ?? throw new InvalidOperationException("角色不存在或已停用");
+        if (role.Code == "super_admin") throw new InvalidOperationException("超级管理员固定拥有全部权限，不能手动删改");
+        var distinctIds = permissionIds.Distinct().ToArray();
+        if (distinctIds.Length > 0)
+        {
+            var valid = (await session.QueryAsync<CountRow>("SELECT COUNT(*) Value FROM eggrack_auth_permission WHERE status=1 AND id IN @PermissionIds", new { PermissionIds = distinctIds }, cancellationToken: cancellationToken)).Single().Value;
+            if (valid != distinctIds.Length) throw new InvalidOperationException("提交内容包含不存在或已停用的权限点");
+        }
+        await session.BeginTransactionAsync(cancellationToken: cancellationToken);
+        try
+        {
+            await session.ExecuteAsync("DELETE FROM eggrack_auth_role_permission WHERE role_id=@RoleId", new { RoleId = roleId }, cancellationToken: cancellationToken);
+            if (distinctIds.Length > 0)
+                await session.ExecuteAsync("INSERT INTO eggrack_auth_role_permission(role_id,permission_id,effect) SELECT @RoleId,id,'ALLOW' FROM eggrack_auth_permission WHERE id IN @PermissionIds", new { RoleId = roleId, PermissionIds = distinctIds }, cancellationToken: cancellationToken);
+            await session.ExecuteAsync("UPDATE eggrack_auth_staff s INNER JOIN eggrack_auth_staff_role sr ON sr.staff_id=s.id SET s.auth_version=s.auth_version+1 WHERE sr.role_id=@RoleId", new { RoleId = roleId }, cancellationToken: cancellationToken);
+            await session.ExecuteAsync("INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.permission.manage','role',@TargetRef,@AfterData)", new { OperatorRef = operatorRef, TargetRef = roleId.ToString(), AfterData = JsonSerializer.Serialize(new { permissionIds = distinctIds }) }, cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
+        }
+        catch { await session.RollbackAsync(cancellationToken); throw; }
+    }
+
     public async Task<IReadOnlyList<DepartmentOption>> GetDepartmentsAsync(CancellationToken cancellationToken = default)
     {
         const string sql = "SELECT id,department_name Name FROM eggrack_auth_department WHERE status=1 AND deleted_at IS NULL ORDER BY sort_order,department_name";

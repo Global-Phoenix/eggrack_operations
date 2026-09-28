@@ -6,4 +6,6 @@ public sealed record RoleListItem(long Id, string Code, string Name, int Level, 
 public sealed record DepartmentOption(long Id, string Name);
 public sealed record StaffRoleAssignment(long Id, long StaffId, string RoleCode, string RoleName, string? DepartmentName);
 public sealed record DepartmentListItem(long Id, long? ParentId, string Code, string Name, string? ParentName, int SortOrder, bool IsEnabled, int StaffCount, int RoleCount);
+public sealed record PermissionListItem(long Id, string Code, string Name, string ResourceType, bool IsEnabled);
+public sealed record RolePermissionGrant(long RoleId, long PermissionId);
 
