@@ -1,7 +1,8 @@
 @model eggrack_operations.ViewComponents.NavigationViewModel
 <aside class="sidebar" id="sidebar">
     <a class="brand" asp-controller="Home" asp-action="Index" title="Eggracks 运营管理中心">
-        <img src="~/favicon.ico" asp-append-version="true" alt="Eggracks" />
+        <span class="brand-logo"><img src="~/favicon.ico" asp-append-version="true" alt="Eggracks" /></span>
+        <span class="brand-copy"><strong>eggracks</strong><small>运营管理中心</small></span>
     </a>
     <nav class="sidebar-nav" aria-label="主导航">
         @foreach (var item in Model.Items)
@@ -35,6 +36,6 @@
         }
     </nav>
     <button class="sidebar-control" id="sidebarToggle" type="button" aria-label="切换导航">
-        <i class="bi bi-list"></i>
+        <i class="bi bi-layout-sidebar-inset" data-sidebar-icon></i><span>收起导航</span>
     </button>
 </aside>
