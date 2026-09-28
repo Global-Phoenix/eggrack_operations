@@ -14,7 +14,10 @@ public static class InternalIdentityServices
         var connectionString=configuration.GetConnectionString("EggrackConnection")
             ?? throw new InvalidOperationException("缺少 EggrackConnection");
         services.AddDbContext<InternalIdentityDbContext>(options =>
-            options.UseMySql(connectionString,new MySqlServerVersion(new Version(5,7,32))));
+            options.UseMySql(
+                connectionString,
+                new MySqlServerVersion(new Version(5,7,32)),
+                mysql => mysql.MigrationsHistoryTable("eggrack_identity_migration")));
         services.AddIdentity<InternalIdentityUser,IdentityRole<long>>(options =>
         {
             options.Password.RequiredLength=12;
