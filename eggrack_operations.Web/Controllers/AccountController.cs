@@ -96,6 +96,20 @@ public sealed class AccountController(
     }
 
     [Authorize]
+    [HttpGet("")]
+    public async Task<IActionResult> Index()
+    {
+        var user = await userManager.GetUserAsync(User);
+        if (user is null) return Challenge();
+
+        return View(new AccountProfileViewModel(
+            user.UserName ?? user.StaffRef,
+            user.Email,
+            user.StaffRef,
+            await userManager.GetTwoFactorEnabledAsync(user),
+            (await userManager.GetRolesAsync(user)).ToArray()));
+    }
+    [Authorize]
     [HttpGet("enable-authenticator")]
     public async Task<IActionResult> EnableAuthenticator()
     {

@@ -28,6 +28,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseStatusCodePagesWithReExecute("/status/{0}");
 app.UseAuthentication();
 app.UseAuthorization();
 

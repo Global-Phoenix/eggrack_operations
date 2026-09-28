@@ -41,3 +41,10 @@ public sealed class RecoveryCodesViewModel
 {
     public required IReadOnlyCollection<string> Codes { get; init; }
 }
+
+public sealed record AccountProfileViewModel(
+    string UserName,
+    string? Email,
+    string StaffRef,
+    bool TwoFactorEnabled,
+    IReadOnlyList<string> Roles);

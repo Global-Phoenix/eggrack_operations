@@ -1,0 +1,8 @@
+@model int
+@{ Layout = "_AccountLayout"; ViewData["Title"] = Model == 404 ? "页面不存在" : "请求无法完成"; var title = Model == 404 ? "页面不存在" : Model == 403 ? "无权访问" : "请求无法完成"; var description = Model == 404 ? "你访问的页面不存在或已经移动。" : Model == 403 ? "当前账号没有此页面的访问权限。" : "系统无法完成当前请求，请稍后重试。"; }
+<div class="system-state-card">
+    <span class="system-state-code">@Model</span>
+    <span class="system-state-icon"><i class="bi @(Model == 404 ? "bi-compass" : Model == 403 ? "bi-shield-lock" : "bi-exclamation-circle")"></i></span>
+    <h1>@title</h1><p>@description</p>
+    <div class="d-flex gap-2 justify-content-center"><a class="btn btn-primary" href="/">返回工作台</a><button class="btn btn-outline-secondary" type="button" onclick="history.back()">返回上一页</button></div>
+</div>

@@ -23,6 +23,13 @@ public class HomeController : Controller
         return View();
     }
 
+
+    [Route("status/{code:int}")]
+    public IActionResult StatusCodePage(int code)
+    {
+        Response.StatusCode = code;
+        return View("StatusCode", code);
+    }
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
     {
