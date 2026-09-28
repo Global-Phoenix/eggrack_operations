@@ -1,0 +1,10 @@
+@model eggrack_operations.ViewComponents.PageHeaderViewModel
+<header class="ui-page-header">
+ <div class="ui-page-title">
+  @if (!string.IsNullOrWhiteSpace(Model.ParentTitle)) { <nav class="ui-breadcrumb" aria-label="面包屑"><a href="@(Model.ParentUrl ?? "/")">@Model.ParentTitle</a><i class="bi bi-chevron-right"></i><span>@Model.Title</span></nav> }
+  <div class="d-flex align-items-center gap-3 flex-wrap"><h1>@Model.Title</h1>@if (!string.IsNullOrWhiteSpace(Model.StatusText)) { <span class="ui-status ui-status-@Model.StatusTone"><i></i>@Model.StatusText</span> }</div>
+  @if (!string.IsNullOrWhiteSpace(Model.Subtitle)) { <p>@Model.Subtitle</p> }
+ </div>
+ @if (!string.IsNullOrWhiteSpace(Model.PrimaryText) || !string.IsNullOrWhiteSpace(Model.SecondaryText)) {
+ <div class="ui-page-actions">@if (!string.IsNullOrWhiteSpace(Model.SecondaryText)) { <a class="btn btn-outline-secondary" href="@Model.SecondaryUrl">@Model.SecondaryText</a> }@if (!string.IsNullOrWhiteSpace(Model.PrimaryText)) { <a class="btn btn-primary" href="@Model.PrimaryUrl">@Model.PrimaryText</a> }</div> }
+</header>

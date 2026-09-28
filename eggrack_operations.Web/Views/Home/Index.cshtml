@@ -1,10 +1,7 @@
 @{
     ViewData["Title"] = "工作台";
 }
-<div class="page-heading">
-    <div><h1>运营工作台</h1><p>批发业务与系统运营的统一入口</p></div>
-    <span class="status-chip"><span></span> 系统运行正常</span>
-</div>
+@await Component.InvokeAsync("PageHeader", new { title = "运营工作台", subtitle = "批发业务与系统运营的统一入口", statusText = "系统运行正常", statusTone = "success" })
 <div class="row g-3 mb-4">
     <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card"><span>待处理任务</span><strong>0</strong><small>任务中心</small></div></div>
     <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card"><span>批发计划</span><strong>—</strong><small>数据库配置后显示</small></div></div>

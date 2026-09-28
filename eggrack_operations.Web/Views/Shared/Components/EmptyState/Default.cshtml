@@ -1,0 +1,2 @@
+@model eggrack_operations.ViewComponents.EmptyStateViewModel
+<div class="ui-empty-state"><span class="ui-empty-icon"><i class="bi @Model.Icon"></i></span><strong>@Model.Title</strong>@if (!string.IsNullOrWhiteSpace(Model.Description)) { <p>@Model.Description</p> }@if (!string.IsNullOrWhiteSpace(Model.ActionText)) { <a class="btn btn-sm btn-outline-primary" href="@Model.ActionUrl">@Model.ActionText</a> }</div>

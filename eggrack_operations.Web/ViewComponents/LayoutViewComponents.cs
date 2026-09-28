@@ -62,3 +62,16 @@ public sealed class ModuleGridViewComponent : ViewComponent
 
 
 
+
+public sealed record PageHeaderViewModel(string Title,string? Subtitle,string? ParentTitle,string? ParentUrl,string? StatusText,string StatusTone,string? PrimaryText,string? PrimaryUrl,string? SecondaryText,string? SecondaryUrl);
+public sealed class PageHeaderViewComponent : ViewComponent
+{
+    public IViewComponentResult Invoke(string title,string? subtitle=null,string? parentTitle=null,string? parentUrl=null,string? statusText=null,string statusTone="neutral",string? primaryText=null,string? primaryUrl=null,string? secondaryText=null,string? secondaryUrl=null) =>
+        View(new PageHeaderViewModel(title,subtitle,parentTitle,parentUrl,statusText,statusTone,primaryText,primaryUrl,secondaryText,secondaryUrl));
+}
+public sealed record EmptyStateViewModel(string Title,string? Description,string Icon,string? ActionText,string? ActionUrl);
+public sealed class EmptyStateViewComponent : ViewComponent
+{
+    public IViewComponentResult Invoke(string title,string? description=null,string icon="bi-inbox",string? actionText=null,string? actionUrl=null) =>
+        View(new EmptyStateViewModel(title,description,icon,actionText,actionUrl));
+}
