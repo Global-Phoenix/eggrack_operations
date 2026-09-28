@@ -70,7 +70,7 @@ try
 
     const string insertStaff = """
         INSERT INTO eggrack_auth_staff
-            (staff_ref, display_name, email, status, auth_version)
+            (staff_ref, staff_name, email, status, auth_version)
         VALUES
             (@StaffRef, @DisplayName, @Email, 1, 1)
         """;
