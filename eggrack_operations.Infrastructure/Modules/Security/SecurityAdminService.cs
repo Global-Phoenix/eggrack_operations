@@ -70,6 +70,21 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         return await session.QueryAsync<DepartmentOption>(sql, cancellationToken: cancellationToken);
     }
 
+    public async Task<IReadOnlyList<StaffRoleAssignment>> GetRoleAssignmentsAsync(CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT sr.id,sr.staff_id StaffId,r.role_code RoleCode,r.role_name RoleName,d.department_name DepartmentName
+            FROM eggrack_auth_staff_role sr
+            INNER JOIN eggrack_auth_role r ON r.id=sr.role_id
+            LEFT JOIN eggrack_auth_department d ON d.id=sr.department_id
+            WHERE (sr.valid_from IS NULL OR sr.valid_from<=UTC_TIMESTAMP(3))
+              AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+            ORDER BY r.role_level,d.department_name
+            """;
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        return await session.QueryAsync<StaffRoleAssignment>(sql, cancellationToken: cancellationToken);
+    }
+
     public async Task AssignRoleAsync(long staffId, long roleId, long? departmentId, string operatorRef, CancellationToken cancellationToken = default)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
@@ -186,7 +201,53 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         }
     }
 
+    public async Task RevokeRoleAsync(long assignmentId, string operatorRef, CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        var rows = await session.QueryAsync<RevocationRule>("""
+            SELECT sr.staff_id StaffId,s.staff_ref StaffRef,r.role_code RoleCode
+            FROM eggrack_auth_staff_role sr
+            INNER JOIN eggrack_auth_staff s ON s.id=sr.staff_id
+            INNER JOIN eggrack_auth_role r ON r.id=sr.role_id
+            WHERE sr.id=@AssignmentId
+            """, new { AssignmentId = assignmentId }, cancellationToken: cancellationToken);
+        var assignment = rows.SingleOrDefault() ?? throw new InvalidOperationException("角色授权不存在");
+        if (assignment.RoleCode == "super_admin" && assignment.StaffRef == operatorRef)
+            throw new InvalidOperationException("不能撤销当前登录账号自己的超级管理员角色");
+        if (assignment.RoleCode == "super_admin")
+        {
+            var counts = await session.QueryAsync<CountRow>("""
+                SELECT COUNT(DISTINCT sr.staff_id) Value
+                FROM eggrack_auth_staff_role sr
+                INNER JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.role_code='super_admin'
+                INNER JOIN eggrack_auth_staff s ON s.id=sr.staff_id AND s.status=1 AND s.deleted_at IS NULL
+                WHERE (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+                """, cancellationToken: cancellationToken);
+            if (counts.Single().Value <= 1)
+                throw new InvalidOperationException("系统必须至少保留一个启用的超级管理员");
+        }
+
+        await session.BeginTransactionAsync(cancellationToken: cancellationToken);
+        try
+        {
+            await session.ExecuteAsync("DELETE FROM eggrack_auth_staff_role WHERE id=@AssignmentId", new { AssignmentId = assignmentId }, cancellationToken: cancellationToken);
+            await session.ExecuteAsync("UPDATE eggrack_auth_staff SET auth_version=auth_version+1 WHERE id=@StaffId", new { assignment.StaffId }, cancellationToken: cancellationToken);
+            await session.ExecuteAsync(
+                "INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,before_data) VALUES(@OperatorRef,'auth.role.revoke','staff',@TargetRef,@BeforeData)",
+                new { OperatorRef = operatorRef, TargetRef = assignment.StaffId.ToString(), BeforeData = JsonSerializer.Serialize(new { assignment.RoleCode }) },
+                cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await session.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     private sealed record RoleRule(string Code);
     private sealed record InsertedId(long Id);
+    private sealed record RevocationRule(long StaffId, string StaffRef, string RoleCode);
+    private sealed record CountRow(long Value);
 }
 

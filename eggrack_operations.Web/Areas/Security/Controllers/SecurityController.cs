@@ -35,12 +35,14 @@ public sealed class SecurityController(
         var staffTask = admin.GetStaffAsync(keyword, cancellationToken);
         var rolesTask = admin.GetRolesAsync(cancellationToken);
         var departmentsTask = admin.GetDepartmentsAsync(cancellationToken);
-        await Task.WhenAll(staffTask, rolesTask, departmentsTask);
+        var assignmentsTask = admin.GetRoleAssignmentsAsync(cancellationToken);
+        await Task.WhenAll(staffTask, rolesTask, departmentsTask, assignmentsTask);
         return View(new StaffIndexViewModel(
             keyword,
             await staffTask,
             await rolesTask,
-            await departmentsTask));
+            await departmentsTask,
+            await assignmentsTask));
     }
 
     [HttpGet("roles")]
@@ -183,6 +185,25 @@ public sealed class SecurityController(
         else
         {
             TempData["Error"] = string.Join("；", result.Errors.Select(x => x.Description));
+        }
+        return RedirectToAction(nameof(Staff));
+    }
+
+    [HttpPost("staff/revoke-role")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.role.revoke")]
+    public async Task<IActionResult> RevokeRole(RevokeRoleInput input, CancellationToken cancellationToken)
+    {
+        var operatorRef = currentStaff.GetStaffRef();
+        if (string.IsNullOrWhiteSpace(operatorRef)) return Challenge();
+        try
+        {
+            await admin.RevokeRoleAsync(input.AssignmentId, operatorRef, cancellationToken);
+            TempData["Success"] = "角色授权已撤销，人员权限缓存版本已更新。";
+        }
+        catch (InvalidOperationException exception)
+        {
+            TempData["Error"] = exception.Message;
         }
         return RedirectToAction(nameof(Staff));
     }

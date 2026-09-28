@@ -34,6 +34,14 @@
               <div class="modal-header"><h2 class="modal-title fs-5">为 @item.StaffName 授予角色</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
               <div class="modal-body">
                 <input type="hidden" name="StaffId" value="@item.Id" />
+                @{ var currentAssignments = Model.Assignments.Where(x => x.StaffId == item.Id).ToArray(); }
+                @if (currentAssignments.Length > 0) {
+                  <div class="mb-3"><label class="form-label">当前授权</label><div class="d-flex flex-column gap-2">
+                    @foreach (var assignment in currentAssignments) {
+                      <div class="d-flex align-items-center justify-content-between border rounded px-3 py-2"><span>@assignment.RoleName <small class="text-secondary">@(assignment.DepartmentName ?? "全局")</small></span><button class="btn btn-sm btn-outline-danger" type="submit" formaction="@Url.Action("RevokeRole")" name="AssignmentId" value="@assignment.Id">撤销</button></div>
+                    }
+                  </div></div>
+                }
                 <label class="form-label">角色</label>
                 <select class="form-select mb-3" name="RoleId" required>
                   <option value="">请选择角色</option>

@@ -12,7 +12,8 @@ public sealed record StaffIndexViewModel(
     string? Keyword,
     IReadOnlyList<StaffListItem> Staff,
     IReadOnlyList<RoleListItem> Roles,
-    IReadOnlyList<DepartmentOption> Departments);
+    IReadOnlyList<DepartmentOption> Departments,
+    IReadOnlyList<StaffRoleAssignment> Assignments);
 
 public sealed class AssignRoleInput
 {
@@ -50,5 +51,10 @@ public sealed class ResetStaffPasswordInput
 {
     [Required] public string StaffRef { get; set; } = string.Empty;
     [Required, DataType(DataType.Password)] public string NewPassword { get; set; } = string.Empty;
+}
+
+public sealed class RevokeRoleInput
+{
+    public long AssignmentId { get; set; }
 }
 
