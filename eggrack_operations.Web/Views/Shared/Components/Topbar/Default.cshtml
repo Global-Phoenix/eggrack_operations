@@ -28,11 +28,17 @@
                 <span class="avatar">@Model.DisplayName[..1]</span><span class="user-name">@Model.DisplayName</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                <li><h6 class="dropdown-header">当前账号</h6></li>
-                <li><a class="dropdown-item" href="#"><i class="bi bi-person"></i><span>账号中心</span></a></li>
-                <li><a class="dropdown-item" href="#"><i class="bi bi-gear"></i><span>个人设置</span></a></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><a class="dropdown-item" href="#"><i class="bi bi-box-arrow-right"></i><span>退出登录</span></a></li>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <li><h6 class="dropdown-header">@Model.DisplayName</h6></li>
+                    <li><a class="dropdown-item" href="/account/enable-authenticator"><i class="bi bi-shield-lock"></i><span>双重验证</span></a></li>
+                    <li><hr class="dropdown-divider" /></li>
+                    <li><form method="post" action="/account/logout"><button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i><span>退出登录</span></button></form></li>
+                }
+                else
+                {
+                    <li><a class="dropdown-item" href="/account/login"><i class="bi bi-box-arrow-in-right"></i><span>登录</span></a></li>
+                }
             </ul>
         </div>
     </div>
