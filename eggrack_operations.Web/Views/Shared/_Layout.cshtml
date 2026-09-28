@@ -14,11 +14,7 @@
     @await Component.InvokeAsync("Navigation")
     <div class="main-panel">
         @await Component.InvokeAsync("Topbar", new { title = ViewData["Title"]?.ToString() })
-        <main class="content-area">
-            @await Component.InvokeAsync("Breadcrumb", new { title = ViewData["Title"]?.ToString() })
-            @RenderBody()
-        </main>
-        <footer class="app-footer">Eggrack Operations · ASP.NET Core 8 MVC</footer>
+        <main class="content-area">@RenderBody()</main>
     </div>
 </div>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
@@ -26,6 +22,3 @@
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
-
-
-

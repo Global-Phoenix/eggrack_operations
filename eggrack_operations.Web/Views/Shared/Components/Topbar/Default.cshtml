@@ -1,15 +1,20 @@
 @model eggrack_operations.ViewComponents.TopbarViewModel
 <header class="topbar">
-    <div class="d-flex align-items-center gap-3 min-w-0">
-        <button class="mobile-menu" id="mobileMenu" type="button" aria-label="打开导航">☰</button>
-        <div class="page-context"><strong>@Model.Title</strong><small>Eggrack Operations</small></div>
+    <div class="workspace-tabs">
+        <button class="mobile-menu" id="mobileMenu" type="button" aria-label="打开导航"><i class="bi bi-list"></i></button>
+        <a class="workspace-tab home-tab" asp-controller="Home" asp-action="Index"><i class="bi bi-house-door"></i><span>首页</span></a>
+        <span class="tab-divider"></span>
+        <div class="workspace-tab active"><span>@Model.Title</span>@if (Model.Title != "工作台") { <button type="button" aria-label="关闭标签">×</button> }</div>
+        <button class="new-tab-button" type="button" aria-label="新建标签"><i class="bi bi-plus-lg"></i></button>
     </div>
     <div class="topbar-actions">
-        <button class="topbar-button" type="button">任务 <span class="badge text-bg-warning">@Model.TaskCount</span></button>
-        <button class="topbar-button" type="button">消息 <span class="badge text-bg-secondary">@Model.MessageCount</span></button>
+        <button class="assistant-button" type="button">AI助手</button>
+        <button class="topbar-link" type="button">新功能</button>
+        <button class="icon-button" type="button" title="任务"><i class="bi bi-clock-history"></i><span class="notification-dot">@Model.TaskCount</span></button>
+        <button class="icon-button" type="button" title="消息"><i class="bi bi-bell"></i><span class="notification-dot">@Model.MessageCount</span></button>
         <div class="dropdown">
             <button class="user-button dropdown-toggle" data-bs-toggle="dropdown" type="button">
-                <span class="avatar">@Model.DisplayName[..1]</span><span class="d-none d-sm-inline">@Model.DisplayName</span>
+                <span class="avatar">@Model.DisplayName[..1]</span><span>@Model.DisplayName</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                 <li><a class="dropdown-item" href="#">账号中心</a></li>

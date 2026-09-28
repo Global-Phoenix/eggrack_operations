@@ -1,42 +1,40 @@
 @model eggrack_operations.ViewComponents.NavigationViewModel
 <aside class="sidebar" id="sidebar">
-    <a class="brand" asp-controller="Home" asp-action="Index">
-        <span class="brand-logo-image"><img src="~/images/eggracks-logo.png" asp-append-version="true" alt="Eggracks" /></span>
-        <span class="brand-mini">E</span>
+    <a class="brand" asp-controller="Home" asp-action="Index" title="Eggracks 运营管理中心">
+        <img src="~/favicon.ico" asp-append-version="true" alt="Eggracks" />
     </a>
     <nav class="sidebar-nav" aria-label="主导航">
         @foreach (var item in Model.Items)
         {
             if (item.Children is { Count: > 0 })
             {
-                var groupId = $"nav-{item.Code.Replace('.', '-')}";
                 var groupActive = Model.IsGroupActive(item);
-                <button class="nav-group-toggle @(groupActive ? "active" : string.Empty)" type="button"
-                        data-bs-toggle="collapse" data-bs-target="#@groupId" aria-expanded="@groupActive.ToString().ToLowerInvariant()">
-                    <i class="nav-icon bi @item.Icon" aria-hidden="true"></i><span class="nav-label">@item.Title</span><span class="nav-chevron">›</span>
-                </button>
-                <div id="@groupId" class="collapse nav-children @(groupActive ? "show" : string.Empty)">
-                    @foreach (var child in item.Children)
-                    {
-                        <a class="nav-link @(Model.IsActive(child) ? "active" : string.Empty)" asp-area="@child.Area" asp-controller="@child.Controller" asp-action="@child.Action">
-                            <i class="nav-child-icon bi @child.Icon" aria-hidden="true"></i><span>@child.Title</span>
-                        </a>
-                    }
+                <div class="nav-group @(groupActive ? "active" : string.Empty)">
+                    <button class="nav-entry" type="button" aria-label="@item.Title">
+                        <i class="bi @item.Icon" aria-hidden="true"></i><span>@item.Title</span>
+                    </button>
+                    <div class="nav-flyout">
+                        <div class="nav-flyout-title">@item.Title</div>
+                        @foreach (var child in item.Children)
+                        {
+                            <a class="nav-flyout-link @(Model.IsActive(child) ? "active" : string.Empty)"
+                               asp-area="@child.Area" asp-controller="@child.Controller" asp-action="@child.Action">
+                                <i class="bi @child.Icon" aria-hidden="true"></i><span>@child.Title</span>
+                            </a>
+                        }
+                    </div>
                 </div>
             }
             else
             {
-                <a class="nav-link root-link @(Model.IsActive(item) ? "active" : string.Empty)" asp-area="@item.Area" asp-controller="@item.Controller" asp-action="@item.Action">
-                    <i class="nav-icon bi @item.Icon" aria-hidden="true"></i><span class="nav-label">@item.Title</span>
+                <a class="nav-entry @(Model.IsActive(item) ? "active" : string.Empty)" title="@item.Title"
+                   asp-area="@item.Area" asp-controller="@item.Controller" asp-action="@item.Action">
+                    <i class="bi @item.Icon" aria-hidden="true"></i><span>@item.Title</span>
                 </a>
             }
         }
     </nav>
-    <button class="sidebar-collapse" id="sidebarToggle" type="button" aria-label="收起或展开导航">
-        <span>‹</span><span class="nav-label">收起导航</span>
+    <button class="sidebar-control" id="sidebarToggle" type="button" aria-label="切换导航">
+        <i class="bi bi-list"></i>
     </button>
 </aside>
-
-
-
-
