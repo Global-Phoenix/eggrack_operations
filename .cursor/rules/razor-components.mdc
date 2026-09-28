@@ -1,0 +1,16 @@
+---
+description: Razor 页面与 Bootstrap 5 组件封装规则
+globs: eggrack_operations.Web/**/*.cshtml
+alwaysApply: false
+---
+
+# Razor UI 规范
+
+- 使用 Bootstrap 5 和服务端 Razor，不引入前后端分离框架。
+- 有独立数据或逻辑的复用区块使用 ViewComponent；纯展示短片段使用 Partial View。
+- 页面只组合组件和渲染 ViewModel，不在 cshtml 中查询数据库或编写业务规则。
+- 列表筛选、分页、状态标签、空状态、上传区、确认弹窗等出现两次即提取复用。
+- ViewComponent 命名为 `<Name>ViewComponent`，视图固定放在 `Views/Shared/Components/<Name>/Default.cshtml`。
+- 模块专用组件放在对应 Area 内；只有跨模块复用的组件进入 Shared。
+- 不复制现有布局 HTML；扩展导航、顶部栏和面包屑时修改对应组件。
+- 保持语义化 HTML、键盘可用性、移动端布局和中文可读提示。

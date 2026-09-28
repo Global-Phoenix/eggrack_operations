@@ -1,0 +1,16 @@
+---
+description: 多窗口、多模块并行开发的全局协作规则
+alwaysApply: true
+---
+
+# 多窗口并行开发
+
+- 每个窗口必须使用独立 Git worktree 和独立分支；禁止多个窗口共用一个工作目录。
+- 一个窗口只负责一个模块：wholesale、security、files、tasks、logs、menus、email-templates。
+- 分支命名为 `feature/<module>-<task>`，提交信息以模块名开头，例如 `files: add upload validation`。
+- 模块代码放在各层的 `Modules/<Module>/` 或 Web 的 `Areas/<Module>/`，禁止把业务代码堆入 Shared。
+- 模块窗口不得修改解决方案、Program.cs、全局布局、公共 CSS、公共数据库配置或公共实体；确需修改时记录在交接说明，由集成窗口处理。
+- 数据库脚本按模块放入 `database/sqlserver/modules/<module>/`，文件名带递增版本；禁止修改已合并脚本。
+- 每次提交前执行 `dotnet build -c Debug` 和相关测试，不提交 bin、obj、用户机密或 appsettings.Local.json。
+- 完成后提交原子 commit，更新模块文档，并向集成窗口提供分支名、commit、数据库变更和验证结果。
+- 集成窗口负责共享文件、冲突解决、全量测试、合并和推送 main。

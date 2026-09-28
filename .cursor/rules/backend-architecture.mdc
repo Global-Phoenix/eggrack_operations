@@ -1,0 +1,17 @@
+---
+description: C# 分层、封装和少接口开发规范
+globs: **/*.cs
+alwaysApply: false
+---
+
+# C# 后端规范
+
+- Controller 只负责输入绑定、调用应用服务和返回 View/Redirect，业务流程封装到 Application。
+- 默认使用具体类；仅在多实现、外部系统隔离、运行时替换或测试替身确有价值时创建接口。
+- 优先封装完整业务动作，避免多个 Controller 重复拼接数据访问步骤。
+- Domain 不引用 Web、数据库或基础设施；Infrastructure 不包含页面逻辑。
+- 模块代码按 `Modules/<Module>/` 垂直组织；跨模块公共类型必须稳定且确实被复用。
+- 数据访问统一使用 DatabaseSessionFactory/DatabaseSession；显式指定数据库名称。
+- 同库写操作使用单一 DatabaseSession 事务；跨库操作使用幂等任务和补偿，不使用分布式事务。
+- 存储过程使用封装方法，参数化执行；禁止字符串拼接 SQL 和记录密码、Token、连接串。
+- 新行为需要对应测试；异常信息应提供业务上下文但不得泄露敏感数据。
