@@ -129,6 +129,34 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         var changed=await db.ExecuteAsync(sql,new{PlanId=planId,input.PurchaseCostCny,input.PackagingCostCny,input.SampleCostCny,input.DomesticShippingCny,input.InternationalShippingCny,input.OtherCostCny,result.TotalCostCny,input.CnyPerUsd,result.TotalCostUsd,input.ProfitRate,result.SuggestedQuoteUsd,StaffId=staffId,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
         if(changed!=1) throw new InvalidOperationException("采购计划不存在或当前状态不能修改成本。");
     }
+    public async Task<ProcurementCosts> GetFlexibleCostsAsync(uint planId,CancellationToken token=default)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        var plan=(await db.QueryAsync<FlexibleCostPlan>("SELECT COALESCE(cny_per_usd,7.12) CnyPerUsd,COALESCE(profit_rate,0.15) ProfitRate,COALESCE(total_cost_cny,0) TotalCostCny,COALESCE(total_cost_usd,0) TotalCostUsd,COALESCE(approved_quote_amount_usd,0) SuggestedQuoteUsd FROM purchase_plans WHERE id=@PlanId",new{PlanId=planId},cancellationToken:token)).Single();
+        var items=await db.QueryAsync<ProcurementCostItem>("SELECT id Id,cost_name Name,amount_cny AmountCny,sort_order SortOrder FROM procurement_plan_cost_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
+        return new(plan.CnyPerUsd,plan.ProfitRate,plan.TotalCostCny,plan.TotalCostUsd,plan.SuggestedQuoteUsd,items);
+    }
+    public async Task<ProcurementCosts> SaveFlexibleCostsAsync(uint planId,SaveProcurementCostsCommand command,long staffId,CancellationToken token=default)
+    {
+        if(command.CnyPerUsd<=0)throw new ArgumentOutOfRangeException(nameof(command.CnyPerUsd),"汇率必须大于 0。");
+        if(command.ProfitRate is <0.10m or >0.20m)throw new ArgumentOutOfRangeException(nameof(command.ProfitRate),"利润率必须在 10% 到 20% 之间。");
+        var items=(command.Items??[]).Where(x=>!string.IsNullOrWhiteSpace(x.Name)).Select(x=>new ProcurementCostItemInput(x.Name.Trim(),x.AmountCny)).ToArray();
+        if(items.Length==0)throw new InvalidOperationException("请至少添加一项成本。");
+        if(items.Any(x=>x.AmountCny<0))throw new InvalidOperationException("成本金额不能为负数。");
+        var total=items.Sum(x=>x.AmountCny);var usd=decimal.Round(total/command.CnyPerUsd,2,MidpointRounding.AwayFromZero);var quote=decimal.Round(usd/(1-command.ProfitRate),2,MidpointRounding.AwayFromZero);
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanAsync(db,planId,token);
+        await db.ExecuteInTransactionAsync(async transactionToken=>
+        {
+            var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            await db.ExecuteAsync("DELETE FROM procurement_plan_cost_items WHERE plan_id=@PlanId",new{PlanId=planId},cancellationToken:transactionToken);
+            for(var index=0;index<items.Length;index++)await db.ExecuteAsync("INSERT procurement_plan_cost_items(plan_id,cost_name,amount_cny,sort_order,created_by,updated_by,created_at,updated_at) VALUES(@PlanId,@Name,@Amount,@Sort,@StaffId,@StaffId,@Now,@Now)",new{PlanId=planId,items[index].Name,Amount=items[index].AmountCny,Sort=index,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            var changed=await db.ExecuteAsync("UPDATE purchase_plans SET product_cost_cny=0,packaging_cost_cny=0,sample_cost_cny=0,domestic_shipping_cny=0,international_shipping_cny=0,other_cost_cny=@Total,total_cost_cny=@Total,cny_per_usd=@Rate,total_cost_usd=@Usd,profit_method=2,profit_rate=@Profit,approved_quote_amount_usd=@Quote,status=3,cost_updated_by=@StaffId,cost_updated_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status IN(1,2,3)",new{PlanId=planId,Total=total,Rate=command.CnyPerUsd,Usd=usd,Profit=command.ProfitRate,Quote=quote,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            if(changed!=1)throw new InvalidOperationException("采购计划当前状态不能修改成本。");
+        },cancellationToken:token);
+        return new(command.CnyPerUsd,command.ProfitRate,total,usd,quote,(await GetFlexibleCostsAsync(planId,token)).Items);
+    }
+    private sealed record FlexibleCostPlan(decimal CnyPerUsd,decimal ProfitRate,decimal TotalCostCny,decimal TotalCostUsd,decimal SuggestedQuoteUsd);
     public async Task<IReadOnlyList<ProcurementBuyerOption>> GetBuyersAsync(CancellationToken token=default)
     {
         var scope=scopePolicy.Current();

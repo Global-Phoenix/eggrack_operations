@@ -23,6 +23,33 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         };
     }
 
+    public async Task<StoredPlanUpload> SavePlanFileAsync(uint planId,string originalName,string mimeType,Stream source,CancellationToken token=default)
+    {
+        var safeName=Path.GetFileName(originalName);
+        if(string.IsNullOrWhiteSpace(safeName)||safeName.Length>255)throw new InvalidDataException("文件名无效或过长。");
+        var relative=$"{planId}/{Guid.NewGuid():N}.bin";
+        var root=Path.GetFullPath(Path.Combine(ResolveSiteRoot(),"u_file","purchase_plans"));
+        var path=ResolveInside(root,relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        const long maximumBytes=50L*1024*1024;
+        long length=0;
+        try
+        {
+            await using var output=new FileStream(path,FileMode.CreateNew,FileAccess.Write,FileShare.None,64*1024,FileOptions.Asynchronous);
+            var buffer=new byte[64*1024];
+            int read;
+            while((read=await source.ReadAsync(buffer,token))>0)
+            {
+                length+=read;
+                if(length>maximumBytes)throw new InvalidDataException("单个附件不能超过 50 MB。");
+                await output.WriteAsync(buffer.AsMemory(0,read),token);
+            }
+        }
+        catch { if(File.Exists(path))File.Delete(path); throw; }
+        if(length==0){File.Delete(path);throw new InvalidDataException("不能上传空文件。");}
+        return new StoredPlanUpload(safeName,relative,string.IsNullOrWhiteSpace(mimeType)?"application/octet-stream":mimeType,checked((uint)length),path);
+    }
+
     private async Task<Stream?> TryOpenPublicAsync(FileCenterStoredFile file, CancellationToken token)
     {
         var candidates = BuildPublicCandidates(configuration["FileCenter:PublicBaseUrl"], file.StoragePath, file.SourceKind);
@@ -150,3 +177,5 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         return path;
     }
 }
+
+public sealed record StoredPlanUpload(string OriginalName,string StoragePath,string MimeType,uint FileSize,string PhysicalPath);

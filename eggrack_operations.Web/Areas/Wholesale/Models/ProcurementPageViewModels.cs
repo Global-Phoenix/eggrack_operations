@@ -9,7 +9,8 @@ public sealed record PurchaseRequestsPageViewModel(
 public sealed record SourcingPageViewModel(
     IReadOnlyList<ProcurementPlanListItem> Plans,
     uint? InitialPlanId = null,
-    string? InitialPlanNumber = null);
+    string? InitialPlanNumber = null,
+    bool CanManageCosts = false);
 
 public sealed record SupplierDirectoryPageViewModel(
     IReadOnlyList<SupplierListItem> Suppliers,

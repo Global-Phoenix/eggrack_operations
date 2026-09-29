@@ -8,7 +8,7 @@ public sealed partial class ProcurementDataService
 {
     public async Task<IReadOnlyList<SupplierListItem>> GetSuppliersAsync(string? keyword,CancellationToken token=default)
     {
-        const string sql="SELECT id Id,supplier_name Name,supplier_code Code,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers WHERE (@Keyword IS NULL OR supplier_name LIKE CONCAT('%',@Keyword,'%') OR supplier_code LIKE CONCAT('%',@Keyword,'%') OR contact_json LIKE CONCAT('%',@Keyword,'%')) ORDER BY supplier_name";
+        const string sql="SELECT id Id,supplier_name Name,supplier_code Code,address Address,legal_representative LegalRepresentative,contact_name ContactName,contact_phone ContactPhone,website Website,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers WHERE (@Keyword IS NULL OR supplier_name LIKE CONCAT('%',@Keyword,'%') OR supplier_code LIKE CONCAT('%',@Keyword,'%') OR contact_name LIKE CONCAT('%',@Keyword,'%') OR contact_phone LIKE CONCAT('%',@Keyword,'%') OR contact_json LIKE CONCAT('%',@Keyword,'%')) ORDER BY supplier_name";
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         return await db.QueryAsync<SupplierListItem>(sql,new{Keyword=string.IsNullOrWhiteSpace(keyword)?null:keyword.Trim()},cancellationToken:token);
     }
@@ -16,16 +16,11 @@ public sealed partial class ProcurementDataService
     public async Task<long> CreateSupplierAsync(CreateSupplierCommand command,CancellationToken token=default)
     {
         if(string.IsNullOrWhiteSpace(command.Name)) throw new InvalidOperationException("供应商名称不能为空。");
-        string? contactJson=null;
-        if(!string.IsNullOrWhiteSpace(command.ContactJson))
-        {
-            try{contactJson=System.Text.Json.JsonDocument.Parse(command.ContactJson).RootElement.GetRawText();}
-            catch(System.Text.Json.JsonException error){throw new InvalidOperationException("联系方式必须是有效 JSON。",error);}
-        }
+        if(!string.IsNullOrWhiteSpace(command.Website)&&(!Uri.TryCreate(command.Website,UriKind.Absolute,out var website)||website.Scheme is not("http" or "https")))throw new InvalidOperationException("供应商网址必须是有效的 http 或 https 地址。");
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         try
         {
-            await db.ExecuteAsync("INSERT procurement_suppliers(supplier_name,supplier_code,contact_json,status,created_at,updated_at) VALUES(@Name,@Code,@ContactJson,'active',@Now,@Now)",new{Name=command.Name.Trim(),Code=string.IsNullOrWhiteSpace(command.Code)?null:command.Code.Trim(),ContactJson=contactJson,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
+            await db.ExecuteAsync("INSERT procurement_suppliers(supplier_name,supplier_code,address,legal_representative,contact_name,contact_phone,website,status,created_at,updated_at) VALUES(@Name,@Code,@Address,@LegalRepresentative,@ContactName,@ContactPhone,@Website,'active',@Now,@Now)",new{Name=command.Name.Trim(),Code=Clean(command.Code),Address=Clean(command.Address),LegalRepresentative=Clean(command.LegalRepresentative),ContactName=Clean(command.ContactName),ContactPhone=Clean(command.ContactPhone),Website=Clean(command.Website),Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
         }
         catch(DbException error) when(error.Message.Contains("uk_procurement_supplier_code",StringComparison.OrdinalIgnoreCase)
           || error.Message.Contains("Duplicate entry",StringComparison.OrdinalIgnoreCase))
@@ -127,15 +122,16 @@ public sealed partial class ProcurementDataService
           requestRow.VersionNumber,requestRow.CustomerName,requestRow.Email,requestRow.SubmittedAtUtc,
           requestItems,attachments);
         var planItems=await db.QueryAsync<ProcurementPlanItemOption>("SELECT id Id,product_name ProductName,quantity Quantity,quantity_unit Unit FROM purchase_plan_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
-        var suppliers=await db.QueryAsync<SupplierListItem>("SELECT id Id,supplier_name Name,supplier_code Code,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers ORDER BY supplier_name",cancellationToken:token);
+        var suppliers=await db.QueryAsync<SupplierListItem>("SELECT id Id,supplier_name Name,supplier_code Code,address Address,legal_representative LegalRepresentative,contact_name ContactName,contact_phone ContactPhone,website Website,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers ORDER BY supplier_name",cancellationToken:token);
         var candidates=await db.QueryAsync<CandidateProductItem>("SELECT c.id Id,c.plan_item_id PlanItemId,c.supplier_id SupplierId,c.product_name ProductName,s.supplier_name SupplierName,c.reference_url ReferenceUrl,c.specification_json SpecificationJson,c.status Status FROM procurement_candidate_products c JOIN purchase_plan_items i ON i.id=c.plan_item_id LEFT JOIN procurement_suppliers s ON s.id=c.supplier_id WHERE i.plan_id=@PlanId ORDER BY c.updated_at DESC,c.id DESC",new{PlanId=planId},cancellationToken:token);
-        var inquiries=await db.QueryAsync<InquiryItem>("SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,s.supplier_name SupplierName,q.currency Currency,q.unit_price_cny UnitPrice,q.moq Moq,q.lead_days LeadDays,q.valid_until ValidUntil,q.terms Terms,q.status Status,q.notes Notes FROM procurement_inquiries q JOIN purchase_plan_items i ON i.id=q.plan_item_id JOIN procurement_suppliers s ON s.id=q.supplier_id WHERE i.plan_id=@PlanId ORDER BY q.updated_at DESC,q.id DESC",new{PlanId=planId},cancellationToken:token);
+        var inquiries=await db.QueryAsync<InquiryItem>("SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,s.supplier_name SupplierName,q.offered_product_name OfferedProductName,q.length_cm LengthCm,q.width_cm WidthCm,q.height_cm HeightCm,q.weight_kg WeightKg,q.color Color,q.size_details SizeDetails,q.parameter_details ParameterDetails,q.currency Currency,q.unit_price_cny UnitPrice,q.moq Moq,q.lead_days LeadDays,q.valid_until ValidUntil,q.terms Terms,q.status Status,q.notes Notes FROM procurement_inquiries q JOIN purchase_plan_items i ON i.id=q.plan_item_id JOIN procurement_suppliers s ON s.id=q.supplier_id WHERE i.plan_id=@PlanId ORDER BY q.updated_at DESC,q.id DESC",new{PlanId=planId},cancellationToken:token);
         var samples=await db.QueryAsync<SampleItem>("SELECT x.id Id,x.plan_item_id PlanItemId,x.supplier_id SupplierId,i.product_name ProductName,s.supplier_name SupplierName,x.quantity Quantity,x.status Status,x.cost_cny CostCny,x.tracking_number TrackingNumber,x.notes Notes FROM procurement_samples x JOIN purchase_plan_items i ON i.id=x.plan_item_id LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC",new{PlanId=planId},cancellationToken:token);
+        var sampleFiles=await db.QueryAsync<SampleFileItem>("SELECT id Id,sample_id SampleId,original_name OriginalName,description Description,mime_type MimeType,file_size FileSize,FROM_UNIXTIME(uploaded_at) UploadedAtUtc FROM purchase_plan_files WHERE plan_id=@PlanId AND status<>3 ORDER BY uploaded_at DESC,id DESC",new{PlanId=planId},cancellationToken:token);
         var mails=await db.QueryAsync<MailTaskItem>("SELECT id Id,recipient Recipient,status Status,template_code TemplateCode,attempts Attempts,last_error LastError,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(sent_at) SentAtUtc FROM procurement_mail_tasks WHERE plan_id=@PlanId ORDER BY created_at DESC,id DESC",new{PlanId=planId},cancellationToken:token);
         var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT id Id,pi_number Number,CASE status WHEN 1 THEN 'Draft' WHEN 2 THEN 'Approved' WHEN 3 THEN 'Issued' ELSE 'Cancelled' END Status,total_amount TotalAmount,currency Currency,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1",new{PlanId=planId},cancellationToken:token);
         var invoice=invoices.SingleOrDefault();
         var pricing=invoice is null?null:await GetProformaInvoicePricingAsync(db,invoice.Id,token);
-        return new(requestContext,planItems,suppliers,candidates,inquiries,samples,mails,invoice,pricing);
+        return new(requestContext,planItems,suppliers,candidates,inquiries,samples,sampleFiles,mails,invoice,pricing);
     }
 
     public async Task<uint> SaveCandidateAsync(SaveCandidateProductCommand command,CancellationToken token=default)
@@ -148,10 +144,10 @@ public sealed partial class ProcurementDataService
 
     public async Task<uint> SaveInquiryAsync(SaveInquiryCommand command,CancellationToken token=default)
     {
-        if(command.UnitPrice<0||command.Moq<0||command.LeadDays<0)throw new InvalidOperationException("询价数据不能为负数。");if(command.Currency is not("CNY" or "USD"))throw new InvalidOperationException("币种仅支持 CNY 或 USD。");
+        if(command.UnitPrice<0||command.Moq<0||command.LeadDays<0||command.LengthCm<0||command.WidthCm<0||command.HeightCm<0||command.WeightKg<0)throw new InvalidOperationException("询价数据和产品参数不能为负数。");if(command.Currency is not("CNY" or "USD"))throw new InvalidOperationException("币种仅支持 CNY 或 USD。");
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_inquiries",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_inquiries SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,currency=@Currency,unit_price_cny=@UnitPrice,moq=@Moq,lead_days=@LeadDays,valid_until=@ValidUntil,terms=@Terms,status=@Status,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("询价记录不存在。");return command.Id.Value;}
-        await db.ExecuteAsync("INSERT procurement_inquiries(plan_item_id,supplier_id,currency,unit_price_cny,moq,lead_days,valid_until,terms,status,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Currency,@UnitPrice,@Moq,@LeadDays,@ValidUntil,@Terms,@Status,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
+        if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_inquiries SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,offered_product_name=@OfferedProductName,length_cm=@LengthCm,width_cm=@WidthCm,height_cm=@HeightCm,weight_kg=@WeightKg,color=@Color,size_details=@SizeDetails,parameter_details=@ParameterDetails,currency=@Currency,unit_price_cny=@UnitPrice,moq=@Moq,lead_days=@LeadDays,valid_until=@ValidUntil,terms=@Terms,status=@Status,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.OfferedProductName,command.LengthCm,command.WidthCm,command.HeightCm,command.WeightKg,command.Color,command.SizeDetails,command.ParameterDetails,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("询价记录不存在。");return command.Id.Value;}
+        await db.ExecuteAsync("INSERT procurement_inquiries(plan_item_id,supplier_id,offered_product_name,length_cm,width_cm,height_cm,weight_kg,color,size_details,parameter_details,currency,unit_price_cny,moq,lead_days,valid_until,terms,status,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@OfferedProductName,@LengthCm,@WidthCm,@HeightCm,@WeightKg,@Color,@SizeDetails,@ParameterDetails,@Currency,@UnitPrice,@Moq,@LeadDays,@ValidUntil,@Terms,@Status,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.OfferedProductName,command.LengthCm,command.WidthCm,command.HeightCm,command.WeightKg,command.Color,command.SizeDetails,command.ParameterDetails,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
 
     public async Task<uint> SaveSampleAsync(SaveSampleCommand command,CancellationToken token=default)
@@ -161,6 +157,19 @@ public sealed partial class ProcurementDataService
         if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_samples SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,quantity=@Quantity,status=@Status,cost_cny=@CostCny,tracking_number=@TrackingNumber,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("样品记录不存在。");return command.Id.Value;}
         await db.ExecuteAsync("INSERT procurement_samples(plan_item_id,supplier_id,quantity,status,cost_cny,tracking_number,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Quantity,@Status,@CostCny,@TrackingNumber,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
+    public async Task<uint> AddSampleFileAsync(uint planId,uint? sampleId,string originalName,string storagePath,string mimeType,uint fileSize,string? description,ulong staffId,CancellationToken token=default)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        if(sampleId.HasValue)
+        {
+            var count=(await db.QueryAsync<long>("SELECT COUNT(*) FROM procurement_samples x JOIN purchase_plan_items i ON i.id=x.plan_item_id WHERE x.id=@SampleId AND i.plan_id=@PlanId",new{SampleId=sampleId.Value,PlanId=planId},cancellationToken:token)).Single();
+            if(count!=1)throw new InvalidOperationException("样品记录不属于当前采购计划。");
+        }
+        await db.ExecuteAsync("INSERT purchase_plan_files(plan_id,sample_id,file_type,description,original_name,storage_path,mime_type,file_size,status,uploaded_by,updated_by,uploaded_at,updated_at) VALUES(@PlanId,@SampleId,'sample',@Description,@OriginalName,@StoragePath,@MimeType,@FileSize,1,@StaffId,@StaffId,@Now,@Now)",new{PlanId=planId,SampleId=sampleId,OriginalName=originalName,Description=Clean(description),StoragePath=storagePath,MimeType=mimeType,FileSize=fileSize,StaffId=staffId,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
+        return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
+    }
     private sealed record PlanForApproval(uint Id,uint RequestId,uint RequestVersionId,decimal? TotalCostUsd,decimal? ProfitRate,byte Status);
     private sealed record SourcingRequestRow(uint RequestId,uint VersionId,string RequestNumber,string PlanNumber,uint VersionNumber,string CustomerName,string Email,DateTime SubmittedAtUtc);
+    private static string? Clean(string? value)=>string.IsNullOrWhiteSpace(value)?null:value.Trim();
 }

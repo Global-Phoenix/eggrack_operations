@@ -1,4 +1,6 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
+using Eggrack.Operations.Application.Modules.Security;
+using Eggrack.Operations.Infrastructure.Modules.Files;
 using Eggrack.Operations.Infrastructure.Modules.Wholesale;
 using eggrack_operations.Areas.Security;
 using eggrack_operations.Areas.Wholesale.Models;
@@ -11,7 +13,7 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 [Authorize]
 [Route("wholesale/procurement")]
 [InternalPermission("wholesale.purchase-plan.view")]
-public sealed partial class ProcurementController(ProcurementDataService procurement,ProcurementMailDispatcher mailDispatcher) : Controller
+public sealed partial class ProcurementController(ProcurementDataService procurement,ProcurementMailDispatcher mailDispatcher,FileCenterStorageService fileStorage,CurrentStaffAccessor currentStaff,PermissionEvaluator permissionEvaluator) : Controller
 {
     [HttpGet("")]
     public IActionResult Index() => RedirectToAction(nameof(PurchaseRequests));
@@ -24,7 +26,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpGet("sourcing")]
     public async Task<IActionResult> Sourcing(CancellationToken token) =>
-        View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token)));
+        View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token),CanManageCosts:await CanManageCostsAsync(token)));
 
     [HttpGet("suppliers")]
     public async Task<IActionResult> SupplierDirectory([FromQuery]string? keyword,CancellationToken token) =>
@@ -38,7 +40,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         var plan=plans.SingleOrDefault(item=>item.Id==planId);
         if(plan is null)return NotFound();
         ViewData["Title"]=$"{plan.PlanNumber} 详情";
-        return View("Sourcing",new SourcingPageViewModel(plans,plan.Id,plan.PlanNumber));
+        return View("Sourcing",new SourcingPageViewModel(plans,plan.Id,plan.PlanNumber,await CanManageCostsAsync(token)));
     }
 
     [HttpGet("request-options")]
@@ -85,16 +87,19 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         }
     }
 
+    [HttpGet("plans/{planId:long}/costs")]
+    [InternalPermission("wholesale.purchase-cost.manage")]
+    public async Task<IActionResult> Costs(uint planId,CancellationToken token) => Json(await procurement.GetFlexibleCostsAsync(planId,token));
+
     [HttpPost("plans/{planId:long}/costs")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.purchase-cost.manage")]
-    public async Task<IActionResult> SaveCosts(uint planId,[FromForm]ProcurementCostInput input,CancellationToken token)
+    public async Task<IActionResult> SaveCosts(uint planId,[FromForm]SaveProcurementCostsCommand command,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
         try
         {
-            await procurement.SaveCostsAsync(planId,input,staffId,token);
-            return Json(new{ok=true,data=ProcurementPricing.Calculate(input)});
+            return Json(new{ok=true,data=await procurement.SaveFlexibleCostsAsync(planId,command,staffId,token)});
         }
         catch(Exception error) when(error is ArgumentOutOfRangeException or InvalidOperationException)
         {
@@ -114,4 +119,9 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     private bool TryStaffIdUnsigned(out ulong staffId) =>
         ulong.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
+    private async Task<bool> CanManageCostsAsync(CancellationToken token)
+    {
+        var authorization=await currentStaff.LoadAsync(token);
+        return authorization is not null&&permissionEvaluator.Evaluate(authorization,"wholesale.purchase-cost.manage").Allowed;
+    }
 }
