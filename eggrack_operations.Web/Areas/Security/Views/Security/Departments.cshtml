@@ -8,17 +8,4 @@
 @if(Model.Departments.Count==0){<tr><td colspan="6" class="text-center text-secondary py-5">尚未创建部门</td></tr>}</tbody></table></div></div>
 <div class="modal fade" id="department-new" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form asp-action="SaveDepartment" method="post"><div class="modal-header"><h2 class="modal-title fs-5">新增部门</h2><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><partial name="_DepartmentFields" model="@(new DepartmentFormViewModel("","",null,0,Model.Departments,null))" /></div><div class="modal-footer"><button class="btn btn-light" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary">创建</button></div></form></div></div></div>
 @section Styles{<link rel="stylesheet" href="~/css/pages/security.css" asp-append-version="true"/>}
-@section Scripts {
-<script>
-document.addEventListener("click", event => {
-  const button = event.target.closest("[data-department-template]");
-  if (!button) return;
-  const form = button.closest("form");
-  if (!form) return;
-  const code = form.querySelector('[name="Code"]');
-  const name = form.querySelector('[name="Name"]');
-  if (code) code.value = button.dataset.code || "";
-  if (name) name.value = button.dataset.name || "";
-});
-</script>
-}
+@section Scripts { <script src="~/js/pages/security-departments.js" asp-append-version="true"></script> }
