@@ -1,6 +1,8 @@
 (() => {
     const root = document.querySelector('[data-purchase-requests]');
     if (!root || typeof bootstrap === 'undefined') return;
+    const { request } = window.Eggrack.http;
+    const { filterRows, setBusy, setMessage } = window.Eggrack.ui;
     const modalElement = document.getElementById('planEditor');
     const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
     const form = root.querySelector('[data-plan-form]');
@@ -13,16 +15,7 @@
     const title = document.getElementById('planEditorTitle');
     const caption = root.querySelector('[data-plan-caption]');
 
-    const showError = message => {
-        errorBox.textContent = message || '';
-        errorBox.classList.toggle('d-none', !message);
-    };
-    const responseMessage = async response => {
-        const type = response.headers.get('content-type') || '';
-        if (type.includes('application/json')) return (await response.json()).message;
-        const text = await response.text();
-        return text || `请求失败（HTTP ${response.status}）`;
-    };
+    const showError = message => setMessage(errorBox, message);
     const openEditor = async button => {
         showError('');
         const requestId = button.dataset.requestId;
@@ -36,9 +29,7 @@
         versionSelect.innerHTML = '<option>正在加载版本…</option>';
         modal.show();
         try {
-            const response = await fetch(`/wholesale/procurement/requests/${requestId}/versions`, { headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error(await responseMessage(response));
-            const versions = await response.json();
+            const versions = await request(`/wholesale/procurement/requests/${requestId}/versions`);
             versionSelect.replaceChildren(...versions.map(version => {
                 const option = document.createElement('option');
                 option.value = version.id;
@@ -62,25 +53,21 @@
         event.preventDefault();
         openEditor(first);
     });
-    root.querySelector('[data-search]')?.addEventListener('input', event => {
-        const keyword = event.target.value.trim().toLowerCase();
-        root.querySelectorAll('[data-row]').forEach(row => row.hidden = !row.textContent.toLowerCase().includes(keyword));
-    });
+    root.querySelector('[data-search]')?.addEventListener('input', event => filterRows(root, event.target.value));
     form.addEventListener('submit', async event => {
         event.preventDefault();
         if (!versionSelect.value || !buyerSelect.value) return showError('请选择申请版本和采购人员。');
-        submit.disabled = true;
+        setBusy(submit, true);
         showError('');
         const body = new FormData(form);
         const planId = planInput.value;
         const url = planId ? `/wholesale/procurement/plans/${planId}` : '/wholesale/procurement/plans';
         try {
-            const response = await fetch(url, { method: 'POST', body, headers: { Accept: 'application/json' } });
-            if (!response.ok) throw new Error(await responseMessage(response));
+            await request(url, { method: 'POST', body });
             window.location.reload();
         } catch (error) {
             showError(error.message || '采购计划保存失败。');
-            submit.disabled = false;
+            setBusy(submit, false);
         }
     });
 })();
