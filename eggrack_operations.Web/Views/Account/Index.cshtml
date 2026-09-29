@@ -1,6 +1,6 @@
 @model AccountProfileViewModel
 @{ ViewData["Title"] = "账号中心"; }
-@await Component.InvokeAsync("PageHeader", new { title = "账号中心", subtitle = "查看个人身份信息与账号安全状态", parentTitle = "系统管理", parentUrl = "/", statusText = Model.TwoFactorEnabled ? "双重验证已开启" : "需要开启双重验证", statusTone = Model.TwoFactorEnabled ? "success" : "warning" })
+@await Component.InvokeAsync("PageHeader", new { title = "账号中心", subtitle = "查看个人身份信息与账号安全状态", parentTitle = "系统管理", parentUrl = "/", statusText = "账号正常", statusTone = "success" })
 
 <div class="row g-3">
     <div class="col-12 col-xl-7">
@@ -8,7 +8,7 @@
             <div class="ui-panel-header"><div class="ui-panel-title"><h2>身份信息</h2><p>账号信息由系统管理员维护</p></div></div>
             <div class="ui-panel-body">
                 <div class="account-identity"><span class="account-avatar">@Model.UserName[..1]</span><div><strong>@Model.UserName</strong><p>@(Model.Email ?? "未设置邮箱")</p></div></div>
-                <dl class="account-details"><div><dt>人员标识</dt><dd>@Model.StaffRef</dd></div><div><dt>系统角色</dt><dd>@(Model.Roles.Count == 0 ? "尚未分配" : string.Join("、", Model.Roles))</dd></div><div><dt>登录方式</dt><dd>本地密码 + TOTP 动态验证码</dd></div></dl>
+                <dl class="account-details"><div><dt>人员标识</dt><dd>@Model.StaffRef</dd></div><div><dt>系统角色</dt><dd>@(Model.Roles.Count == 0 ? "尚未分配" : string.Join("、", Model.Roles))</dd></div><div><dt>登录方式</dt><dd>本地密码</dd></div></dl>
             </div>
         </section>
     </div>
@@ -16,8 +16,8 @@
         <section class="ui-panel">
             <div class="ui-panel-header"><div class="ui-panel-title"><h2>账号安全</h2><p>保护内部运营账号</p></div></div>
             <div class="ui-panel-body">
-                <div class="security-setting"><span><i class="bi bi-shield-check"></i></span><div><strong>双重验证</strong><p>@(Model.TwoFactorEnabled ? "已绑定身份验证器" : "首次登录必须完成绑定")</p></div><a class="btn btn-sm btn-outline-primary" href="/account/enable-authenticator">@(Model.TwoFactorEnabled ? "重新配置" : "立即配置")</a></div>
-                <div class="security-note"><i class="bi bi-info-circle"></i>密码和恢复码不会在此页面显示；请妥善保管恢复码。</div>
+                <div class="security-setting"><span><i class="bi bi-shield-check"></i></span><div><strong>密码登录</strong><p>系统当前使用账号密码验证身份</p></div></div>
+                <div class="security-note"><i class="bi bi-info-circle"></i>密码不会在此页面显示，请妥善保管登录凭据。</div>
             </div>
         </section>
     </div>

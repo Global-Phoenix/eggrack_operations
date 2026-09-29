@@ -1,7 +1,7 @@
 (() => {
  const root=document.querySelector('[data-sourcing]');if(!root||typeof bootstrap==='undefined')return;
  const {request}=window.Eggrack.http;const {escapeHtml:esc,filterRows,setBusy,notify}=window.Eggrack.ui;
- const modal=bootstrap.Modal.getOrCreateInstance(document.getElementById('sourcingModal'));const planInput=root.querySelector('[data-plan-id]');let workspace;
+ const planInput=root.querySelector('[data-plan-id]');let workspace;
  const fillSelects=()=>{root.querySelectorAll('[data-plan-items]').forEach(select=>{const old=select.value;select.innerHTML='<option value="">选择计划产品</option>'+workspace.planItems.map(x=>`<option value="${x.id}">${esc(x.productName)} · ${x.quantity} ${esc(x.unit)}</option>`).join('');select.value=old;});root.querySelectorAll('[data-suppliers-select]').forEach(select=>{const optional=select.querySelector('option[value=""]')?.outerHTML||'<option value="">选择供应商</option>';const old=select.value;select.innerHTML=optional+workspace.suppliers.filter(x=>x.status==='active').map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');select.value=old;});};
  const renderList=(selector,items,template,formSelector)=>{const host=root.querySelector(selector);host.innerHTML=items.length?items.map((item,index)=>`<div class="supplier"><div class="flex-grow-1">${template(item)}</div><button class="btn btn-sm btn-outline-secondary" type="button" data-edit-index="${index}">编辑</button></div>`).join(''):'<div class="text-secondary small">暂无记录</div>';host.querySelectorAll('[data-edit-index]').forEach(button=>button.addEventListener('click',()=>fillForm(root.querySelector(formSelector),items[Number(button.dataset.editIndex)])));};
  const fillForm=(form,item)=>{Object.entries(item).forEach(([key,value])=>{const input=form.elements.namedItem(key.charAt(0).toUpperCase()+key.slice(1));if(input)input.value=value??'';});form.scrollIntoView({behavior:'smooth',block:'center'});};
@@ -10,10 +10,7 @@
  const initialPlanId=root.dataset.initialPlanId;
  if(initialPlanId){
   planInput.value=initialPlanId;
-  document.getElementById('sourcingTitle').textContent=root.dataset.initialPlanNumber||'采购计划详情';
-  modal.show();
   loadWorkspace().catch(error=>notify(error.message));
-  document.getElementById('sourcingModal').addEventListener('hidden.bs.modal',()=>window.Eggrack.workspaceTabs?.closeCurrent('/wholesale/procurement/sourcing'),{once:true});
  }
  root.querySelector('[data-search]')?.addEventListener('input',event=>filterRows(root,event.target.value));
  const bindForm=(selector,url)=>root.querySelector(selector)?.addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;setBusy(button,true);try{await request(url,{method:'POST',body:new FormData(event.target)});event.target.reset();event.target.elements.namedItem('Id').value='';await loadWorkspace();}catch(error){notify(error.message);}finally{setBusy(button,false);}});
