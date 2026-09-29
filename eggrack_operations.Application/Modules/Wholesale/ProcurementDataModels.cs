@@ -20,7 +20,8 @@ public sealed class PurchaseRequestSource
 public sealed record PurchaseRequestVersionSource(uint Id,uint RequestId,uint VersionNumber,string CustomerName,string Email,DateTime SubmittedAtUtc);
 public sealed record PurchaseRequestVersionDetail(
     uint Id,uint RequestId,uint VersionNumber,string CustomerName,string Email,
-    DateTime SubmittedAtUtc,IReadOnlyList<PurchaseRequestVersionItemDetail> Items);
+    DateTime SubmittedAtUtc,IReadOnlyList<PurchaseRequestVersionItemDetail> Items,
+    IReadOnlyList<PurchaseRequestAttachmentDetail> Attachments);
 public sealed class PurchaseRequestVersionItemDetail
 {
     public uint Id { get; set; }
@@ -30,6 +31,7 @@ public sealed class PurchaseRequestVersionItemDetail
     public string Unit { get; set; } = string.Empty;
     public string? Sku { get; set; }
     public string? Brand { get; set; }
+    public string? Description { get; set; }
     public string? Specifications { get; set; }
     public string? Color { get; set; }
     public string? Size { get; set; }
@@ -37,6 +39,18 @@ public sealed class PurchaseRequestVersionItemDetail
     public string? CustomizationRequirements { get; set; }
     public string? CustomerNote { get; set; }
 }
+public sealed class PurchaseRequestAttachmentDetail
+{
+    public uint Id { get; set; }
+    public uint VersionId { get; set; }
+    public string OriginalName { get; set; } = string.Empty;
+    public string MimeType { get; set; } = "application/octet-stream";
+    public uint FileSize { get; set; }
+}
+public sealed record ProcurementRequestContext(
+    string RequestNumber,string PlanNumber,uint VersionNumber,string CustomerName,string Email,
+    DateTime SubmittedAtUtc,IReadOnlyList<PurchaseRequestVersionItemDetail> Items,
+    IReadOnlyList<PurchaseRequestAttachmentDetail> Attachments);
 public sealed record PurchaseRequestItemSource(uint Id,uint RequestId,uint VersionId,string ProductKey,string ProductName,decimal Quantity,string Unit,string SnapshotJson);
 public sealed record ProcurementBuyerOption(ulong Id,string Name);
 public sealed record CreateProcurementPlanCommand(uint RequestId,uint RequestVersionId,ulong AssignedBuyerStaffId,ulong CreatedByStaffId);

@@ -165,7 +165,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         if(versions.Count==0)return [];
         const string itemSql="""
         SELECT id Id,version_id VersionId,product_name ProductName,quantity Quantity,
-          quantity_unit Unit,sku Sku,brand Brand,specifications Specifications,
+          quantity_unit Unit,sku Sku,brand Brand,description Description,specifications Specifications,
           color Color,size Size,packaging_requirements PackagingRequirements,
           customization_requirements CustomizationRequirements,customer_note CustomerNote
         FROM purchase_request_version_items
@@ -174,10 +174,19 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         """;
         var items=await db.QueryAsync<PurchaseRequestVersionItemDetail>(
           itemSql,new{RequestId=requestId,VersionIds=versions.Select(x=>x.Id).ToArray()},cancellationToken:token);
+        const string attachmentSql="""
+        SELECT id Id,version_id VersionId,original_name OriginalName,mime_type MimeType,file_size FileSize
+        FROM purchase_request_files
+        WHERE request_id=@RequestId AND version_id IN @VersionIds
+        ORDER BY version_id,uploaded_at,id
+        """;
+        var attachments=await db.QueryAsync<PurchaseRequestAttachmentDetail>(
+          attachmentSql,new{RequestId=requestId,VersionIds=versions.Select(x=>x.Id).ToArray()},cancellationToken:token);
         return versions.Select(version=>new PurchaseRequestVersionDetail(
           version.Id,version.RequestId,version.VersionNumber,version.CustomerName,
           version.Email,version.SubmittedAtUtc,
-          items.Where(item=>item.VersionId==version.Id).ToArray())).ToArray();
+          items.Where(item=>item.VersionId==version.Id).ToArray(),
+          attachments.Where(file=>file.VersionId==version.Id).ToArray())).ToArray();
     }
 
     public async Task UpdatePlanAsync(UpdateProcurementPlanCommand command,CancellationToken token=default)

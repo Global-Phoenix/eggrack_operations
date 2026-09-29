@@ -2,7 +2,7 @@
     const root = document.querySelector('[data-purchase-requests]');
     if (!root || typeof bootstrap === 'undefined') return;
     const { request } = window.Eggrack.http;
-    const { escapeHtml: esc, filterRows, setBusy, setMessage, notify } = window.Eggrack.ui;
+    const { filterRows, setBusy, setMessage, notify } = window.Eggrack.ui;
     const modalElement = document.getElementById('planEditor');
     const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
     const form = root.querySelector('[data-plan-form]');
@@ -41,19 +41,8 @@
         overview.email.textContent = version.email || '—';
         overview.submitted.textContent = displayDate(version.submittedAtUtc);
         versionSummary.textContent = `V${version.versionNumber} · ${items.length} 项产品`;
-        versionItems.className = 'request-item-list';
-        versionItems.innerHTML = items.length ? items.map((item, index) => {
-            const attributes = [
-                ['SKU', item.sku], ['品牌', item.brand], ['规格', item.specifications],
-                ['颜色', item.color], ['尺寸', item.size]
-            ].filter(([, value]) => value).map(([label, value]) => `<span><b>${label}</b> ${esc(value)}</span>`).join('');
-            const notes = [
-                ['包装要求', item.packagingRequirements],
-                ['定制要求', item.customizationRequirements],
-                ['客户备注', item.customerNote]
-            ].filter(([, value]) => value).map(([label, value]) => `<div class="request-item-note"><b>${label}：</b>${esc(value)}</div>`).join('');
-            return `<article class="request-item"><div class="request-item-title"><strong>${index + 1}. ${esc(item.productName || '未命名产品')}</strong><span>${esc(item.quantity)} ${esc(item.unit || '')}</span></div>${attributes ? `<div class="request-item-meta">${attributes}</div>` : ''}${notes}</article>`;
-        }).join('') : '<div class="text-secondary small">该版本没有产品明细。</div>';
+        versionItems.className = 'request-detail-content';
+        window.Eggrack.procurementRequestView.render(versionItems, version);
     };
     const openEditor = async button => {
         showError('');

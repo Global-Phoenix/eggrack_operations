@@ -97,6 +97,35 @@ public sealed partial class ProcurementDataService
     {
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,planId,token);
+        const string requestSql="""
+        SELECT p.request_id RequestId,p.request_version_id VersionId,p.plan_number PlanNumber,
+          r.request_number RequestNumber,v.version_number VersionNumber,
+          COALESCE(v.company_name,v.contact_name) CustomerName,v.email Email,
+          FROM_UNIXTIME(v.submitted_at) SubmittedAtUtc
+        FROM purchase_plans p
+        JOIN purchase_requests r ON r.id=p.request_id
+        JOIN purchase_request_versions v ON v.id=p.request_version_id AND v.request_id=p.request_id
+        WHERE p.id=@PlanId
+        """;
+        var requestRow=(await db.QueryAsync<SourcingRequestRow>(requestSql,new{PlanId=planId},cancellationToken:token)).Single();
+        const string requestItemSql="""
+        SELECT id Id,version_id VersionId,product_name ProductName,quantity Quantity,
+          quantity_unit Unit,sku Sku,brand Brand,description Description,specifications Specifications,
+          color Color,size Size,packaging_requirements PackagingRequirements,
+          customization_requirements CustomizationRequirements,customer_note CustomerNote
+        FROM purchase_request_version_items
+        WHERE request_id=@RequestId AND version_id=@VersionId ORDER BY sort_order,id
+        """;
+        var requestItems=await db.QueryAsync<PurchaseRequestVersionItemDetail>(requestItemSql,new{requestRow.RequestId,requestRow.VersionId},cancellationToken:token);
+        const string attachmentSql="""
+        SELECT id Id,version_id VersionId,original_name OriginalName,mime_type MimeType,file_size FileSize
+        FROM purchase_request_files
+        WHERE request_id=@RequestId AND version_id=@VersionId ORDER BY uploaded_at,id
+        """;
+        var attachments=await db.QueryAsync<PurchaseRequestAttachmentDetail>(attachmentSql,new{requestRow.RequestId,requestRow.VersionId},cancellationToken:token);
+        var requestContext=new ProcurementRequestContext(requestRow.RequestNumber,requestRow.PlanNumber,
+          requestRow.VersionNumber,requestRow.CustomerName,requestRow.Email,requestRow.SubmittedAtUtc,
+          requestItems,attachments);
         var planItems=await db.QueryAsync<ProcurementPlanItemOption>("SELECT id Id,product_name ProductName,quantity Quantity,quantity_unit Unit FROM purchase_plan_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
         var suppliers=await db.QueryAsync<SupplierListItem>("SELECT id Id,supplier_name Name,supplier_code Code,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers ORDER BY supplier_name",cancellationToken:token);
         var candidates=await db.QueryAsync<CandidateProductItem>("SELECT c.id Id,c.plan_item_id PlanItemId,c.supplier_id SupplierId,c.product_name ProductName,s.supplier_name SupplierName,c.reference_url ReferenceUrl,c.specification_json SpecificationJson,c.status Status FROM procurement_candidate_products c JOIN purchase_plan_items i ON i.id=c.plan_item_id LEFT JOIN procurement_suppliers s ON s.id=c.supplier_id WHERE i.plan_id=@PlanId ORDER BY c.updated_at DESC,c.id DESC",new{PlanId=planId},cancellationToken:token);
@@ -106,7 +135,7 @@ public sealed partial class ProcurementDataService
         var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT id Id,pi_number Number,CASE status WHEN 1 THEN 'Draft' WHEN 2 THEN 'Approved' WHEN 3 THEN 'Issued' ELSE 'Cancelled' END Status,total_amount TotalAmount,currency Currency,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1",new{PlanId=planId},cancellationToken:token);
         var invoice=invoices.SingleOrDefault();
         var pricing=invoice is null?null:await GetProformaInvoicePricingAsync(db,invoice.Id,token);
-        return new(planItems,suppliers,candidates,inquiries,samples,mails,invoice,pricing);
+        return new(requestContext,planItems,suppliers,candidates,inquiries,samples,mails,invoice,pricing);
     }
 
     public async Task<uint> SaveCandidateAsync(SaveCandidateProductCommand command,CancellationToken token=default)
@@ -133,4 +162,5 @@ public sealed partial class ProcurementDataService
         await db.ExecuteAsync("INSERT procurement_samples(plan_item_id,supplier_id,quantity,status,cost_cny,tracking_number,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Quantity,@Status,@CostCny,@TrackingNumber,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
     private sealed record PlanForApproval(uint Id,uint RequestId,uint RequestVersionId,decimal? TotalCostUsd,decimal? ProfitRate,byte Status);
+    private sealed record SourcingRequestRow(uint RequestId,uint VersionId,string RequestNumber,string PlanNumber,uint VersionNumber,string CustomerName,string Email,DateTime SubmittedAtUtc);
 }
