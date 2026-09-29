@@ -12,6 +12,21 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
     private sealed record LegacyMailConfig(string SmtpHost,int SmtpPort,string SmtpUserName,string FromEmail,string SmtpPassword,string? FromName,string? Smtpinbox);
     private sealed record MailProduct(string ProductName,decimal Quantity,string Unit,decimal UnitPrice,decimal LineAmount);
 
+    public async Task<string> PreviewHtmlAsync(uint mailTaskId,CancellationToken token)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        var rows=await db.QueryAsync<PendingMail>("""
+        SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,
+          i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency
+        FROM procurement_mail_tasks t
+        JOIN proforma_invoices i ON i.purchase_plan_id=t.plan_id AND i.status=3
+        WHERE t.id=@MailTaskId LIMIT 1
+        """,new{MailTaskId=mailTaskId},cancellationToken:token);
+        var task=rows.SingleOrDefault()??throw new InvalidOperationException("邮件任务不存在或 PI 尚未签发。");
+        var products=await db.QueryAsync<MailProduct>("SELECT product_name ProductName,quantity Quantity,quantity_unit Unit,unit_price UnitPrice,line_amount LineAmount FROM proforma_invoice_items WHERE pi_id=@InvoiceId ORDER BY sort_order,id",new{task.InvoiceId},cancellationToken:token);
+        return BuildHtml(task,products);
+    }
+
     public async Task<bool> DispatchAsync(uint mailTaskId,CancellationToken token)
     {
         PendingMail? task;

@@ -144,8 +144,8 @@ public sealed partial class ProcurementDataService
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         return await db.ExecuteInTransactionAsync<ProcurementLifecycleResult>(async transactionToken=>
         {
-            var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT i.id Id,i.pi_number Number,CASE i.status WHEN 3 THEN 'Issued' ELSE 'Invalid' END Status,i.total_amount TotalAmount,i.currency Currency,FROM_UNIXTIME(i.created_at) CreatedAtUtc,FROM_UNIXTIME(i.issued_at) IssuedAtUtc FROM purchase_plans p JOIN proforma_invoices i ON i.purchase_plan_id=p.id AND i.status=3 WHERE p.id=@PlanId AND p.status=4 ORDER BY i.id DESC LIMIT 1 FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
-            var invoice=invoices.SingleOrDefault()??throw new BusinessRuleException("只有已签发 PI 的采购计划才能完成。","procurement.plan.complete-state");
+            var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT i.id Id,i.pi_number Number,CASE i.status WHEN 3 THEN 'Issued' ELSE 'Invalid' END Status,i.total_amount TotalAmount,i.currency Currency,FROM_UNIXTIME(i.created_at) CreatedAtUtc,FROM_UNIXTIME(i.issued_at) IssuedAtUtc FROM purchase_plans p JOIN proforma_invoices i ON i.purchase_plan_id=p.id AND i.status=3 WHERE p.id=@PlanId AND p.status=4 AND EXISTS(SELECT 1 FROM procurement_mail_tasks m WHERE m.plan_id=p.id AND m.status='sent') ORDER BY i.id DESC LIMIT 1 FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
+            var invoice=invoices.SingleOrDefault()??throw new BusinessRuleException("只有 PI 已签发且客户邮件发送成功后才能完成采购计划。","procurement.plan.complete-state");
             var changed=await db.ExecuteAsync("UPDATE purchase_plans SET status=5,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=4",new{PlanId=planId,StaffId=staffId,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:transactionToken);
             if(changed!=1) throw new BusinessRuleException("采购计划已被其他操作处理，请刷新后重试。","procurement.plan.concurrent-change");
             return new(planId,"Completed",invoice.Id,invoice.Number,"Issued");

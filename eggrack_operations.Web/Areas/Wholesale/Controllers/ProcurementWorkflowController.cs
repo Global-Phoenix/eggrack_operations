@@ -99,6 +99,14 @@ public sealed partial class ProcurementController
         try{return Json(new{ok=true,data=await procurement.CompletePlanAsync(planId,staffId,token)});}
         catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
     }
+    [HttpGet("mail-tasks/{mailTaskId:long}/preview")]
+    [InternalPermission("wholesale.purchase-quote.approve")]
+    public async Task<IActionResult> PreviewMailTask(uint mailTaskId,CancellationToken token)
+    {
+        try{return Content(await mailDispatcher.PreviewHtmlAsync(mailTaskId,token),"text/html; charset=utf-8");}
+        catch(InvalidOperationException error){return NotFound(error.Message);}
+    }
+
     [HttpPost("mail-tasks/{mailTaskId:long}/send")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.purchase-quote.approve")]

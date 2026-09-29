@@ -42,4 +42,14 @@ public sealed class ProcurementAuthorizationTests
         Assert.NotNull(permission.Arguments);
         Assert.Equal(expectedPermission,Assert.Single(permission.Arguments!));
     }
+
+    [Fact]
+    public void MailPreviewRequiresQuoteApprovalPermission()
+    {
+        var method=typeof(ProcurementController).GetMethod(nameof(ProcurementController.PreviewMailTask))
+            ?? throw new InvalidOperationException(nameof(ProcurementController.PreviewMailTask));
+        Assert.NotEmpty(method.GetCustomAttributes<HttpGetAttribute>());
+        var permission=Assert.Single(method.GetCustomAttributes<InternalPermissionAttribute>());
+        Assert.Equal("wholesale.purchase-quote.approve",Assert.Single(permission.Arguments!));
+    }
 }
