@@ -10,9 +10,9 @@
             if (item.Children is { Count: > 0 })
             {
                 var groupActive = Model.IsGroupActive(item);
-                <div class="nav-group @(groupActive ? "active" : string.Empty)">
-                    <button class="nav-entry" type="button" aria-label="@item.Title">
-                        <i class="bi @item.Icon" aria-hidden="true"></i><span>@item.Title</span>
+                <div class="nav-group @(groupActive ? "active open" : string.Empty)">
+                    <button class="nav-entry" type="button" data-nav-group aria-label="@item.Title" aria-expanded="@(groupActive ? "true" : "false")">
+                        <i class="bi @item.Icon" aria-hidden="true"></i><span>@item.Title</span><i class="bi bi-chevron-down nav-chevron" aria-hidden="true"></i>
                     </button>
                     <div class="nav-flyout">
                         <div class="nav-flyout-title">@item.Title</div>
