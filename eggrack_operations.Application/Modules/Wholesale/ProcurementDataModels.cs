@@ -1,10 +1,19 @@
 namespace Eggrack.Operations.Application.Modules.Wholesale;
 
-public sealed record PurchaseRequestSource(
-    uint Id, uint CurrentVersionId, string RequestNumber, uint CurrentVersion,
-    string CustomerName, string Email, DateTime SubmittedAtUtc,
-    uint? PlanId, string? PlanNumber, uint? PlannedVersionId, ulong? BuyerId, string? BuyerName)
+public sealed class PurchaseRequestSource
 {
+    public uint Id { get; set; }
+    public uint CurrentVersionId { get; set; }
+    public string RequestNumber { get; set; } = string.Empty;
+    public uint CurrentVersion { get; set; }
+    public string CustomerName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public DateTime SubmittedAtUtc { get; set; }
+    public uint? PlanId { get; set; }
+    public string? PlanNumber { get; set; }
+    public uint? PlannedVersionId { get; set; }
+    public ulong? BuyerId { get; set; }
+    public string? BuyerName { get; set; }
     public bool HasPlan => PlanId.HasValue;
 }
 
