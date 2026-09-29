@@ -42,6 +42,24 @@ public sealed partial class ProcurementController
         catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
     }
 
+    [HttpGet("plans/{planId:long}/workspace")]
+    public async Task<IActionResult> Workspace(uint planId,CancellationToken token) =>
+        Json(await procurement.GetSourcingWorkspaceAsync(planId,token));
+
+    [HttpPost("candidates")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveCandidate([FromForm]SaveCandidateProductCommand command,CancellationToken token)
+    { try{return Json(new{ok=true,id=await procurement.SaveCandidateAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
+
+    [HttpPost("inquiry-records")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveInquiry([FromForm]SaveInquiryCommand command,CancellationToken token)
+    { try{return Json(new{ok=true,id=await procurement.SaveInquiryAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
+
+    [HttpPost("sample-records")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SaveSample([FromForm]SaveSampleCommand command,CancellationToken token)
+    { try{return Json(new{ok=true,id=await procurement.SaveSampleAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
     private bool TryStaffId(out long staffId) =>
         long.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
 }
