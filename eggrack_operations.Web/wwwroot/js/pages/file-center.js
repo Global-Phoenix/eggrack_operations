@@ -41,7 +41,7 @@
     root.querySelectorAll('tbody tr').forEach(item=>item.classList.toggle('active',item===row));
     q('[data-detail-label]').textContent='文件详情';q('[data-detail-name]').textContent=x[0];q('[data-detail-sub]').textContent=x[1]+' · '+x[2];
     const contentUrl='/files/content/'+encodeURIComponent(x[8])+'/'+x[9];
-    const preview=x[10]==='image'?'<img src="'+contentUrl+'" alt="'+esc(x[0])+'">':x[10]==='video'?'<video src="'+contentUrl+'" controls preload="metadata"></video>':(x[10]==='pdf'||x[10]==='text')?'<iframe src="'+contentUrl+'" title="'+esc(x[0])+'"></iframe>':'<div><i class="bi '+(icons[x[1]]||'bi-file-earmark')+'"></i>此格式暂不支持在线预览<br><small>请下载后查看</small></div>';
+    const preview=x[10]==='image'?'<img src="'+contentUrl+'" alt="'+esc(x[0])+'">':x[10]==='video'?'<video src="'+contentUrl+'" controls preload="metadata"></video>':(x[10]==='pdf'||x[10]==='text'||x[10]==='spreadsheet')?'<iframe src="'+contentUrl+'" title="'+esc(x[0])+'"></iframe>':'<div><i class="bi '+(icons[x[1]]||'bi-file-earmark')+'"></i>此格式暂不支持在线预览<br><small>请下载后查看</small></div>';
     q('[data-preview]').innerHTML=preview;
     q('[data-primary]').onclick=()=>{window.location.href=contentUrl+'?download=true'};
     q('[data-secondary]').disabled=false;q('[data-primary]').disabled=false;

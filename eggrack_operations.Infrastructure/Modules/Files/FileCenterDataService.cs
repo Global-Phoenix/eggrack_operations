@@ -16,6 +16,12 @@ public sealed class FileCenterDataService(DatabaseSessionFactory databases)
         FROM purchase_request_files f
         JOIN purchase_requests r ON r.id = f.request_id
         JOIN purchase_request_versions v ON v.id = f.version_id AND v.request_id = f.request_id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM purchase_request_files newer
+          WHERE newer.request_id = f.request_id
+            AND newer.storage_path = f.storage_path
+            AND newer.id > f.id
+        )
         UNION ALL
         SELECT CONCAT('plan:', f.id) ItemKey, 'plan' SourceKind, f.id FileId,
           f.original_name OriginalName, f.mime_type MimeType, f.file_size FileSize,
@@ -58,7 +64,8 @@ public sealed class FileCenterDataService(DatabaseSessionFactory databases)
         await using var db = await databases.OpenMySqlAsync("Eggrack", token);
         var rows = await db.QueryAsync<FileCenterStoredFile>(sql, new { FileId = fileId }, cancellationToken: token);
         return rows.SingleOrDefault();
-    }}
+    }
+}
 
 public sealed record FileCenterStoredFile(
     string SourceKind,

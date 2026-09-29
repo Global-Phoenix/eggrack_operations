@@ -34,8 +34,10 @@ public sealed record FileCenterFileItem(
     public string StatusLabel => SourceKind == "plan" && Status == 0 ? "已停用" : SourceLabel + "附件";
     public string PreviewKind => MimeType.ToLowerInvariant() switch
     {
+        _ when FileType == "XLSX" => "spreadsheet",
         var mime when mime.StartsWith("image/") => "image",
         "application/pdf" => "pdf",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "spreadsheet",
         var mime when mime.StartsWith("video/") => "video",
         var mime when mime.StartsWith("text/") => "text",
         "application/csv" or "application/vnd.ms-excel" when FileType == "CSV" => "text",

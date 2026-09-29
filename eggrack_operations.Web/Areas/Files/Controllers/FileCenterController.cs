@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Eggrack.Operations.Application.Modules.Files;
+using Eggrack.Operations.Web.Areas.Files.Services;
 using Eggrack.Operations.Infrastructure.Modules.Files;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +30,13 @@ public sealed class FileCenterController(FileCenterDataService files, FileCenter
             var stream = await storage.OpenReadAsync(file, token);
             Response.Headers.XContentTypeOptions = "nosniff";
             Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; media-src 'self'; img-src 'self' data:";
+            if (!download && Path.GetExtension(file.OriginalName).Equals(".xlsx", StringComparison.OrdinalIgnoreCase))
+            {
+                await using (stream)
+                {
+                    return Content(XlsxPreviewRenderer.Render(stream), "text/html; charset=utf-8");
+                }
+            }
             return download
                 ? File(stream, file.MimeType, file.OriginalName, enableRangeProcessing: file.SourceKind == "plan")
                 : File(stream, file.MimeType, enableRangeProcessing: file.SourceKind == "plan");
