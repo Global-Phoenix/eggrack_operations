@@ -1,0 +1,32 @@
+@model eggrack_operations.Areas.Wholesale.Models.SupplierDirectoryPageViewModel
+@{ ViewData["Title"] = "供应商"; }
+<section class="proc" data-supplier-directory>
+@await Component.InvokeAsync("PageHeader", new { title = "供应商", subtitle = "查询和维护采购询价使用的供应商资料", parentTitle = "批发管理", parentUrl = "/wholesale/procurement/sourcing" })
+<div class="panel overflow-hidden">
+ <form class="tools" method="get" action="/wholesale/procurement/suppliers">
+  <input class="form-control" type="search" name="keyword" value="@Model.Keyword" placeholder="搜索供应商名称、编码或联系方式">
+  <button class="btn btn-outline-primary" type="submit">查询</button>
+  <button class="btn btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#supplierCreate">新增供应商</button>
+  <span class="ms-auto small text-secondary">共 @Model.Suppliers.Count 条</span>
+ </form>
+ <div class="collapse border-bottom" id="supplierCreate">
+  <form class="p-3" data-supplier-create-form>@Html.AntiForgeryToken()
+   <div class="row g-2">
+    <div class="col-md-4"><input class="form-control" name="Name" placeholder="供应商名称" required></div>
+    <div class="col-md-3"><input class="form-control" name="Code" placeholder="供应商编码"></div>
+    <div class="col-md-5"><input class="form-control" name="ContactJson" placeholder='联系方式 JSON，例如 {"contact":"张三","mobile":"138..."}'></div>
+   </div>
+   <button class="btn btn-primary mt-2" type="submit">保存供应商</button>
+  </form>
+ </div>
+ <div class="table-responsive"><table class="table table-hover mb-0">
+  <thead><tr><th>供应商</th><th>编码</th><th>联系方式</th><th>状态</th><th>更新时间</th></tr></thead>
+  <tbody>
+  @foreach(var item in Model.Suppliers){<tr><td><strong>@item.Name</strong></td><td>@(item.Code??"—")</td><td><code class="supplier-contact">@(item.ContactJson??"—")</code></td><td><span class="stage">@item.Status</span></td><td>@(item.UpdatedAtUtc?.ToString("yyyy-MM-dd HH:mm")??"—")</td></tr>}
+  @if(Model.Suppliers.Count==0){<tr><td colspan="5" class="text-center text-secondary py-5">没有匹配的供应商。</td></tr>}
+  </tbody>
+ </table></div>
+</div>
+</section>
+@section Styles { <link rel="stylesheet" href="~/css/pages/procurement.css" asp-append-version="true" /> }
+@section Scripts { <script src="~/js/pages/procurement-suppliers.js" asp-append-version="true"></script> }

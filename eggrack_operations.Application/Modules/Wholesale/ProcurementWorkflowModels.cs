@@ -1,6 +1,14 @@
 namespace Eggrack.Operations.Application.Modules.Wholesale;
 
-public sealed record SupplierListItem(uint Id,string Name,string? Code,string Status);
+public sealed class SupplierListItem
+{
+    public uint Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? ContactJson { get; set; }
+    public string Status { get; set; } = string.Empty;
+    public DateTime? UpdatedAtUtc { get; set; }
+}
 public sealed record CreateSupplierCommand(string Name,string? Code,string? ContactJson);
 public sealed record RecordInquiryCommand(uint PlanItemId,uint SupplierId,decimal? UnitPriceCny,decimal? Moq,int? LeadDays,DateOnly? ValidUntil,string? Terms);
 public sealed record RecordSampleCommand(uint PlanItemId,uint? SupplierId,string Status,decimal CostCny,string? TrackingNumber,string? Notes);

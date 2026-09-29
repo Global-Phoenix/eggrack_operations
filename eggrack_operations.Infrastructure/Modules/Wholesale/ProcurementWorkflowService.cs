@@ -1,5 +1,6 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Common.Models;
+using System.Data.Common;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
@@ -7,17 +8,30 @@ public sealed partial class ProcurementDataService
 {
     public async Task<IReadOnlyList<SupplierListItem>> GetSuppliersAsync(string? keyword,CancellationToken token=default)
     {
-        const string sql="SELECT id Id,supplier_name Name,supplier_code Code,status Status FROM procurement_suppliers WHERE (@Keyword IS NULL OR supplier_name LIKE CONCAT('%',@Keyword,'%') OR supplier_code LIKE CONCAT('%',@Keyword,'%')) ORDER BY supplier_name";
+        const string sql="SELECT id Id,supplier_name Name,supplier_code Code,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers WHERE (@Keyword IS NULL OR supplier_name LIKE CONCAT('%',@Keyword,'%') OR supplier_code LIKE CONCAT('%',@Keyword,'%') OR contact_json LIKE CONCAT('%',@Keyword,'%')) ORDER BY supplier_name";
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         return await db.QueryAsync<SupplierListItem>(sql,new{Keyword=string.IsNullOrWhiteSpace(keyword)?null:keyword.Trim()},cancellationToken:token);
     }
 
     public async Task<long> CreateSupplierAsync(CreateSupplierCommand command,CancellationToken token=default)
     {
-        scopePolicy.EnsureGlobalResourceWrite();
         if(string.IsNullOrWhiteSpace(command.Name)) throw new InvalidOperationException("供应商名称不能为空。");
+        string? contactJson=null;
+        if(!string.IsNullOrWhiteSpace(command.ContactJson))
+        {
+            try{contactJson=System.Text.Json.JsonDocument.Parse(command.ContactJson).RootElement.GetRawText();}
+            catch(System.Text.Json.JsonException error){throw new InvalidOperationException("联系方式必须是有效 JSON。",error);}
+        }
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        await db.ExecuteAsync("INSERT procurement_suppliers(supplier_name,supplier_code,contact_json,status,created_at,updated_at) VALUES(@Name,@Code,@ContactJson,'active',@Now,@Now)",new{Name=command.Name.Trim(),command.Code,command.ContactJson,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
+        try
+        {
+            await db.ExecuteAsync("INSERT procurement_suppliers(supplier_name,supplier_code,contact_json,status,created_at,updated_at) VALUES(@Name,@Code,@ContactJson,'active',@Now,@Now)",new{Name=command.Name.Trim(),Code=string.IsNullOrWhiteSpace(command.Code)?null:command.Code.Trim(),ContactJson=contactJson,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
+        }
+        catch(DbException error) when(error.Message.Contains("uk_procurement_supplier_code",StringComparison.OrdinalIgnoreCase)
+          || error.Message.Contains("Duplicate entry",StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("供应商编码已存在。",error);
+        }
         return (await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
 
@@ -84,7 +98,7 @@ public sealed partial class ProcurementDataService
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,planId,token);
         var planItems=await db.QueryAsync<ProcurementPlanItemOption>("SELECT id Id,product_name ProductName,quantity Quantity,quantity_unit Unit FROM purchase_plan_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
-        var suppliers=await db.QueryAsync<SupplierListItem>("SELECT id Id,supplier_name Name,supplier_code Code,status Status FROM procurement_suppliers ORDER BY supplier_name",cancellationToken:token);
+        var suppliers=await db.QueryAsync<SupplierListItem>("SELECT id Id,supplier_name Name,supplier_code Code,contact_json ContactJson,status Status,FROM_UNIXTIME(updated_at) UpdatedAtUtc FROM procurement_suppliers ORDER BY supplier_name",cancellationToken:token);
         var candidates=await db.QueryAsync<CandidateProductItem>("SELECT c.id Id,c.plan_item_id PlanItemId,c.supplier_id SupplierId,c.product_name ProductName,s.supplier_name SupplierName,c.reference_url ReferenceUrl,c.specification_json SpecificationJson,c.status Status FROM procurement_candidate_products c JOIN purchase_plan_items i ON i.id=c.plan_item_id LEFT JOIN procurement_suppliers s ON s.id=c.supplier_id WHERE i.plan_id=@PlanId ORDER BY c.updated_at DESC,c.id DESC",new{PlanId=planId},cancellationToken:token);
         var inquiries=await db.QueryAsync<InquiryItem>("SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,s.supplier_name SupplierName,q.currency Currency,q.unit_price_cny UnitPrice,q.moq Moq,q.lead_days LeadDays,q.valid_until ValidUntil,q.terms Terms,q.status Status,q.notes Notes FROM procurement_inquiries q JOIN purchase_plan_items i ON i.id=q.plan_item_id JOIN procurement_suppliers s ON s.id=q.supplier_id WHERE i.plan_id=@PlanId ORDER BY q.updated_at DESC,q.id DESC",new{PlanId=planId},cancellationToken:token);
         var samples=await db.QueryAsync<SampleItem>("SELECT x.id Id,x.plan_item_id PlanItemId,x.supplier_id SupplierId,i.product_name ProductName,s.supplier_name SupplierName,x.quantity Quantity,x.status Status,x.cost_cny CostCny,x.tracking_number TrackingNumber,x.notes Notes FROM procurement_samples x JOIN purchase_plan_items i ON i.id=x.plan_item_id LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC",new{PlanId=planId},cancellationToken:token);

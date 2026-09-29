@@ -3,3 +3,4 @@
 @media(max-width:991.98px){.proc .summary{grid-template-columns:1fr 1fr}.proc-flow{justify-content:flex-start}.proc .tools{flex-wrap:wrap}.proc .tools input{flex:1 1 100%}.proc .tools [data-result]{margin-left:0!important}}
 @media(max-width:575.98px){.proc .summary{grid-template-columns:1fr}.proc .tile{padding:14px}.proc .tools .form-select{width:100%!important}.proc .tools .btn{flex:1}}
 .proc-version-badge{display:inline-flex;align-items:center;margin-left:6px;padding:2px 7px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:10px;font-weight:650;line-height:1.35;vertical-align:middle}
+.proc .supplier-contact{display:block;max-width:420px;overflow:hidden;color:#475569;text-overflow:ellipsis;white-space:nowrap}

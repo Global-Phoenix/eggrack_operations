@@ -6,15 +6,25 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 
 public sealed partial class ProcurementController
 {
-    [HttpGet("suppliers")]
+    [HttpGet("supplier-options")]
     public async Task<IActionResult> Suppliers([FromQuery]string? keyword,CancellationToken token) =>
         Json(await procurement.GetSuppliersAsync(keyword,token));
 
     [HttpPost("suppliers")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.procurement.manage")]
-    public async Task<IActionResult> CreateSupplier([FromForm]CreateSupplierCommand command,CancellationToken token) =>
-        Json(new{ok=true,id=await procurement.CreateSupplierAsync(command,token)});
+    public async Task<IActionResult> CreateSupplier([FromForm]CreateSupplierCommand command,CancellationToken token)
+    {
+        try
+        {
+            var id=await procurement.CreateSupplierAsync(command,token);
+            return Json(new{ok=true,id,data=new{id,name=command.Name.Trim(),code=command.Code,status="active"}});
+        }
+        catch(InvalidOperationException error)
+        {
+            return UnprocessableEntity(new{ok=false,message=error.Message});
+        }
+    }
 
     [HttpPost("inquiries")]
     [ValidateAntiForgeryToken]

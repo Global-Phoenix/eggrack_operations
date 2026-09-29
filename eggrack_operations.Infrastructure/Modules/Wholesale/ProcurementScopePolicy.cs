@@ -101,12 +101,6 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
             : throw new BusinessRuleException("采购人员没有可用的部门归属，或不在当前授权部门内。", "procurement.buyer.department-denied");
     }
 
-    public void EnsureGlobalResourceWrite()
-    {
-        if (!Current().IsAll)
-            throw new DataScopeDeniedException("部门范围账号不能新增全局供应商。");
-    }
-
     public static object Params(ProcurementAccessScope scope, object values)
     {
         var parameters = new Dapper.DynamicParameters(values);

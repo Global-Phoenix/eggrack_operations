@@ -10,3 +10,7 @@ public sealed record SourcingPageViewModel(
     IReadOnlyList<ProcurementPlanListItem> Plans,
     uint? InitialPlanId = null,
     string? InitialPlanNumber = null);
+
+public sealed record SupplierDirectoryPageViewModel(
+    IReadOnlyList<SupplierListItem> Suppliers,
+    string? Keyword);

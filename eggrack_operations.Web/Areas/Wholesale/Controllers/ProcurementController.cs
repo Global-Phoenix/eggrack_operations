@@ -26,6 +26,11 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     public async Task<IActionResult> Sourcing(CancellationToken token) =>
         View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token)));
 
+    [HttpGet("suppliers")]
+    public async Task<IActionResult> SupplierDirectory([FromQuery]string? keyword,CancellationToken token) =>
+        View("Suppliers",new SupplierDirectoryPageViewModel(
+            await procurement.GetSuppliersAsync(keyword,token),keyword));
+
     [HttpGet("plans/{planId:long}/details")]
     public async Task<IActionResult> Details(uint planId,CancellationToken token)
     {
