@@ -14,7 +14,9 @@ public sealed class StaffAuthorizationQuery(DatabaseSessionFactory databases)
         ArgumentException.ThrowIfNullOrWhiteSpace(staffRef);
 
         const string staffSql = """
-            SELECT id AS StaffId, staff_ref AS StaffRef, auth_version AS AuthVersion
+            SELECT CAST(id AS SIGNED) AS StaffId,
+                   staff_ref AS StaffRef,
+                   CAST(auth_version AS SIGNED) AS AuthVersion
             FROM eggrack_auth_staff
             WHERE staff_ref = @StaffRef AND status = 1 AND deleted_at IS NULL
             LIMIT 1
@@ -24,7 +26,7 @@ public sealed class StaffAuthorizationQuery(DatabaseSessionFactory databases)
                 p.permission_code AS PermissionCode,
                 rp.effect AS Effect,
                 COALESCE(rs.data_scope, r.default_scope) AS ScopeName,
-                sr.department_id AS DepartmentId
+                CAST(sr.department_id AS SIGNED) AS DepartmentId
             FROM eggrack_auth_staff_role sr
             INNER JOIN eggrack_auth_role r
                 ON r.id = sr.role_id AND r.status = 1

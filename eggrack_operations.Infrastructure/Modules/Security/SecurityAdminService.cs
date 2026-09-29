@@ -24,7 +24,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task<IReadOnlyList<StaffListItem>> GetStaffAsync(string? keyword, CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT s.id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
+            SELECT CAST(s.id AS SIGNED) Id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
               s.status=1 IsEnabled,
               COALESCE(GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR '、'),'—') Departments,
               COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_level SEPARATOR '、'),'未授权') Roles
@@ -49,7 +49,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task<IReadOnlyList<RoleListItem>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT r.id,r.role_code Code,r.role_name Name,r.role_level Level,
+            SELECT CAST(r.id AS SIGNED) Id,r.role_code Code,r.role_name Name,r.role_level Level,
               r.default_scope DefaultScope,r.status=1 IsEnabled,
               COUNT(DISTINCT sr.staff_id) StaffCount,
               COUNT(DISTINCT rp.permission_id) PermissionCount
@@ -65,7 +65,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
 
     public async Task<IReadOnlyList<PermissionListItem>> GetPermissionsAsync(CancellationToken cancellationToken = default)
     {
-        const string sql = "SELECT id,permission_code Code,permission_name Name,resource_type ResourceType,status=1 IsEnabled FROM eggrack_auth_permission ORDER BY resource_type,permission_code";
+        const string sql = "SELECT CAST(id AS SIGNED) Id,permission_code Code,permission_name Name,resource_type ResourceType,status=1 IsEnabled FROM eggrack_auth_permission ORDER BY resource_type,permission_code";
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
         return await session.QueryAsync<PermissionListItem>(sql, cancellationToken: cancellationToken);
     }
@@ -73,7 +73,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task<IReadOnlyList<RolePermissionGrant>> GetRolePermissionGrantsAsync(CancellationToken cancellationToken = default)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
-        return await session.QueryAsync<RolePermissionGrant>("SELECT role_id RoleId,permission_id PermissionId FROM eggrack_auth_role_permission WHERE effect='ALLOW'", cancellationToken: cancellationToken);
+        return await session.QueryAsync<RolePermissionGrant>("SELECT CAST(role_id AS SIGNED) RoleId,CAST(permission_id AS SIGNED) PermissionId FROM eggrack_auth_role_permission WHERE effect='ALLOW'", cancellationToken: cancellationToken);
     }
 
     public async Task<IReadOnlyList<PermissionAuditItem>> GetAuditLogsAsync(
@@ -85,7 +85,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT id,operator_ref OperatorRef,action_code ActionCode,target_type TargetType,target_ref TargetRef,
+            SELECT CAST(id AS SIGNED) Id,operator_ref OperatorRef,action_code ActionCode,target_type TargetType,target_ref TargetRef,
               before_data BeforeData,after_data AfterData,request_id RequestId,ip_address IpAddress,created_at CreatedAt
             FROM eggrack_auth_audit_log
             WHERE (@OperatorRef IS NULL OR operator_ref LIKE CONCAT('%',@OperatorRef,'%'))
@@ -134,7 +134,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
 
     public async Task<IReadOnlyList<DepartmentOption>> GetDepartmentsAsync(CancellationToken cancellationToken = default)
     {
-        const string sql = "SELECT id,department_name Name FROM eggrack_auth_department WHERE status=1 AND deleted_at IS NULL ORDER BY sort_order,department_name";
+        const string sql = "SELECT CAST(id AS SIGNED) Id,department_name Name FROM eggrack_auth_department WHERE status=1 AND deleted_at IS NULL ORDER BY sort_order,department_name";
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
         return await session.QueryAsync<DepartmentOption>(sql, cancellationToken: cancellationToken);
     }
@@ -142,7 +142,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task<IReadOnlyList<DepartmentListItem>> GetDepartmentListAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT d.id,d.parent_id ParentId,d.department_code Code,d.department_name Name,p.department_name ParentName,
+            SELECT CAST(d.id AS SIGNED) Id,CAST(d.parent_id AS SIGNED) ParentId,d.department_code Code,d.department_name Name,p.department_name ParentName,
               d.sort_order SortOrder,d.status=1 IsEnabled,
               COUNT(DISTINCT sd.staff_id) StaffCount,COUNT(DISTINCT sr.id) RoleCount
             FROM eggrack_auth_department d
@@ -195,7 +195,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task<IReadOnlyList<StaffRoleAssignment>> GetRoleAssignmentsAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT sr.id,sr.staff_id StaffId,r.role_code RoleCode,r.role_name RoleName,d.department_name DepartmentName
+            SELECT CAST(sr.id AS SIGNED) Id,CAST(sr.staff_id AS SIGNED) StaffId,r.role_code RoleCode,r.role_name RoleName,d.department_name DepartmentName
             FROM eggrack_auth_staff_role sr
             INNER JOIN eggrack_auth_role r ON r.id=sr.role_id
             LEFT JOIN eggrack_auth_department d ON d.id=sr.department_id
@@ -269,7 +269,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
                 """;
             await session.ExecuteAsync(insertStaff, new { StaffRef = staffRef, StaffName = staffName, Email = email }, cancellationToken: cancellationToken);
             var staffId = (await session.QueryAsync<InsertedId>(
-                "SELECT LAST_INSERT_ID() Id",
+                "SELECT CAST(LAST_INSERT_ID() AS SIGNED) Id",
                 cancellationToken: cancellationToken)).Single().Id;
             const string assignRole = """
                 INSERT INTO eggrack_auth_staff_role(staff_id,role_id,department_id,granted_by)
@@ -327,7 +327,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
         var rows = await session.QueryAsync<RevocationRule>("""
-            SELECT sr.staff_id StaffId,s.staff_ref StaffRef,r.role_code RoleCode
+            SELECT CAST(sr.staff_id AS SIGNED) StaffId,s.staff_ref StaffRef,r.role_code RoleCode
             FROM eggrack_auth_staff_role sr
             INNER JOIN eggrack_auth_staff s ON s.id=sr.staff_id
             INNER JOIN eggrack_auth_role r ON r.id=sr.role_id
