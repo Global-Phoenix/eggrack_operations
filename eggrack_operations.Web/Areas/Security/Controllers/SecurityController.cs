@@ -59,6 +59,19 @@ public sealed class SecurityController(
     public async Task<IActionResult> Departments(CancellationToken cancellationToken) =>
         View(new DepartmentIndexViewModel(await admin.GetDepartmentListAsync(cancellationToken)));
 
+    [HttpGet("audit")]
+    [InternalPermission("auth.audit.read")]
+    public async Task<IActionResult> Audit(
+        string? operatorRef,
+        string? actionCode,
+        string? targetType,
+        DateTime? from,
+        DateTime? to,
+        CancellationToken cancellationToken) =>
+        View(new PermissionAuditViewModel(
+            operatorRef,actionCode,targetType,from,to,
+            await admin.GetAuditLogsAsync(operatorRef,actionCode,targetType,from,to,cancellationToken)));
+
     [HttpPost("staff/assign-role")]
     [ValidateAntiForgeryToken]
     [InternalPermission("auth.role.assign")]

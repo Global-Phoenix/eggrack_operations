@@ -76,6 +76,37 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         return await session.QueryAsync<RolePermissionGrant>("SELECT role_id RoleId,permission_id PermissionId FROM eggrack_auth_role_permission WHERE effect='ALLOW'", cancellationToken: cancellationToken);
     }
 
+    public async Task<IReadOnlyList<PermissionAuditItem>> GetAuditLogsAsync(
+        string? operatorRef,
+        string? actionCode,
+        string? targetType,
+        DateTime? from,
+        DateTime? to,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT id,operator_ref OperatorRef,action_code ActionCode,target_type TargetType,target_ref TargetRef,
+              before_data BeforeData,after_data AfterData,request_id RequestId,ip_address IpAddress,created_at CreatedAt
+            FROM eggrack_auth_audit_log
+            WHERE (@OperatorRef IS NULL OR operator_ref LIKE CONCAT('%',@OperatorRef,'%'))
+              AND (@ActionCode IS NULL OR action_code=@ActionCode)
+              AND (@TargetType IS NULL OR target_type=@TargetType)
+              AND (@From IS NULL OR created_at>=@From)
+              AND (@To IS NULL OR created_at<DATE_ADD(@To,INTERVAL 1 DAY))
+            ORDER BY created_at DESC,id DESC
+            LIMIT 500
+            """;
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        return await session.QueryAsync<PermissionAuditItem>(sql, new
+        {
+            OperatorRef = string.IsNullOrWhiteSpace(operatorRef) ? null : operatorRef.Trim(),
+            ActionCode = string.IsNullOrWhiteSpace(actionCode) ? null : actionCode.Trim(),
+            TargetType = string.IsNullOrWhiteSpace(targetType) ? null : targetType.Trim(),
+            From = from,
+            To = to
+        }, cancellationToken: cancellationToken);
+    }
+
     public async Task SaveRolePermissionsAsync(long roleId, IReadOnlyCollection<long> permissionIds, string operatorRef, CancellationToken cancellationToken = default)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);

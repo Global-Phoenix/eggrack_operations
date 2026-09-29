@@ -87,3 +87,11 @@ public sealed class SaveRolePermissionsInput
     public long[] PermissionIds { get; set; } = [];
 }
 
+public sealed record PermissionAuditViewModel(
+    string? OperatorRef,
+    string? ActionCode,
+    string? TargetType,
+    DateTime? From,
+    DateTime? To,
+    IReadOnlyList<PermissionAuditItem> Items);
+

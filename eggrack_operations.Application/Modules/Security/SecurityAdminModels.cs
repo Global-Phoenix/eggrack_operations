@@ -8,4 +8,5 @@ public sealed record StaffRoleAssignment(long Id, long StaffId, string RoleCode,
 public sealed record DepartmentListItem(long Id, long? ParentId, string Code, string Name, string? ParentName, int SortOrder, bool IsEnabled, int StaffCount, int RoleCount);
 public sealed record PermissionListItem(long Id, string Code, string Name, string ResourceType, bool IsEnabled);
 public sealed record RolePermissionGrant(long RoleId, long PermissionId);
+public sealed record PermissionAuditItem(long Id, string OperatorRef, string ActionCode, string TargetType, string? TargetRef, string? BeforeData, string? AfterData, string? RequestId, string? IpAddress, DateTime CreatedAt);
 
