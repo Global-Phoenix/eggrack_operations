@@ -11,4 +11,19 @@ body{background:var(--page-bg);color:#334155}
 .tab-actions-dropdown .dropdown-item:hover,.topbar-actions .dropdown-item:hover{color:#2563eb;background:#eff6ff}.tab-actions-dropdown .dropdown-item:hover i,.topbar-actions .dropdown-item:hover i{color:#2563eb}.content-area{padding:20px 24px;background:#f8fafc}.metric-card,.card,.ui-panel{border-color:#e5e7eb!important;box-shadow:0 2px 8px rgba(15,23,42,.04)!important}.module-card:hover{border-color:#93c5fd;box-shadow:0 8px 18px #2563eb12}
 .btn-primary{--bs-btn-bg:#2563eb;--bs-btn-border-color:#2563eb;--bs-btn-hover-bg:#1d4ed8;--bs-btn-hover-border-color:#1d4ed8}.btn-outline-primary{--bs-btn-color:#2563eb;--bs-btn-border-color:#93c5fd;--bs-btn-hover-bg:#eff6ff;--bs-btn-hover-border-color:#60a5fa;--bs-btn-hover-color:#1d4ed8}button:focus-visible,a:focus-visible{outline-color:#2563eb}
 @media(max-width:767.98px){.sidebar-expanded{--sidebar-width:260px}.sidebar{width:260px}.content-area{padding:14px}.topbar{height:58px;flex-basis:58px}}
+/* Unified workspace header */
+.topbar{height:58px;flex-basis:58px;padding:0 14px 0 10px}
+.workspace-tabs{height:100%;gap:0;padding:0;overflow:visible}
+.dynamic-tabs{height:100%;flex:0 1 auto;align-items:stretch;gap:0;overflow-x:auto;scrollbar-width:none}
+.dynamic-tabs::-webkit-scrollbar{display:none}
+.workspace-tab{height:100%;margin:0;padding:0 13px;border:0;border-bottom:2px solid transparent;border-radius:0;color:#64748b;background:transparent;box-shadow:none;transition:color .16s ease,background-color .16s ease,border-color .16s ease}
+.workspace-tab:hover{color:#2563eb;background:#f8fafc}
+.workspace-tab.active{min-width:0;color:#1d4ed8;background:#f8fbff;border-color:#2563eb;box-shadow:none}
+.workspace-tab.active::before,.workspace-tab:not(.active)::after{display:none}
+.workspace-tab .tab-close{width:18px;height:18px;font-size:14px;opacity:.55;transition:opacity .16s ease,color .16s ease,background-color .16s ease}
+.workspace-tab:hover .tab-close,.workspace-tab.active .tab-close{opacity:1}
+.home-tab{padding:0 14px!important}
+.new-tab-button,.tab-actions-button{width:34px;height:34px;margin:0 1px;border-radius:7px}
+.topbar-actions{height:100%;flex:0 0 auto;padding-left:12px;background:linear-gradient(90deg,transparent,#fff 12px)}
+@media(max-width:767.98px){.workspace-tab{padding:0 10px}.home-tab{padding:0 11px!important}.topbar{height:56px;flex-basis:56px;padding-right:6px}.topbar-actions{padding-left:4px}}
 
