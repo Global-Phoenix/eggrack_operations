@@ -38,10 +38,12 @@ public static class InternalIdentityServices
             options.Cookie.HttpOnly=true;
             options.Cookie.SecurePolicy=Microsoft.AspNetCore.Http.CookieSecurePolicy.Always;
             options.Cookie.SameSite=Microsoft.AspNetCore.Http.SameSiteMode.Lax;
-            options.ExpireTimeSpan=TimeSpan.FromHours(4);
-            options.SlidingExpiration=false;
+            options.ExpireTimeSpan=TimeSpan.FromMinutes(30);
+            options.SlidingExpiration=true;
             options.LoginPath="/account/login";
             options.AccessDeniedPath="/account/denied";
+            options.Events.OnSigningIn=IdentitySessionProtection.SigningIn;
+            options.Events.OnValidatePrincipal=IdentitySessionProtection.Validate;
         });
         return services;
     }
