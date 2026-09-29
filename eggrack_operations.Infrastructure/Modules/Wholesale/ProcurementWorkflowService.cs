@@ -76,5 +76,5 @@ public sealed partial class ProcurementDataService
         catch{await db.RollbackAsync(token);throw;}
     }
 
-    private sealed record PlanForApproval(long Id,decimal? TotalCostUsd,decimal? ProfitRate,int Status);
+    private sealed record PlanForApproval(uint Id,decimal? TotalCostUsd,decimal? ProfitRate,byte Status);
 }

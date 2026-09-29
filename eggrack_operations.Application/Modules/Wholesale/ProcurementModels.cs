@@ -11,7 +11,7 @@ public static class ProcurementPlanStatusParser
 }
 
 public sealed record ProcurementPlanListItem(
-    long Id, string PlanNumber, string RequestNumber, int RequestVersion, string CustomerName,
+    uint Id, string PlanNumber, string RequestNumber, int RequestVersion, string CustomerName,
     string ProductSummary, string? BuyerName, decimal? TotalCostCny, decimal? FinalQuoteUsd,
     ProcurementPlanStatus Status, DateTime UpdatedAtUtc);
 

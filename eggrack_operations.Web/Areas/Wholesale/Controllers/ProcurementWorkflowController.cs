@@ -26,7 +26,7 @@ public sealed partial class ProcurementController
 
     [HttpPost("plans/{planId:long}/approve")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Approve(long planId,[FromForm]decimal quoteUsd,[FromForm]string recipient,[FromForm]string? note,CancellationToken token)
+    public async Task<IActionResult> Approve(uint planId,[FromForm]decimal quoteUsd,[FromForm]string recipient,[FromForm]string? note,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
         try{return Json(new{ok=true,data=await procurement.ApproveQuoteAsync(new(planId,quoteUsd,note,staffId),recipient,token)});}
@@ -35,7 +35,7 @@ public sealed partial class ProcurementController
 
     [HttpPost("plans/{planId:long}/reject")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Reject(long planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
+    public async Task<IActionResult> Reject(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
         try{return Json(new{ok=true,data=await procurement.RejectQuoteAsync(new(planId,quoteUsd,note,staffId),token)});}

@@ -11,7 +11,9 @@ public class NavigationServiceTests
         var codes = items.SelectMany(item => item.Children ?? [item]).Select(item => item.Code).ToHashSet();
 
         Assert.Contains("files", codes);
-        Assert.Contains("wholesale.purchase-plans", codes);
+        Assert.Contains("wholesale.purchase-requests", codes);
+        Assert.Contains("wholesale.sourcing", codes);
+        Assert.DoesNotContain("wholesale.purchase-plans", codes);
         Assert.Contains("system.users", codes);
         Assert.Contains("system.roles", codes);
         Assert.DoesNotContain("tasks", codes);
