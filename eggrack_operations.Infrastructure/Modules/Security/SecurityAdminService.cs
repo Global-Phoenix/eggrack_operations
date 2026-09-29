@@ -27,6 +27,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         const string sql = """
             SELECT CAST(s.id AS SIGNED) Id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
               s.status=1 IsEnabled,
+              COALESCE(MAX(CASE WHEN sd.is_primary=1 THEN d.department_name END),MIN(d.department_name),'全局人员') PrimaryDepartment,
               COALESCE(GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR '、'),'—') Departments,
               COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_level SEPARATOR '、'),'未授权') Roles
             FROM eggrack_auth_staff s
@@ -58,6 +59,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         const string sql = """
             SELECT CAST(s.id AS SIGNED) Id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
               s.status=1 IsEnabled,
+              COALESCE(MAX(CASE WHEN sd.is_primary=1 THEN d.department_name END),MIN(d.department_name),'全局人员') PrimaryDepartment,
               COALESCE(GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR '、'),'—') Departments,
               COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_level SEPARATOR '、'),'未授权') Roles
             FROM eggrack_auth_staff s

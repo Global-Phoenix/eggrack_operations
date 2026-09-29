@@ -1,5 +1,12 @@
 @model StaffIndexViewModel
-@{ ViewData["Title"] = "人员权限"; }
+@{
+  ViewData["Title"] = "人员权限";
+  var staffGroups = Model.Staff
+    .GroupBy(item => string.IsNullOrWhiteSpace(item.PrimaryDepartment) ? "全局人员" : item.PrimaryDepartment)
+    .OrderBy(group => group.Key == "全局人员" ? 0 : 1)
+    .ThenBy(group => group.Key)
+    .ToArray();
+}
 
 @await Component.InvokeAsync("PageHeader", new { title = "人员权限", subtitle = "将登录账号映射为内部人员，并按部门授予角色", parentTitle = "权限管理", parentUrl = Url.Action("Index"), primaryText = "新增人员", primaryModalTarget = "#createStaff", secondaryText = "返回概览", secondaryUrl = Url.Action("Index") })
 @if (TempData["Success"] is string success) { <div class="alert alert-success">@success</div> }
@@ -17,10 +24,22 @@
     <table class="table table-hover align-middle mb-0">
       <thead class="table-light"><tr><th class="ps-4">人员</th><th>部门</th><th>当前角色</th><th>状态</th><th class="text-end pe-4">授权</th></tr></thead>
       <tbody>
-      @foreach (var item in Model.Staff) {
+      @foreach (var groupEntry in staffGroups.Select((group, index) => new { Group = group, Index = index })) {
+        var group = groupEntry.Group;
+        var groupId = $"department-{groupEntry.Index}";
+        <tr class="department-group-row">
+          <td colspan="5" class="px-4 py-2">
+            <button class="department-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target=".@groupId" aria-expanded="true">
+              <span class="department-group-chevron">⌄</span>
+              <strong>@group.Key</strong>
+              <span class="badge rounded-pill text-bg-secondary">@group.Count() 人</span>
+            </button>
+          </td>
+        </tr>
+        @foreach (var item in group) {
         var modalId = $"assign-{item.Id}";
         var passwordModalId = $"password-{item.Id}";
-        <tr><td class="ps-4"><strong>@item.StaffName</strong><div class="small text-secondary">@item.StaffRef</div></td>
+        <tr class="collapse show @groupId"><td class="ps-5"><strong>@item.StaffName</strong><div class="small text-secondary">@item.StaffRef</div></td>
           <td>@item.Departments</td><td>@item.Roles</td>
           <td><span class="badge @(item.IsEnabled ? "text-bg-success" : "text-bg-secondary")">@(item.IsEnabled ? "启用" : "停用")</span></td>
           <td class="text-end pe-4"><div class="d-inline-flex gap-1"><button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">授予角色</button><button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#@passwordModalId">重置密码</button><form asp-action="SetStaffStatus" method="post"><input type="hidden" name="StaffId" value="@item.Id" /><input type="hidden" name="StaffRef" value="@item.StaffRef" /><input type="hidden" name="Enabled" value="@(!item.IsEnabled)" /><button class="btn btn-sm @(item.IsEnabled ? "btn-outline-danger" : "btn-outline-success")" type="submit">@(item.IsEnabled ? "停用" : "启用")</button></form></div></td></tr>
@@ -63,6 +82,7 @@
             </form>
           </div></div>
         </div>
+        }
       }
       @if (Model.Staff.Count == 0) { <tr><td colspan="5" class="text-center text-secondary py-5">没有符合条件的人员</td></tr> }
       </tbody>
