@@ -10,7 +10,7 @@ public sealed record ProcurementPlanItemOption(uint Id,string ProductName,decima
 public sealed record CandidateProductItem(uint Id,uint PlanItemId,uint? SupplierId,string ProductName,string? SupplierName,string? ReferenceUrl,string? SpecificationJson,string Status);
 public sealed record InquiryItem(uint Id,uint PlanItemId,uint SupplierId,string ProductName,string SupplierName,string Currency,decimal? UnitPrice,decimal? Moq,uint? LeadDays,DateTime? ValidUntil,string? Terms,string Status,string? Notes);
 public sealed record SampleItem(uint Id,uint PlanItemId,uint? SupplierId,string ProductName,string? SupplierName,decimal Quantity,string Status,decimal CostCny,string? TrackingNumber,string? Notes);
-public sealed record MailTaskItem(uint Id,string Recipient,string Status,string TemplateCode,DateTime CreatedAtUtc,DateTime? SentAtUtc);
+public sealed record MailTaskItem(uint Id,string Recipient,string Status,string TemplateCode,byte Attempts,string? LastError,DateTime CreatedAtUtc,DateTime? SentAtUtc);
 public sealed record ProformaInvoiceSummary(uint Id,string Number,string Status,decimal TotalAmount,string Currency,DateTime CreatedAtUtc,DateTime? IssuedAtUtc);
 public sealed record ProformaInvoicePriceItem(uint Id,string ProductName,decimal Quantity,string Unit,decimal UnitPrice,decimal LineAmount);
 public sealed record ProformaInvoicePricing(uint InvoiceId,decimal ProductAmount,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,decimal TotalAmount,IReadOnlyList<ProformaInvoicePriceItem> Items);

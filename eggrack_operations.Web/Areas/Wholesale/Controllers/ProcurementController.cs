@@ -11,7 +11,7 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 [Authorize]
 [Route("wholesale/procurement")]
 [InternalPermission("wholesale.purchase-plan.view")]
-public sealed partial class ProcurementController(ProcurementDataService procurement) : Controller
+public sealed partial class ProcurementController(ProcurementDataService procurement,ProcurementMailDispatcher mailDispatcher) : Controller
 {
     [HttpGet("")]
     public IActionResult Index() => RedirectToAction(nameof(PurchaseRequests));

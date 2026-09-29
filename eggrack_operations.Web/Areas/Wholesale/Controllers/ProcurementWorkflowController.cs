@@ -99,6 +99,19 @@ public sealed partial class ProcurementController
         try{return Json(new{ok=true,data=await procurement.CompletePlanAsync(planId,staffId,token)});}
         catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
     }
+    [HttpPost("mail-tasks/{mailTaskId:long}/send")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.approve")]
+    public async Task<IActionResult> SendMailTask(uint mailTaskId,CancellationToken token)
+    {
+        try
+        {
+            var sent=await mailDispatcher.DispatchAsync(mailTaskId,token);
+            return sent?Json(new{ok=true,message="邮件发送成功。"}):UnprocessableEntity(new{ok=false,message="邮件发送失败，已记录失败原因，可稍后重试。"});
+        }
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
+
     private bool TryStaffId(out long staffId) =>
         long.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
 }

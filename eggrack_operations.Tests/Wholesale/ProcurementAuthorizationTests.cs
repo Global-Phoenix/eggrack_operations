@@ -32,6 +32,7 @@ public sealed class ProcurementAuthorizationTests
     [InlineData(nameof(ProcurementController.IssueProformaInvoice), "wholesale.purchase-quote.approve")]
     [InlineData(nameof(ProcurementController.CompletePlan), "wholesale.procurement.manage")]
     [InlineData(nameof(ProcurementController.UpdateProformaInvoicePricing), "wholesale.purchase-quote.approve")]
+    [InlineData(nameof(ProcurementController.SendMailTask), "wholesale.purchase-quote.approve")]
     public void WriteActionsRequireSpecificPermission(string methodName,string expectedPermission)
     {
         var method=typeof(ProcurementController).GetMethod(methodName)
