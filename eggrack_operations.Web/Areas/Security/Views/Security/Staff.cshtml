@@ -6,89 +6,127 @@
     .OrderBy(group => group.Key == "全局人员" ? 0 : 1)
     .ThenBy(group => group.Key)
     .ToArray();
+  var enabledStaffCount = Model.Staff.Count(item => item.IsEnabled);
 }
 
-@await Component.InvokeAsync("PageHeader", new { title = "人员权限", subtitle = "将登录账号映射为内部人员，并按部门授予角色", parentTitle = "权限管理", parentUrl = Url.Action("Index"), primaryText = "新增人员", primaryModalTarget = "#createStaff", secondaryText = "返回概览", secondaryUrl = Url.Action("Index") })
+@await Component.InvokeAsync("PageHeader", new { title = "人员权限", subtitle = "按组织架构管理登录人员、角色与数据范围", parentTitle = "权限管理", parentUrl = Url.Action("Index"), primaryText = "新增人员", primaryModalTarget = "#createStaff", secondaryText = "返回概览", secondaryUrl = Url.Action("Index") })
 @if (TempData["Success"] is string success) { <div class="alert alert-success">@success</div> }
 @if (TempData["Error"] is string error) { <div class="alert alert-danger">@error</div> }
 
-<div class="card border-0 shadow-sm">
-  <div class="card-header bg-white border-0 p-4">
-    <form method="get" class="row g-2 align-items-center">
-      <div class="col-12 col-md"><input class="form-control" name="keyword" value="@Model.Keyword" placeholder="搜索姓名或登录账号标识" /></div>
-      <div class="col-auto"><button class="btn btn-dark" type="submit">搜索</button></div>
-      <div class="col-auto"><a class="btn btn-outline-secondary" asp-action="Staff">重置</a></div>
-    </form>
-  </div>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead class="table-light"><tr><th class="ps-4">人员</th><th>部门</th><th>当前角色</th><th>状态</th><th class="text-end pe-4">授权</th></tr></thead>
-      <tbody>
-      @foreach (var groupEntry in staffGroups.Select((group, index) => new { Group = group, Index = index })) {
-        var group = groupEntry.Group;
-        var groupId = $"department-{groupEntry.Index}";
-        <tr class="department-group-row">
-          <td colspan="5" class="px-4 py-2">
-            <button class="department-group-toggle" type="button" data-bs-toggle="collapse" data-bs-target=".@groupId" aria-expanded="true">
-              <span class="department-group-chevron">⌄</span>
-              <strong>@group.Key</strong>
-              <span class="badge rounded-pill text-bg-secondary">@group.Count() 人</span>
-            </button>
-          </td>
-        </tr>
-        @foreach (var item in group) {
-        var modalId = $"assign-{item.Id}";
-        var passwordModalId = $"password-{item.Id}";
-        <tr class="collapse show @groupId"><td class="ps-5"><strong>@item.StaffName</strong><div class="small text-secondary">@item.StaffRef</div></td>
-          <td>@item.Departments</td><td>@item.Roles</td>
-          <td><span class="badge @(item.IsEnabled ? "text-bg-success" : "text-bg-secondary")">@(item.IsEnabled ? "启用" : "停用")</span></td>
-          <td class="text-end pe-4"><div class="d-inline-flex gap-1"><button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">授予角色</button><button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#@passwordModalId">重置密码</button><form asp-action="SetStaffStatus" method="post"><input type="hidden" name="StaffId" value="@item.Id" /><input type="hidden" name="StaffRef" value="@item.StaffRef" /><input type="hidden" name="Enabled" value="@(!item.IsEnabled)" /><button class="btn btn-sm @(item.IsEnabled ? "btn-outline-danger" : "btn-outline-success")" type="submit">@(item.IsEnabled ? "停用" : "启用")</button></form></div></td></tr>
-        <div class="modal fade" id="@modalId" tabindex="-1">
-          <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
-            <form asp-action="AssignRole" method="post">
-              <div class="modal-header"><h2 class="modal-title fs-5">为 @item.StaffName 授予角色</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-              <div class="modal-body">
-                <input type="hidden" name="StaffId" value="@item.Id" />
-                @{ var currentAssignments = Model.Assignments.Where(x => x.StaffId == item.Id).ToArray(); }
-                @if (currentAssignments.Length > 0) {
-                  <div class="mb-3"><label class="form-label">当前授权</label><div class="d-flex flex-column gap-2">
-                    @foreach (var assignment in currentAssignments) {
-                      <div class="d-flex align-items-center justify-content-between border rounded px-3 py-2"><span>@assignment.RoleName <small class="text-secondary">@(assignment.DepartmentName ?? "全局")</small></span><button class="btn btn-sm btn-outline-danger" type="submit" formaction="@Url.Action("RevokeRole")" name="AssignmentId" value="@assignment.Id">撤销</button></div>
-                    }
-                  </div></div>
-                }
-                <label class="form-label">角色</label>
-                <select class="form-select mb-3" name="RoleId" required>
-                  <option value="">请选择角色</option>
-                  @foreach (var role in Model.Roles) { <option value="@role.Id">@role.Name（@role.DefaultScope）</option> }
-                </select>
-                <label class="form-label">生效部门</label>
-                <select class="form-select" name="DepartmentId">
-                  <option value="">全局（仅超级管理员、老板）</option>
-                  @foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }
-                </select>
-                <div class="form-text">部门管理员、部门主管、部门员工必须选择部门。</div>
-              </div>
-              <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-dark" type="submit">确认授权</button></div>
-            </form>
-          </div></div>
-        </div>
-        <div class="modal fade" id="@passwordModalId" tabindex="-1">
-          <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
-            <form asp-action="ResetStaffPassword" method="post">
-              <div class="modal-header"><h2 class="modal-title fs-5">重置 @item.StaffName 的密码</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-              <div class="modal-body"><input type="hidden" name="StaffRef" value="@item.StaffRef" /><label class="form-label">新密码</label><input class="form-control" name="NewPassword" type="password" autocomplete="new-password" required /><div class="form-text">至少 12 位，包含大小写字母、数字和特殊字符。保存后旧会话会失效。</div></div>
-              <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">确认重置</button></div>
-            </form>
-          </div></div>
-        </div>
-        }
-      }
-      @if (Model.Staff.Count == 0) { <tr><td colspan="5" class="text-center text-secondary py-5">没有符合条件的人员</td></tr> }
-      </tbody>
-    </table>
+<div class="staff-toolbar">
+  <form method="get" class="staff-search">
+    <div class="input-group">
+      <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-secondary"></i></span>
+      <input class="form-control border-start-0 ps-0" name="keyword" value="@Model.Keyword" placeholder="搜索姓名或登录账号标识" />
+    </div>
+    <button class="btn btn-dark px-4" type="submit">搜索</button>
+    <a class="btn btn-outline-secondary" asp-action="Staff">重置</a>
+  </form>
+  <div class="staff-overview" aria-label="人员统计">
+    <span><strong>@staffGroups.Length</strong> 个组织</span>
+    <span><strong>@Model.Staff.Count</strong> 名人员</span>
+    <span><strong>@enabledStaffCount</strong> 名启用</span>
   </div>
 </div>
+
+@if (Model.Staff.Count == 0)
+{
+  <div class="staff-empty"><i class="bi bi-people"></i><strong>没有符合条件的人员</strong><span>请调整搜索条件后重试</span></div>
+}
+else
+{
+  <div class="staff-directory">
+  @foreach (var groupEntry in staffGroups.Select((group, index) => new { Group = group, Index = index }))
+  {
+    var group = groupEntry.Group;
+    var groupId = $"department-{groupEntry.Index}";
+    var isGlobal = group.Key == "全局人员";
+    var enabledCount = group.Count(item => item.IsEnabled);
+    <section class="staff-department @(isGlobal ? "staff-department-global" : null)">
+      <button class="staff-department-header" type="button" data-bs-toggle="collapse" data-bs-target="#@groupId" aria-expanded="true" aria-controls="@groupId">
+        <span class="staff-department-icon"><i class="bi @(isGlobal ? "bi-shield-lock" : "bi-diagram-3")"></i></span>
+        <span class="staff-department-title">
+          <strong>@group.Key</strong>
+          <small>@(isGlobal ? "企业级管理角色，不受单一部门范围限制" : "按主部门归类，人员可拥有其他部门授权")</small>
+        </span>
+        <span class="staff-department-metrics">
+          <span><b>@group.Count()</b> 人员</span>
+          <span><b>@enabledCount</b> 启用</span>
+        </span>
+        <i class="bi bi-chevron-down staff-department-chevron"></i>
+      </button>
+      <div class="collapse show" id="@groupId">
+        <div class="table-responsive">
+          <table class="table staff-department-table align-middle mb-0">
+            <thead><tr><th class="ps-4">人员</th><th>当前角色</th><th>关联部门</th><th>状态</th><th class="text-end pe-4">操作</th></tr></thead>
+            <tbody>
+            @foreach (var item in group)
+            {
+              var modalId = $"assign-{item.Id}";
+              var passwordModalId = $"password-{item.Id}";
+              <tr>
+                <td class="ps-4"><div class="staff-person"><span class="staff-avatar">@item.StaffName.FirstOrDefault()</span><span><strong>@item.StaffName</strong><small>@item.StaffRef</small></span></div></td>
+                <td><span class="staff-role">@item.Roles</span></td>
+                <td><span class="text-secondary">@item.Departments</span></td>
+                <td><span class="staff-status @(item.IsEnabled ? "is-enabled" : "is-disabled")"><i></i>@(item.IsEnabled ? "启用" : "停用")</span></td>
+                <td class="text-end pe-4">
+                  <div class="staff-actions">
+                    <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">授予角色</button>
+                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#@passwordModalId">重置密码</button>
+                    <form asp-action="SetStaffStatus" method="post"><input type="hidden" name="StaffId" value="@item.Id" /><input type="hidden" name="StaffRef" value="@item.StaffRef" /><input type="hidden" name="Enabled" value="@(!item.IsEnabled)" /><button class="btn btn-sm @(item.IsEnabled ? "btn-outline-danger" : "btn-outline-success")" type="submit">@(item.IsEnabled ? "停用" : "启用")</button></form>
+                  </div>
+                </td>
+              </tr>
+            }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  }
+  </div>
+}
+
+@foreach (var item in Model.Staff)
+{
+  var modalId = $"assign-{item.Id}";
+  var passwordModalId = $"password-{item.Id}";
+  <div class="modal fade" id="@modalId" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <form asp-action="AssignRole" method="post">
+        <div class="modal-header"><h2 class="modal-title fs-5">为 @item.StaffName 授予角色</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <input type="hidden" name="StaffId" value="@item.Id" />
+          @{ var currentAssignments = Model.Assignments.Where(x => x.StaffId == item.Id).ToArray(); }
+          @if (currentAssignments.Length > 0)
+          {
+            <div class="mb-3"><label class="form-label">当前授权</label><div class="d-flex flex-column gap-2">
+              @foreach (var assignment in currentAssignments)
+              {
+                <div class="d-flex align-items-center justify-content-between border rounded px-3 py-2"><span>@assignment.RoleName <small class="text-secondary">@(assignment.DepartmentName ?? "全局")</small></span><button class="btn btn-sm btn-outline-danger" type="submit" formaction="@Url.Action("RevokeRole")" name="AssignmentId" value="@assignment.Id">撤销</button></div>
+              }
+            </div></div>
+          }
+          <label class="form-label">角色</label>
+          <select class="form-select mb-3" name="RoleId" required><option value="">请选择角色</option>@foreach (var role in Model.Roles) { <option value="@role.Id">@role.Name（@role.DefaultScope）</option> }</select>
+          <label class="form-label">生效部门</label>
+          <select class="form-select" name="DepartmentId"><option value="">全局（仅超级管理员、老板）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select>
+          <div class="form-text">部门管理员、部门主管、部门员工必须选择部门。</div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-dark" type="submit">确认授权</button></div>
+      </form>
+    </div></div>
+  </div>
+  <div class="modal fade" id="@passwordModalId" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+      <form asp-action="ResetStaffPassword" method="post">
+        <div class="modal-header"><h2 class="modal-title fs-5">重置 @item.StaffName 的密码</h2><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body"><input type="hidden" name="StaffRef" value="@item.StaffRef" /><label class="form-label">新密码</label><input class="form-control" name="NewPassword" type="password" autocomplete="new-password" required /><div class="form-text">至少 12 位，包含大小写字母、数字和特殊字符。保存后旧会话会失效。</div></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">确认重置</button></div>
+      </form>
+    </div></div>
+  </div>
+}
 
 <div class="modal fade" id="createStaff" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
