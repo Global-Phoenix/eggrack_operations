@@ -14,6 +14,11 @@ public sealed class PurchaseRequestSource
     public uint? PlannedVersionId { get; set; }
     public ulong? BuyerId { get; set; }
     public string? BuyerName { get; set; }
+    public string? PlanTitle { get; set; }
+    public string Priority { get; set; } = "normal";
+    public DateTime? PlannedStartDate { get; set; }
+    public DateTime? TargetCompletionDate { get; set; }
+    public string? InternalNote { get; set; }
     public bool HasPlan => PlanId.HasValue;
 }
 
@@ -53,5 +58,28 @@ public sealed record ProcurementRequestContext(
     IReadOnlyList<PurchaseRequestAttachmentDetail> Attachments);
 public sealed record PurchaseRequestItemSource(uint Id,uint RequestId,uint VersionId,string ProductKey,string ProductName,decimal Quantity,string Unit,string SnapshotJson);
 public sealed record ProcurementBuyerOption(ulong Id,string Name);
-public sealed record CreateProcurementPlanCommand(uint RequestId,uint RequestVersionId,ulong AssignedBuyerStaffId,ulong CreatedByStaffId);
-public sealed record UpdateProcurementPlanCommand(uint PlanId,uint RequestVersionId,ulong AssignedBuyerStaffId,ulong UpdatedByStaffId);
+public sealed class SaveProcurementPlanInput
+{
+    public uint RequestVersionId { get; set; }
+    public ulong AssignedBuyerStaffId { get; set; }
+    public string PlanTitle { get; set; } = string.Empty;
+    public string Priority { get; set; } = "normal";
+    public DateTime? PlannedStartDate { get; set; }
+    public DateTime? TargetCompletionDate { get; set; }
+    public string? InternalNote { get; set; }
+    public List<SaveProcurementPlanItemCommand> Items { get; set; } = [];
+}
+public sealed class ProcurementPlanEditor
+{
+    public uint Id { get; set; }
+    public uint RequestId { get; set; }
+    public uint RequestVersionId { get; set; }
+    public ulong? AssignedBuyerStaffId { get; set; }
+    public string PlanNumber { get; set; } = string.Empty;
+    public string PlanTitle { get; set; } = string.Empty;
+    public string Priority { get; set; } = "normal";
+    public DateTime? PlannedStartDate { get; set; }
+    public DateTime? TargetCompletionDate { get; set; }
+    public string? InternalNote { get; set; }
+    public IReadOnlyList<ProcurementPlanItemOption> Items { get; set; } = [];
+}

@@ -52,7 +52,23 @@ public sealed record SourcingWorkspace(ProcurementRequestContext Request,IReadOn
 public sealed record SaveCandidateProductCommand(uint? Id,uint PlanItemId,uint? SupplierId,string ProductName,string? ReferenceUrl,string? SpecificationJson,string Status);
 public sealed record SaveInquiryCommand(uint? Id,uint PlanItemId,uint SupplierId,string? OfferedProductName,decimal? LengthCm,decimal? WidthCm,decimal? HeightCm,decimal? WeightKg,string? Color,string? SizeDetails,string? ParameterDetails,string Currency,decimal? UnitPrice,decimal? Moq,uint? LeadDays,DateTime? ValidUntil,string? Terms,string Status,string? Notes);
 public sealed record SaveSampleCommand(uint? Id,uint PlanItemId,uint? SupplierId,decimal Quantity,string Status,decimal CostCny,string? TrackingNumber,string? Notes);
-public sealed record SaveProcurementPlanItemCommand(uint? Id,uint? RequestItemId,string ProductName,decimal Quantity,string Unit,string? Sku,string? Brand,string? Description,string? Specifications,string? Color,string? Size,string? PackagingRequirements,string? CustomizationRequirements,string? InternalNote);
+public sealed class SaveProcurementPlanItemCommand
+{
+    public uint? Id { get; set; }
+    public uint? RequestItemId { get; set; }
+    public string ProductName { get; set; } = string.Empty;
+    public decimal Quantity { get; set; }
+    public string Unit { get; set; } = string.Empty;
+    public string? Sku { get; set; }
+    public string? Brand { get; set; }
+    public string? Description { get; set; }
+    public string? Specifications { get; set; }
+    public string? Color { get; set; }
+    public string? Size { get; set; }
+    public string? PackagingRequirements { get; set; }
+    public string? CustomizationRequirements { get; set; }
+    public string? InternalNote { get; set; }
+}
 public sealed record ProcurementCostItemInput(uint? TypeId,string? Name,decimal AmountCny);
 public sealed record ProcurementCostItem(uint Id,uint? TypeId,string Name,decimal AmountCny,uint SortOrder);
 public sealed record SaveProcurementCostsCommand(decimal CnyPerUsd,decimal ProfitRate,List<ProcurementCostItemInput> Items);

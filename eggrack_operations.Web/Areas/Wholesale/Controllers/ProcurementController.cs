@@ -51,16 +51,23 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     public async Task<IActionResult> Versions(uint requestId,CancellationToken token) =>
         Json(await procurement.GetRequestVersionsAsync(requestId,token));
 
+    [HttpGet("plans/{planId:long}/editor")]
+    [InternalPermission("wholesale.purchase-plan.update")]
+    public async Task<IActionResult> PlanEditor(uint planId,CancellationToken token)
+    {
+        try{return Json(await procurement.GetPlanEditorAsync(planId,token));}
+        catch(InvalidOperationException error){return NotFound(new{ok=false,message=error.Message});}
+    }
+
     [HttpPost("plans")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.purchase-plan.create")]
-    public async Task<IActionResult> Create([FromForm]uint requestId,[FromForm]uint requestVersionId,[FromForm]ulong assignedBuyerStaffId,CancellationToken token)
+    public async Task<IActionResult> Create([FromForm]uint requestId,[FromForm]SaveProcurementPlanInput input,CancellationToken token)
     {
         if(!TryStaffIdUnsigned(out var staffId)) return Forbid();
-        if(assignedBuyerStaffId==0) return UnprocessableEntity(new{ok=false,message="请选择采购人员。"});
         try
         {
-            var id=await procurement.CreatePlanAsync(new(requestId,requestVersionId,assignedBuyerStaffId,staffId),token);
+            var id=await procurement.CreatePlanAsync(requestId,input,staffId,token);
             return Json(new{ok=true,id});
         }
         catch(InvalidOperationException error)
@@ -72,13 +79,12 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     [HttpPost("plans/{planId:long}")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.purchase-plan.update")]
-    public async Task<IActionResult> Update(uint planId,[FromForm]uint requestVersionId,[FromForm]ulong assignedBuyerStaffId,CancellationToken token)
+    public async Task<IActionResult> Update(uint planId,[FromForm]SaveProcurementPlanInput input,CancellationToken token)
     {
         if(!TryStaffIdUnsigned(out var staffId)) return Forbid();
-        if(assignedBuyerStaffId==0) return UnprocessableEntity(new{ok=false,message="请选择采购人员。"});
         try
         {
-            await procurement.UpdatePlanAsync(new(planId,requestVersionId,assignedBuyerStaffId,staffId),token);
+            await procurement.UpdatePlanAsync(planId,input,staffId,token);
             return Json(new{ok=true});
         }
         catch(InvalidOperationException error)
