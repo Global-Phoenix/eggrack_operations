@@ -1,4 +1,5 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
+using eggrack_operations.Areas.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace eggrack_operations.Areas.Wholesale.Controllers;
@@ -11,21 +12,25 @@ public sealed partial class ProcurementController
 
     [HttpPost("suppliers")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
     public async Task<IActionResult> CreateSupplier([FromForm]CreateSupplierCommand command,CancellationToken token) =>
         Json(new{ok=true,id=await procurement.CreateSupplierAsync(command,token)});
 
     [HttpPost("inquiries")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
     public async Task<IActionResult> RecordInquiry([FromForm]RecordInquiryCommand command,CancellationToken token) =>
         Json(new{ok=true,id=await procurement.RecordInquiryAsync(command,token)});
 
     [HttpPost("samples")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
     public async Task<IActionResult> RecordSample([FromForm]RecordSampleCommand command,CancellationToken token) =>
         Json(new{ok=true,id=await procurement.RecordSampleAsync(command,token)});
 
     [HttpPost("plans/{planId:long}/approve")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.approve")]
     public async Task<IActionResult> Approve(uint planId,[FromForm]decimal quoteUsd,[FromForm]string recipient,[FromForm]string? note,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
@@ -35,6 +40,7 @@ public sealed partial class ProcurementController
 
     [HttpPost("plans/{planId:long}/reject")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.approve")]
     public async Task<IActionResult> Reject(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
@@ -48,18 +54,41 @@ public sealed partial class ProcurementController
 
     [HttpPost("candidates")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
     public async Task<IActionResult> SaveCandidate([FromForm]SaveCandidateProductCommand command,CancellationToken token)
     { try{return Json(new{ok=true,id=await procurement.SaveCandidateAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
 
     [HttpPost("inquiry-records")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
     public async Task<IActionResult> SaveInquiry([FromForm]SaveInquiryCommand command,CancellationToken token)
     { try{return Json(new{ok=true,id=await procurement.SaveInquiryAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
 
     [HttpPost("sample-records")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
     public async Task<IActionResult> SaveSample([FromForm]SaveSampleCommand command,CancellationToken token)
     { try{return Json(new{ok=true,id=await procurement.SaveSampleAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
+
+    [HttpPost("plans/{planId:long}/pi/issue")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.approve")]
+    public async Task<IActionResult> IssueProformaInvoice(uint planId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId)) return Forbid();
+        try{return Json(new{ok=true,data=await procurement.IssueProformaInvoiceAsync(planId,staffId,token)});}
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
+
+    [HttpPost("plans/{planId:long}/complete")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
+    public async Task<IActionResult> CompletePlan(uint planId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId)) return Forbid();
+        try{return Json(new{ok=true,data=await procurement.CompletePlanAsync(planId,staffId,token)});}
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
     private bool TryStaffId(out long staffId) =>
         long.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
 }

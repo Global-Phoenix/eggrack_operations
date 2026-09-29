@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Infrastructure.Database;
 
@@ -7,7 +8,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
 {
     private const string DatabaseName = "Eggrack";
 
-    private sealed record PlanIdentityRow(uint Id,uint RequestId);
+    private sealed record PlanIdentityRow(uint Id,uint RequestId,byte Status);
 
     private sealed record ProcurementPlanRow(
         uint Id, string PlanNumber, string RequestNumber, uint RequestVersion, string CustomerName,
@@ -94,6 +95,11 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             await db.CommitAsync(token);
             return planId;
         }
+        catch(DbException error) when(error.Message.Contains("uk_purchase_plans_request_id",StringComparison.OrdinalIgnoreCase))
+        {
+            await db.RollbackAsync(token);
+            throw new InvalidOperationException("该采购申请已经创建采购计划，不能重复创建。",error);
+        }
         catch { await db.RollbackAsync(token); throw; }
     }
 
@@ -106,11 +112,11 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           other_cost_cny=@OtherCostCny,total_cost_cny=@TotalCostCny,cny_per_usd=@CnyPerUsd,total_cost_usd=@TotalCostUsd,
           profit_method=2,profit_rate=@ProfitRate,approved_quote_amount_usd=@SuggestedQuoteUsd,status=3,
           cost_updated_by=@StaffId,cost_updated_at=@Now,updated_by=@StaffId,updated_at=@Now
-        WHERE id=@PlanId
+        WHERE id=@PlanId AND status IN (1,2,3)
         """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         var changed=await db.ExecuteAsync(sql,new{PlanId=planId,input.PurchaseCostCny,input.PackagingCostCny,input.SampleCostCny,input.DomesticShippingCny,input.InternationalShippingCny,input.OtherCostCny,result.TotalCostCny,input.CnyPerUsd,result.TotalCostUsd,input.ProfitRate,result.SuggestedQuoteUsd,StaffId=staffId,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
-        if(changed!=1) throw new InvalidOperationException("采购计划不存在。");
+        if(changed!=1) throw new InvalidOperationException("采购计划不存在或当前状态不能修改成本。");
     }
     public async Task<IReadOnlyList<ProcurementBuyerOption>> GetBuyersAsync(CancellationToken token=default)
     {
@@ -137,8 +143,11 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         await db.BeginTransactionAsync(cancellationToken:token);
         try
         {
-            var plan=(await db.QueryAsync<PlanIdentityRow>("SELECT id Id,request_id RequestId FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:token)).SingleOrDefault()
+            var plan=(await db.QueryAsync<PlanIdentityRow>("SELECT id Id,request_id RequestId,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:token)).SingleOrDefault()
                 ?? throw new InvalidOperationException("采购计划不存在。");
+            if(plan.Status>2) throw new InvalidOperationException("采购计划已进入成本或审批阶段，不能更换申请版本。");
+            var sourcingCount=(await db.QueryAsync<long>("SELECT (SELECT COUNT(*) FROM procurement_candidate_products c JOIN purchase_plan_items i ON i.id=c.plan_item_id WHERE i.plan_id=@PlanId)+(SELECT COUNT(*) FROM procurement_inquiries q JOIN purchase_plan_items i ON i.id=q.plan_item_id WHERE i.plan_id=@PlanId)+(SELECT COUNT(*) FROM procurement_samples s JOIN purchase_plan_items i ON i.id=s.plan_item_id WHERE i.plan_id=@PlanId)",new{command.PlanId},cancellationToken:token)).Single();
+            if(sourcingCount>0) throw new InvalidOperationException("采购计划已有候选产品、询价或样品记录，不能更换申请版本。");
             var versions=await db.QueryAsync<uint>("SELECT id FROM purchase_request_versions WHERE id=@VersionId AND request_id=@RequestId",new{VersionId=command.RequestVersionId,plan.RequestId},cancellationToken:token);
             if(versions.Count!=1) throw new InvalidOperationException("采购申请版本与计划不匹配。");
             var items=await db.QueryAsync<PurchaseRequestItemSource>(itemSql,new{plan.RequestId,VersionId=command.RequestVersionId},cancellationToken:token);

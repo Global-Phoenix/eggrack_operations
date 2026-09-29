@@ -1,5 +1,6 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Infrastructure.Modules.Wholesale;
+using eggrack_operations.Areas.Security;
 using eggrack_operations.Areas.Wholesale.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,6 +10,7 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 [Area("Wholesale")]
 [Authorize]
 [Route("wholesale/procurement")]
+[InternalPermission("wholesale.purchase-plan.view")]
 public sealed partial class ProcurementController(ProcurementDataService procurement) : Controller
 {
     [HttpGet("")]
@@ -34,6 +36,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpPost("plans")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-plan.create")]
     public async Task<IActionResult> Create([FromForm]uint requestId,[FromForm]uint requestVersionId,[FromForm]ulong assignedBuyerStaffId,CancellationToken token)
     {
         if(!TryStaffIdUnsigned(out var staffId)) return Forbid();
@@ -51,6 +54,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpPost("plans/{planId:long}")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-plan.update")]
     public async Task<IActionResult> Update(uint planId,[FromForm]uint requestVersionId,[FromForm]ulong assignedBuyerStaffId,CancellationToken token)
     {
         if(!TryStaffIdUnsigned(out var staffId)) return Forbid();
@@ -68,6 +72,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpPost("plans/{planId:long}/costs")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-cost.manage")]
     public async Task<IActionResult> SaveCosts(uint planId,[FromForm]ProcurementCostInput input,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
@@ -84,6 +89,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpPost("pricing")]
     [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-cost.manage")]
     public IActionResult Pricing([FromForm]ProcurementCostInput input)
     {
         try{return Json(new{ok=true,data=ProcurementPricing.Calculate(input)});}

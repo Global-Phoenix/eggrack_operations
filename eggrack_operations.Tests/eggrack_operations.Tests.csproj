@@ -24,6 +24,7 @@
     <ProjectReference Include="..\eggrack_operations.Application\eggrack_operations.Application.csproj" />
     <ProjectReference Include="..\eggrack_operations.Domain\eggrack_operations.Domain.csproj" />
     <ProjectReference Include="..\eggrack_operations.Infrastructure\eggrack_operations.Infrastructure.csproj" />
+    <ProjectReference Include="..\eggrack_operations.Web\eggrack_operations.csproj" />
   </ItemGroup>
 
 </Project>
