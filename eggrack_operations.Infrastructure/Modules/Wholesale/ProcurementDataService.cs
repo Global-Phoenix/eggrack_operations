@@ -145,7 +145,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         return await db.QueryAsync<ProcurementBuyerOption>(
           sql,ProcurementScopePolicy.Params(scope,new{}),cancellationToken:token);
     }
-    public async Task<IReadOnlyList<PurchaseRequestVersionSource>> GetRequestVersionsAsync(uint requestId,CancellationToken token=default)
+    public async Task<IReadOnlyList<PurchaseRequestVersionDetail>> GetRequestVersionsAsync(uint requestId,CancellationToken token=default)
     {
         var scope=scopePolicy.Current();
         const string sql="""
@@ -153,15 +153,31 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           COALESCE(v.company_name,v.contact_name) CustomerName,v.email Email,
           FROM_UNIXTIME(v.submitted_at) SubmittedAtUtc
         FROM purchase_request_versions v
-        JOIN purchase_plans p ON p.request_id=v.request_id
+        LEFT JOIN purchase_plans p ON p.request_id=v.request_id
         WHERE v.request_id=@RequestId
           AND (@ScopeAll=1 OR (@ScopeSelf=1 AND p.assigned_buyer_id=@ScopeStaffId)
             OR p.department_id IN @ScopeDepartmentIds)
         ORDER BY v.version_number DESC
         """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        return await db.QueryAsync<PurchaseRequestVersionSource>(
+        var versions=await db.QueryAsync<PurchaseRequestVersionSource>(
           sql,ProcurementScopePolicy.Params(scope,new{RequestId=requestId}),cancellationToken:token);
+        if(versions.Count==0)return [];
+        const string itemSql="""
+        SELECT id Id,version_id VersionId,product_name ProductName,quantity Quantity,
+          quantity_unit Unit,sku Sku,brand Brand,specifications Specifications,
+          color Color,size Size,packaging_requirements PackagingRequirements,
+          customization_requirements CustomizationRequirements,customer_note CustomerNote
+        FROM purchase_request_version_items
+        WHERE request_id=@RequestId AND version_id IN @VersionIds
+        ORDER BY version_id,sort_order,id
+        """;
+        var items=await db.QueryAsync<PurchaseRequestVersionItemDetail>(
+          itemSql,new{RequestId=requestId,VersionIds=versions.Select(x=>x.Id).ToArray()},cancellationToken:token);
+        return versions.Select(version=>new PurchaseRequestVersionDetail(
+          version.Id,version.RequestId,version.VersionNumber,version.CustomerName,
+          version.Email,version.SubmittedAtUtc,
+          items.Where(item=>item.VersionId==version.Id).ToArray())).ToArray();
     }
 
     public async Task UpdatePlanAsync(UpdateProcurementPlanCommand command,CancellationToken token=default)

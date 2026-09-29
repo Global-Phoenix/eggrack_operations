@@ -2,7 +2,7 @@
     const root = document.querySelector('[data-purchase-requests]');
     if (!root || typeof bootstrap === 'undefined') return;
     const { request } = window.Eggrack.http;
-    const { filterRows, setBusy, setMessage, notify } = window.Eggrack.ui;
+    const { escapeHtml: esc, filterRows, setBusy, setMessage, notify } = window.Eggrack.ui;
     const modalElement = document.getElementById('planEditor');
     const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
     const form = root.querySelector('[data-plan-form]');
@@ -14,8 +14,47 @@
     const submit = root.querySelector('[data-submit]');
     const title = document.getElementById('planEditorTitle');
     const caption = root.querySelector('[data-plan-caption]');
+    const overview = {
+        number: root.querySelector('[data-request-number]'),
+        customer: root.querySelector('[data-request-customer]'),
+        email: root.querySelector('[data-request-email]'),
+        submitted: root.querySelector('[data-request-submitted]'),
+        plan: root.querySelector('[data-request-plan]')
+    };
+    const versionSummary = root.querySelector('[data-version-summary]');
+    const versionItems = root.querySelector('[data-version-items]');
+    let loadedVersions = [];
 
     const showError = message => setMessage(errorBox, message);
+    const displayDate = value => value ? new Date(value).toLocaleString() : '—';
+    const renderVersionDetail = () => {
+        const version = loadedVersions.find(item => String(item.id) === versionSelect.value);
+        if (!version) {
+            versionSummary.textContent = '';
+            versionItems.className = 'text-secondary small';
+            versionItems.textContent = loadedVersions.length ? '请选择申请版本。' : '暂无可用申请明细。';
+            return;
+        }
+
+        const items = version.items || [];
+        overview.customer.textContent = version.customerName || '—';
+        overview.email.textContent = version.email || '—';
+        overview.submitted.textContent = displayDate(version.submittedAtUtc);
+        versionSummary.textContent = `V${version.versionNumber} · ${items.length} 项产品`;
+        versionItems.className = 'request-item-list';
+        versionItems.innerHTML = items.length ? items.map((item, index) => {
+            const attributes = [
+                ['SKU', item.sku], ['品牌', item.brand], ['规格', item.specifications],
+                ['颜色', item.color], ['尺寸', item.size]
+            ].filter(([, value]) => value).map(([label, value]) => `<span><b>${label}</b> ${esc(value)}</span>`).join('');
+            const notes = [
+                ['包装要求', item.packagingRequirements],
+                ['定制要求', item.customizationRequirements],
+                ['客户备注', item.customerNote]
+            ].filter(([, value]) => value).map(([label, value]) => `<div class="request-item-note"><b>${label}：</b>${esc(value)}</div>`).join('');
+            return `<article class="request-item"><div class="request-item-title"><strong>${index + 1}. ${esc(item.productName || '未命名产品')}</strong><span>${esc(item.quantity)} ${esc(item.unit || '')}</span></div>${attributes ? `<div class="request-item-meta">${attributes}</div>` : ''}${notes}</article>`;
+        }).join('') : '<div class="text-secondary small">该版本没有产品明细。</div>';
+    };
     const openEditor = async button => {
         showError('');
         const requestId = button.dataset.requestId;
@@ -25,11 +64,19 @@
         buyerSelect.value = button.dataset.buyerId || '';
         title.textContent = planId ? '更新采购计划' : '创建采购计划';
         caption.textContent = planId ? `${button.dataset.number} 已有唯一计划；保存将按所选版本同步计划明细。` : `${button.dataset.number} 尚未创建计划。`;
+        overview.number.textContent = button.dataset.number || '—';
+        overview.customer.textContent = button.dataset.customer || '—';
+        overview.email.textContent = button.dataset.email || '—';
+        overview.submitted.textContent = displayDate(button.dataset.submittedAt);
+        overview.plan.textContent = button.dataset.planNumber || '未创建';
+        loadedVersions = [];
+        renderVersionDetail();
         versionSelect.disabled = true;
         versionSelect.innerHTML = '<option>正在加载版本…</option>';
         modal.show();
         try {
             const versions = await request(`/wholesale/procurement/requests/${requestId}/versions`);
+            loadedVersions = versions;
             versionSelect.replaceChildren(...versions.map(version => {
                 const option = document.createElement('option');
                 option.value = version.id;
@@ -38,14 +85,19 @@
                 return option;
             }));
             if (!versions.length) throw new Error('该采购申请没有可用版本。');
+            if (!versionSelect.value) versionSelect.selectedIndex = 0;
+            renderVersionDetail();
         } catch (error) {
+            loadedVersions = [];
             versionSelect.innerHTML = '<option value="">版本加载失败</option>';
+            renderVersionDetail();
             showError(error.message || '采购申请版本加载失败。');
         } finally {
             versionSelect.disabled = false;
         }
     };
 
+    versionSelect.addEventListener('change', renderVersionDetail);
     root.querySelectorAll('[data-edit-plan]').forEach(button => button.addEventListener('click', () => openEditor(button)));
     root.querySelector('.ui-page-actions .btn-primary')?.addEventListener('click', event => {
         const first = [...root.querySelectorAll('[data-edit-plan]')].find(button => !button.dataset.planId);
