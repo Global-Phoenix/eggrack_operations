@@ -2,7 +2,7 @@
     const root = document.querySelector('[data-purchase-requests]');
     if (!root || typeof bootstrap === 'undefined') return;
     const { request } = window.Eggrack.http;
-    const { filterRows, setBusy, setMessage } = window.Eggrack.ui;
+    const { filterRows, setBusy, setMessage, notify } = window.Eggrack.ui;
     const modalElement = document.getElementById('planEditor');
     const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
     const form = root.querySelector('[data-plan-form]');
@@ -49,7 +49,7 @@
     root.querySelectorAll('[data-edit-plan]').forEach(button => button.addEventListener('click', () => openEditor(button)));
     root.querySelector('.ui-page-actions .btn-primary')?.addEventListener('click', event => {
         const first = [...root.querySelectorAll('[data-edit-plan]')].find(button => !button.dataset.planId);
-        if (!first) { event.preventDefault(); modal.hide(); window.alert('所有采购申请均已创建计划，请在对应申请行更新计划。'); return; }
+        if (!first) { event.preventDefault(); modal.hide(); notify('所有采购申请均已创建计划，请在对应申请行更新计划。','info'); return; }
         event.preventDefault();
         openEditor(first);
     });
