@@ -8,3 +8,4 @@
 .table-responsive>.table{margin-bottom:0}.table thead th{vertical-align:middle;white-space:nowrap}.table tbody td{vertical-align:middle}.table [data-actions]{white-space:nowrap}
 @media(max-width:767.98px){.modal-dialog:not(.modal-fullscreen){margin:.75rem}.modal-footer{flex-wrap:wrap}.modal-footer>.btn{flex:1 1 auto}.ui-page-actions{flex-wrap:wrap}}
 @media(prefers-reduced-motion:reduce){.btn[data-busy=true]::before{animation-duration:1.5s}}
+.ui-toast-container{position:fixed;top:12px;right:12px;z-index:1090;width:min(380px,calc(100vw - 24px))}.ui-toast{width:100%}

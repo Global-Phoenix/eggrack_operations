@@ -55,6 +55,38 @@ public sealed class DatabaseSession : IAsyncDisposable
         CancellationToken cancellationToken = default) =>
         QueryAsync<T>(procedureName, parameters, CommandType.StoredProcedure, cancellationToken);
 
+    public async Task<T> ExecuteInTransactionAsync<T>(
+        Func<CancellationToken, Task<T>> action,
+        IsolationLevel isolationLevel = IsolationLevel.ReadCommitted,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        await BeginTransactionAsync(isolationLevel, cancellationToken);
+        try
+        {
+            var result = await action(cancellationToken);
+            await CommitAsync(cancellationToken);
+            return result;
+        }
+        catch
+        {
+            await RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    public async Task ExecuteInTransactionAsync(
+        Func<CancellationToken, Task> action,
+        IsolationLevel isolationLevel = IsolationLevel.ReadCommitted,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        await ExecuteInTransactionAsync(async token =>
+        {
+            await action(token);
+            return true;
+        }, isolationLevel, cancellationToken);
+    }
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
         if (_transaction is null) throw new InvalidOperationException("当前会话没有活动事务");
