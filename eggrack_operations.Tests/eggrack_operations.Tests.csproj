@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\eggrack_operations.Application\eggrack_operations.Application.csproj" />
     <ProjectReference Include="..\eggrack_operations.Domain\eggrack_operations.Domain.csproj" />
+    <ProjectReference Include="..\eggrack_operations.Infrastructure\eggrack_operations.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

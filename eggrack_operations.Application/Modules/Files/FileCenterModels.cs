@@ -8,7 +8,7 @@ public sealed record FileCenterFileItem(
     string MimeType,
     uint FileSize,
     string SourceNumber,
-    string DepartmentName,
+    string CategoryName,
     string UploadedBy,
     DateTime UploadedAtUtc,
     long Status)
@@ -32,6 +32,15 @@ public sealed record FileCenterFileItem(
 
     public string SourceLabel => SourceKind == "plan" ? "采购计划" : "采购申请";
     public string StatusLabel => SourceKind == "plan" && Status == 0 ? "已停用" : SourceLabel + "附件";
+    public string PreviewKind => MimeType.ToLowerInvariant() switch
+    {
+        var mime when mime.StartsWith("image/") => "image",
+        "application/pdf" => "pdf",
+        var mime when mime.StartsWith("video/") => "video",
+        var mime when mime.StartsWith("text/") => "text",
+        "application/csv" or "application/vnd.ms-excel" when FileType == "CSV" => "text",
+        _ => "download"
+    };
 }
 
 public sealed record FileCenterIndexViewModel(IReadOnlyList<FileCenterFileItem> PurchaseFiles);

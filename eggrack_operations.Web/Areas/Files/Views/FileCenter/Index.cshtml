@@ -7,17 +7,20 @@
         file.OriginalName,
         file.FileType,
         file.FileSizeText,
-        file.DepartmentName,
+        file.CategoryName,
         file.SourceNumber,
         file.UploadedBy,
         file.UploadedAtUtc.ToString("yyyy-MM-dd"),
-        file.StatusLabel
+        file.StatusLabel,
+        file.SourceKind,
+        file.FileId,
+        file.PreviewKind
     });
 }
 
 @await Component.InvokeAsync("PageHeader", new {
     title = "文件中心",
-    subtitle = "按采购部门或会员快速查找相关文件",
+    subtitle = "按采购部门快速查找客户文件与内部文件",
     parentTitle = "业务管理",
     parentUrl = "/",
     statusText = "只读",
@@ -28,7 +31,7 @@
 <section class="file-center" data-file-center>
     <aside class="fc-sidebar">
         <div class="fc-sidebar-header">
-            <span><i class="bi bi-diagram-3"></i><span data-tree-title>计划部门</span></span>
+            <span><i class="bi bi-diagram-3"></i><span data-tree-title>客户</span></span>
             <small class="text-secondary">分类</small>
         </div>
         <div class="fc-category-list" data-categories></div>
@@ -36,8 +39,8 @@
 
     <div class="fc-content">
         <div class="fc-tabs" role="tablist">
-            <button class="fc-tab active" type="button" data-mode="purchase"><i class="bi bi-file-earmark-text"></i>采购申请文件</button>
-            <button class="fc-tab" type="button" data-mode="member"><i class="bi bi-people"></i>会员文件</button>
+            <button class="fc-tab active" type="button" data-mode="customer"><i class="bi bi-person-vcard"></i>客户文件</button>
+            <button class="fc-tab" type="button" data-mode="internal"><i class="bi bi-shield-lock"></i>内部文件</button>
         </div>
 
         <div class="ui-toolbar">
@@ -46,12 +49,12 @@
                 <input class="form-control" type="search" data-search placeholder="搜索文件名或申请编号" />
             </label>
             <select class="form-select ui-filter" data-type aria-label="文件类型">
-                <option value="">全部类型</option><option>PDF</option><option>XLSX</option><option>DOCX</option><option>ZIP</option>
+                <option value="">全部类型</option><option>PDF</option><option>JPG</option><option>JPEG</option><option>PNG</option><option>WEBP</option><option>MP4</option><option>TXT</option><option>CSV</option><option>XLS</option><option>XLSX</option><option>DOCX</option><option>ZIP</option>
             </select>
             <select class="form-select ui-filter" data-range aria-label="文件日期">
                 <option value="">全部日期</option><option value="week">近 7 天</option><option value="month">近 30 天</option>
             </select>
-            <button class="btn btn-outline-secondary fc-policy" type="button" data-policy data-bs-toggle="offcanvas" data-bs-target="#fileDetail">
+            <button class="btn btn-outline-secondary fc-policy" type="button" data-policy>
                 <i class="bi bi-clock-history"></i> 清理策略
             </button>
         </div>
@@ -72,21 +75,20 @@
         </div>
     </div>
 
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="fileDetail" aria-labelledby="fileDetailTitle">
-        <div class="offcanvas-header border-bottom">
-            <div><small class="text-secondary" data-detail-label>文件详情</small><h5 class="offcanvas-title mt-1" id="fileDetailTitle" data-detail-name></h5></div>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="关闭"></button>
+    <aside class="fc-detail" data-detail-panel aria-labelledby="fileDetailTitle">
+        <div class="fc-detail-header">
+            <div><small class="text-secondary" data-detail-label>文件预览</small><h5 class="mt-1 mb-0" id="fileDetailTitle" data-detail-name>选择文件查看</h5></div>
         </div>
-        <div class="offcanvas-body">
-            <small class="text-secondary" data-detail-sub></small>
+        <div class="fc-detail-body">
+            <small class="text-secondary" data-detail-sub>从左侧列表中选择一个文件</small>
             <div class="fc-preview" data-preview><div><i class="bi bi-file-earmark"></i>暂无预览</div></div>
             <div data-detail-meta></div>
         </div>
-        <div class="p-3 border-top d-flex gap-2">
-            <button class="btn btn-outline-secondary flex-fill" type="button" data-secondary><i class="bi bi-link-45deg"></i> 复制链接</button>
-            <button class="btn btn-primary flex-fill" type="button" data-primary><i class="bi bi-download"></i> 下载</button>
+        <div class="fc-detail-actions">
+            <button class="btn btn-outline-secondary flex-fill" type="button" data-secondary disabled><i class="bi bi-link-45deg"></i> 复制链接</button>
+            <button class="btn btn-primary flex-fill" type="button" data-primary disabled><i class="bi bi-download"></i> 下载</button>
         </div>
-    </div>
+    </aside>
 </section>
 
 @section Styles { <link rel="stylesheet" href="~/css/pages/file-center.css" asp-append-version="true" /> }
@@ -95,22 +97,21 @@
 <script>
 (() => {
   const root=document.querySelector('[data-file-center]'); if(!root)return;
-  const data={
-    purchase:@Html.Raw(JsonSerializer.Serialize(purchaseData)),
-    member:[]
-  };
+  const data={all:@Html.Raw(JsonSerializer.Serialize(purchaseData))};
+  data.customer=data.all.filter(file=>file[8]==='request');
+  data.internal=data.all.filter(file=>file[8]==='plan');
   const groups={
-    purchase:['全部部门',...new Set(data.purchase.map(file=>file[3]))],
-    member:['全部会员']
+    customer:['全部客户',...new Set(data.customer.map(file=>file[3]))],
+    internal:['全部部门',...new Set(data.internal.map(file=>file[3]))]
   };
-  const icons={PDF:'bi-file-earmark-pdf',XLSX:'bi-file-earmark-spreadsheet',DOCX:'bi-file-earmark-word',ZIP:'bi-file-earmark-zip'};
-  let mode='purchase',group='全部部门'; const q=s=>root.querySelector(s);
+  const icons={PDF:'bi-file-earmark-pdf',JPG:'bi-file-earmark-image',JPEG:'bi-file-earmark-image',PNG:'bi-file-earmark-image',WEBP:'bi-file-earmark-image',MP4:'bi-file-earmark-play',TXT:'bi-file-earmark-text',CSV:'bi-file-earmark-spreadsheet',XLS:'bi-file-earmark-spreadsheet',XLSX:'bi-file-earmark-spreadsheet',DOCX:'bi-file-earmark-word',ZIP:'bi-file-earmark-zip'};
+  let mode='customer',group='全部客户'; const q=s=>root.querySelector(s);
 
   function categories(){
     const box=q('[data-categories]');box.innerHTML='';
     groups[mode].forEach((name,index)=>{
       const button=document.createElement('button');button.type='button';button.className='fc-category '+(name===group?'active':'');
-      const icon=index===0?(mode==='purchase'?'bi-grid':'bi-people'):(mode==='purchase'?'bi-building':'bi-person');
+      const icon=index===0?(mode==='customer'?'bi-person-vcard':'bi-shield-lock'):'bi-building';
       button.innerHTML='<span class="fc-category-name"><i class="bi '+icon+'"></i>'+name+'</span><small>'+(index?data[mode].filter(x=>x[3]===name).length:data[mode].length)+'</small>';
       button.onclick=()=>{group=name;categories();render()};box.appendChild(button);
     });
@@ -118,32 +119,41 @@
 
   function render(){
     const keyword=q('[data-search]').value.toLowerCase(),type=q('[data-type]').value,range=q('[data-range]').value;
-    const cutoff=range==='week'?'2026-09-22':range==='month'?'2026-08-29':'';
+    const cutoffDate=new Date(); cutoffDate.setDate(cutoffDate.getDate()-(range==='week'?7:range==='month'?30:0));
+    const cutoff=range?cutoffDate.toISOString().slice(0,10):'';
     const items=data[mode].filter(x=>(group.startsWith('全部')||x[3]===group)&&(!type||x[1]===type)&&(!cutoff||x[6]>=cutoff)&&(!keyword||(x[0]+x[3]+x[4]).toLowerCase().includes(keyword)));
     const body=q('[data-rows]');body.innerHTML='';
     items.forEach(x=>{
       const row=document.createElement('tr');const state=x[7].includes('清理')?'warning':x[7]==='审批中'?'review':'';
       row.innerHTML='<td><div class="fc-file"><span class="fc-file-icon '+x[1].toLowerCase()+'"><i class="bi '+icons[x[1]]+'"></i></span><span><strong>'+x[0]+'</strong><small>'+x[2]+'</small></span></div></td><td><strong class="small">'+x[4]+'</strong><small>'+x[3]+'</small></td><td>'+x[5]+'</td><td>'+x[6]+'</td><td><span class="fc-state '+state+'">'+x[7]+'</span></td><td class="text-end text-secondary"><i class="bi bi-chevron-right"></i></td>';
-      row.onclick=()=>detail(x);body.appendChild(row);
+      row.onclick=()=>detail(x,row);body.appendChild(row);
     });
     q('[data-empty]').style.display=items.length?'none':'block';
     q('[data-result-count]').textContent='共 '+items.length+' 个文件';
   }
 
-  function detail(x){
+  function detail(x,row){
+    root.querySelectorAll('tbody tr').forEach(item=>item.classList.toggle('active',item===row));
     q('[data-detail-label]').textContent='文件详情';q('[data-detail-name]').textContent=x[0];q('[data-detail-sub]').textContent=x[1]+' · '+x[2];
-    q('[data-preview]').innerHTML='<div><i class="bi '+icons[x[1]]+'"></i>暂无预览</div>';
-    q('[data-detail-meta]').innerHTML='<div class="fc-meta"><span>'+(mode==='purchase'?'采购申请':'会员编号')+'</span><strong>'+x[4]+'</strong></div><div class="fc-meta"><span>'+(mode==='purchase'?'计划部门':'所属会员')+'</span><strong>'+x[3]+'</strong></div><div class="fc-meta"><span>上传信息</span><strong>'+x[5]+' · '+x[6]+'</strong></div><div class="fc-meta"><span>文件状态</span><strong>'+x[7]+'</strong></div>';
-    bootstrap.Offcanvas.getOrCreateInstance(q('#fileDetail')).show();
+    const contentUrl='/files/content/'+encodeURIComponent(x[8])+'/'+x[9];
+    const preview=x[10]==='image'?'<img src="'+contentUrl+'" alt="'+escapeHtml(x[0])+'">':x[10]==='video'?'<video src="'+contentUrl+'" controls preload="metadata"></video>':(x[10]==='pdf'||x[10]==='text')?'<iframe src="'+contentUrl+'" title="'+escapeHtml(x[0])+'"></iframe>':'<div><i class="bi '+(icons[x[1]]||'bi-file-earmark')+'"></i>此格式暂不支持在线预览<br><small>请下载后查看</small></div>';
+    q('[data-preview]').innerHTML=preview;
+    q('[data-primary]').onclick=()=>{window.location.href=contentUrl+'?download=true'};
+    q('[data-secondary]').disabled=false;q('[data-primary]').disabled=false;
+    q('[data-secondary]').onclick=async()=>{await navigator.clipboard.writeText(location.origin+contentUrl)};
+    q('[data-detail-meta]').innerHTML='<div class="fc-meta"><span>'+(mode==='customer'?'采购申请':'采购计划')+'</span><strong>'+x[4]+'</strong></div><div class="fc-meta"><span>'+(mode==='customer'?'客户':'计划部门')+'</span><strong>'+x[3]+'</strong></div><div class="fc-meta"><span>上传信息</span><strong>'+x[5]+' · '+x[6]+'</strong></div><div class="fc-meta"><span>文件状态</span><strong>'+x[7]+'</strong></div>';
+
   }
+
+  function escapeHtml(value){const node=document.createElement('span');node.textContent=value;return node.innerHTML}
 
   function setMode(next){
     mode=next;group=groups[next][0];
     root.querySelectorAll('[data-mode]').forEach(x=>x.classList.toggle('active',x.dataset.mode===next));
-    q('[data-tree-title]').textContent=next==='purchase'?'计划部门':'会员分类';
-    q('[data-group-head]').textContent=next==='purchase'?'来源单号':'所属会员';
-    q('[data-search]').placeholder=next==='purchase'?'搜索文件名或申请编号':'搜索文件名或会员编号';
-    q('[data-policy]').style.display=next==='member'?'block':'none';categories();render();
+    q('[data-tree-title]').textContent=next==='customer'?'客户':'部门';
+    q('[data-group-head]').textContent=next==='customer'?'采购申请':'采购计划';
+    q('[data-search]').placeholder=next==='customer'?'搜索客户文件或申请编号':'搜索内部文件或计划编号';
+    q('[data-policy]').style.display='none';categories();render();
   }
 
   root.querySelectorAll('[data-mode]').forEach(x=>x.onclick=()=>setMode(x.dataset.mode));
@@ -153,7 +163,7 @@
     q('[data-preview]').innerHTML='<div><i class="bi bi-clock-history"></i><strong class="d-block fs-4 text-primary">90 天</strong>业务结束后的保留期</div>';
     q('[data-detail-meta]').innerHTML='<div class="fc-meta"><span>执行频率</span><strong>每日 02:00</strong></div><div class="fc-meta"><span>提前提醒</span><strong>清理前 7 天</strong></div><div class="fc-meta"><span>最近执行</span><strong>2026-09-28 · 已完成</strong></div>';
   };
-  setMode('purchase');
+  setMode('customer');
 })();
 </script>
 }
