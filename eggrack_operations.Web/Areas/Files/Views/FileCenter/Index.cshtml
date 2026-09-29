@@ -20,7 +20,7 @@
 
 @await Component.InvokeAsync("PageHeader", new {
     title = "文件中心",
-    subtitle = "按采购部门快速查找客户文件与内部文件",
+    subtitle = "按实际会员与部门目录查找客户文件和内部文件",
     parentTitle = "业务管理",
     parentUrl = "/",
     statusText = "只读",
@@ -61,7 +61,7 @@
 
         <div class="ui-data-table">
             <table class="table table-hover align-middle">
-                <thead><tr><th>文件</th><th data-group-head>来源单号</th><th>上传人</th><th>上传时间</th><th>状态</th><th class="text-end"></th></tr></thead>
+                <thead><tr><th>文件</th><th data-group-head>来源单号</th><th>上传信息</th><th class="text-end"></th></tr></thead>
                 <tbody data-rows></tbody>
             </table>
             <div class="fc-empty" data-empty>

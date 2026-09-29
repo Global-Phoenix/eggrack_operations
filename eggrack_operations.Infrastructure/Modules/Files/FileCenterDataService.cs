@@ -11,11 +11,21 @@ public sealed class FileCenterDataService(DatabaseSessionFactory databases)
         SELECT CONCAT('request:', f.id) ItemKey, 'request' SourceKind, f.id FileId,
           f.original_name OriginalName, f.mime_type MimeType, f.file_size FileSize,
           r.request_number SourceNumber,
-          COALESCE(NULLIF(TRIM(v.company_name), ''), NULLIF(TRIM(v.contact_name), ''), r.email) CategoryName,
+          CASE
+            WHEN r.user_id IS NOT NULL THEN CONCAT(
+              COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.FirstName, u.LastName)), ''), CONCAT('会员 #', r.user_id)),
+              CASE
+                WHEN COALESCE(NULLIF(TRIM(u.Email), ''), NULLIF(TRIM(r.email), '')) IS NULL THEN ''
+                ELSE CONCAT(' · ', COALESCE(NULLIF(TRIM(u.Email), ''), NULLIF(TRIM(r.email), '')))
+              END
+            )
+            ELSE CONCAT('游客 · ', COALESCE(NULLIF(TRIM(r.email), ''), NULLIF(TRIM(r.guest_id), ''), '未登记邮箱'))
+          END CategoryName,
           '客户提交' UploadedBy, FROM_UNIXTIME(f.uploaded_at) UploadedAtUtc, 1 Status
         FROM purchase_request_files f
         JOIN purchase_requests r ON r.id = f.request_id
         JOIN purchase_request_versions v ON v.id = f.version_id AND v.request_id = f.request_id
+        LEFT JOIN `user` u ON u.UserId = r.user_id
         WHERE NOT EXISTS (
           SELECT 1 FROM purchase_request_files newer
           WHERE newer.request_id = f.request_id
@@ -26,7 +36,11 @@ public sealed class FileCenterDataService(DatabaseSessionFactory databases)
         SELECT CONCAT('plan:', f.id) ItemKey, 'plan' SourceKind, f.id FileId,
           f.original_name OriginalName, f.mime_type MimeType, f.file_size FileSize,
           p.plan_number SourceNumber,
-          COALESCE(d.department_name, '未分配部门') CategoryName,
+          CASE
+            WHEN d.id IS NULL THEN '未分配部门'
+            WHEN parent_department.id IS NULL THEN d.department_name
+            ELSE CONCAT(parent_department.department_name, ' / ', d.department_name)
+          END CategoryName,
           COALESCE(s.staff_name, CONCAT('员工 #', f.uploaded_by)) UploadedBy,
           FROM_UNIXTIME(f.uploaded_at) UploadedAtUtc, f.status Status
         FROM purchase_plan_files f
@@ -37,6 +51,8 @@ public sealed class FileCenterDataService(DatabaseSessionFactory databases)
           ON sd.staff_id = p.assigned_buyer_id AND sd.is_primary = 1
         LEFT JOIN eggrack_auth_department d
           ON d.id = sd.department_id AND d.deleted_at IS NULL
+        LEFT JOIN eggrack_auth_department parent_department
+          ON parent_department.id = d.parent_id AND parent_department.deleted_at IS NULL
         ORDER BY UploadedAtUtc DESC, FileId DESC
         """;
 

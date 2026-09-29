@@ -29,8 +29,8 @@
     const items=data[mode].filter(x=>(group.startsWith('全部')||x[3]===group)&&(!type||x[1]===type)&&(!cutoff||x[6]>=cutoff)&&(!keyword||(x[0]+x[3]+x[4]).toLowerCase().includes(keyword)));
     const body=q('[data-rows]');body.innerHTML='';
     items.forEach(x=>{
-      const row=document.createElement('tr');const typeKey=String(x[1]||'').toUpperCase();const fileClass=icons[typeKey]?typeKey.toLowerCase():'other';const state=x[7].includes('清理')?'warning':x[7]==='审批中'?'review':'';
-      row.innerHTML='<td><div class="fc-file"><span class="fc-file-icon '+fileClass+'"><i class="bi '+(icons[typeKey]||'bi-file-earmark')+'"></i></span><span><strong>'+esc(x[0])+'</strong><small>'+esc(x[2])+'</small></span></div></td><td><strong class="small">'+esc(x[4])+'</strong><small>'+esc(x[3])+'</small></td><td>'+esc(x[5])+'</td><td>'+esc(x[6])+'</td><td><span class="fc-state '+state+'">'+esc(x[7])+'</span></td><td class="text-end text-secondary"><i class="bi bi-chevron-right"></i></td>';
+      const row=document.createElement('tr');const typeKey=String(x[1]||'').toUpperCase();const fileClass=icons[typeKey]?typeKey.toLowerCase():'other';
+      row.innerHTML='<td><div class="fc-file"><span class="fc-file-icon '+fileClass+'"><i class="bi '+(icons[typeKey]||'bi-file-earmark')+'"></i></span><span class="fc-file-copy"><strong title="'+esc(x[0])+'">'+esc(x[0])+'</strong><small>'+esc(x[2])+'</small></span></div></td><td><strong class="small">'+esc(x[4])+'</strong><small>'+esc(x[3])+'</small></td><td><span>'+esc(x[6])+'</span><small>'+esc(x[5])+'</small></td><td class="text-end text-secondary"><i class="bi bi-chevron-right"></i></td>';
       row.onclick=()=>detail(x,row);body.appendChild(row);
     });
     q('[data-empty]').style.display=items.length?'none':'block';
