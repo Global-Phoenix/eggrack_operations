@@ -227,7 +227,19 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
                 FROM eggrack_auth_staff g WHERE g.staff_ref=@OperatorRef
                 ON DUPLICATE KEY UPDATE granted_by=VALUES(granted_by),valid_until=NULL
                 """;
-            await session.ExecuteAsync(assignSql, new { StaffId = staffId, RoleId = roleId, DepartmentId = departmentId, OperatorRef = operatorRef }, cancellationToken: cancellationToken);
+            if (await session.ExecuteAsync(assignSql, new { StaffId = staffId, RoleId = roleId, DepartmentId = departmentId, OperatorRef = operatorRef }, cancellationToken: cancellationToken) != 1)
+                throw new InvalidOperationException("无法识别当前操作人员");
+            if (departmentId.HasValue)
+            {
+                const string syncDepartment = """
+                    INSERT INTO eggrack_auth_staff_department(staff_id,department_id,is_primary)
+                    SELECT @StaffId,@DepartmentId,
+                      CASE WHEN EXISTS(SELECT 1 FROM eggrack_auth_staff_department WHERE staff_id=@StaffId) THEN 0 ELSE 1 END
+                    FROM DUAL
+                    ON DUPLICATE KEY UPDATE department_id=VALUES(department_id)
+                    """;
+                await session.ExecuteAsync(syncDepartment, new { StaffId = staffId, DepartmentId = departmentId.Value }, cancellationToken: cancellationToken);
+            }
             await session.ExecuteAsync("UPDATE eggrack_auth_staff SET auth_version=auth_version+1 WHERE id=@StaffId", new { StaffId = staffId }, cancellationToken: cancellationToken);
             await session.ExecuteAsync(
                 "INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.role.assign','staff',@TargetRef,@AfterData)",
@@ -278,6 +290,12 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
                 """;
             if (await session.ExecuteAsync(assignRole, new { StaffId = staffId, RoleId = roleId, DepartmentId = departmentId, OperatorRef = operatorRef }, cancellationToken: cancellationToken) != 1)
                 throw new InvalidOperationException("无法识别当前操作人员");
+            if (departmentId.HasValue)
+            {
+                await session.ExecuteAsync(
+                    "INSERT INTO eggrack_auth_staff_department(staff_id,department_id,is_primary) VALUES(@StaffId,@DepartmentId,1)",
+                    new { StaffId = staffId, DepartmentId = departmentId.Value }, cancellationToken: cancellationToken);
+            }
             await session.ExecuteAsync(
                 "INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.staff.create','staff',@TargetRef,@AfterData)",
                 new { OperatorRef = operatorRef, TargetRef = staffId.ToString(), AfterData = JsonSerializer.Serialize(new { staffName, email, roleId, departmentId }) },
@@ -323,6 +341,31 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         }
     }
 
+    public async Task RecordPasswordResetAsync(
+        string staffRef,
+        string operatorRef,
+        string? requestId,
+        string? ipAddress,
+        CancellationToken cancellationToken = default)
+    {
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        await session.ExecuteAsync(
+            """
+            INSERT INTO eggrack_auth_audit_log(
+                operator_ref,action_code,target_type,target_ref,after_data,request_id,ip_address)
+            VALUES(
+                @OperatorRef,'auth.staff.password.reset','staff',@StaffRef,@AfterData,@RequestId,@IpAddress)
+            """,
+            new
+            {
+                OperatorRef = operatorRef,
+                StaffRef = staffRef,
+                AfterData = JsonSerializer.Serialize(new { sessionsRevoked = true }),
+                RequestId = requestId,
+                IpAddress = ipAddress
+            },
+            cancellationToken: cancellationToken);
+    }
     public async Task RevokeRoleAsync(long assignmentId, string operatorRef, CancellationToken cancellationToken = default)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);

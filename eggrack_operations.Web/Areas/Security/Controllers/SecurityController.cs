@@ -191,6 +191,9 @@ public sealed class SecurityController(
     [InternalPermission("auth.staff.update")]
     public async Task<IActionResult> ResetStaffPassword(ResetStaffPasswordInput input, CancellationToken cancellationToken)
     {
+        var operatorRef = currentStaff.GetStaffRef();
+        if (string.IsNullOrWhiteSpace(operatorRef)) return Challenge();
+
         var user = await users.Users.SingleOrDefaultAsync(x => x.StaffRef == input.StaffRef, cancellationToken);
         if (user is null)
         {
@@ -202,7 +205,13 @@ public sealed class SecurityController(
         if (result.Succeeded)
         {
             await users.UpdateSecurityStampAsync(user);
-            TempData["Success"] = $"{user.DisplayName} 的密码已重置，旧会话已失效。";
+            await admin.RecordPasswordResetAsync(
+                input.StaffRef,
+                operatorRef,
+                HttpContext.TraceIdentifier,
+                HttpContext.Connection.RemoteIpAddress?.ToString(),
+                cancellationToken);
+            TempData["Success"] = $"{user.DisplayName} 的密码已重置，旧会话已失效且操作已记录审计。";
         }
         else
         {
