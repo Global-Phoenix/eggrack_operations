@@ -1,11 +1,7 @@
 @model SecurityOverviewViewModel
 @{ ViewData["Title"] = "权限管理"; }
 
-<div class="page-heading">
-  <div><h1>权限管理</h1><p>统一管理内部人员、部门角色与业务数据范围</p></div>
-  <div class="d-flex gap-2"><a class="btn btn-outline-secondary" asp-action="Audit">审计日志</a><a class="btn btn-outline-secondary" asp-action="Departments">管理部门</a><a class="btn btn-dark" asp-action="Staff">管理人员权限</a></div>
-</div>
-
+@await Component.InvokeAsync("PageHeader", new { title = "权限管理", subtitle = "统一管理内部人员、部门角色与业务数据范围", primaryText = "管理人员权限", primaryUrl = Url.Action("Staff"), secondaryText = "管理部门", secondaryUrl = Url.Action("Departments"), tertiaryText = "审计日志", tertiaryUrl = Url.Action("Audit") })
 <div class="row g-3 mb-4">
   <div class="col-6 col-xl-3"><div class="metric-card"><span>内部人员</span><strong>@Model.Dashboard.StaffCount</strong><small>已映射账号</small></div></div>
   <div class="col-6 col-xl-3"><div class="metric-card"><span>启用人员</span><strong>@Model.Dashboard.EnabledStaffCount</strong><small>可参与授权</small></div></div>

@@ -5,6 +5,13 @@
   <div class="d-flex align-items-center gap-3 flex-wrap"><h1>@Model.Title</h1>@if (!string.IsNullOrWhiteSpace(Model.StatusText)) { <span class="ui-status ui-status-@Model.StatusTone"><i></i>@Model.StatusText</span> }</div>
   @if (!string.IsNullOrWhiteSpace(Model.Subtitle)) { <p>@Model.Subtitle</p> }
  </div>
- @if (!string.IsNullOrWhiteSpace(Model.PrimaryText) || !string.IsNullOrWhiteSpace(Model.SecondaryText)) {
- <div class="ui-page-actions">@if (!string.IsNullOrWhiteSpace(Model.SecondaryText)) { <a class="btn btn-outline-secondary" href="@Model.SecondaryUrl">@Model.SecondaryText</a> }@if (!string.IsNullOrWhiteSpace(Model.PrimaryText)) { <a class="btn btn-primary" href="@Model.PrimaryUrl">@Model.PrimaryText</a> }</div> }
+ @if (!string.IsNullOrWhiteSpace(Model.PrimaryText) || !string.IsNullOrWhiteSpace(Model.SecondaryText) || !string.IsNullOrWhiteSpace(Model.TertiaryText)) {
+ <div class="ui-page-actions">
+  @if (!string.IsNullOrWhiteSpace(Model.TertiaryText)) { <a class="btn btn-outline-secondary" href="@Model.TertiaryUrl">@Model.TertiaryText</a> }
+  @if (!string.IsNullOrWhiteSpace(Model.SecondaryText)) { <a class="btn btn-outline-secondary" href="@Model.SecondaryUrl">@Model.SecondaryText</a> }
+  @if (!string.IsNullOrWhiteSpace(Model.PrimaryText)) {
+   if (!string.IsNullOrWhiteSpace(Model.PrimaryModalTarget)) { <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="@Model.PrimaryModalTarget">@Model.PrimaryText</button> }
+   else { <a class="btn btn-primary" href="@Model.PrimaryUrl">@Model.PrimaryText</a> }
+  }
+ </div> }
 </header>

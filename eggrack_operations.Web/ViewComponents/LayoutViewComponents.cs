@@ -48,13 +48,9 @@ public sealed class ModuleGridViewComponent : ViewComponent
 {
     private static readonly IReadOnlyList<ModuleCard> Modules =
     [
-        new("批", "批发管理", "采购计划、批发计划", "orange", "/wholesale/procurement", "bi-cart3"),
+        new("批", "批发管理", "采购申请与采购计划", "orange", "/wholesale/procurement", "bi-cart3"),
         new("权", "权限管理", "用户、角色、权限", "blue", "/security", "bi-shield-lock"),
-        new("文", "文件中心", "上传、下载、归档", "green", "/files", "bi-folder2-open"),
-        new("任", "任务中心", "导入、导出、后台任务", "purple", "/tasks", "bi-list-task"),
-        new("志", "日志中心", "操作与异常追踪", "slate", "/logs", "bi-journal-text"),
-        new("单", "菜单管理", "动态菜单与排序", "cyan", "/menus", "bi-menu-button-wide"),
-        new("邮", "邮件模板", "模板与变量配置", "red", "/EmailTemplates", "bi-envelope-paper")
+        new("文", "文件中心", "上传、下载、归档", "green", "/files", "bi-folder2-open")
     ];
 
     public IViewComponentResult Invoke() => View(Modules);
@@ -63,11 +59,11 @@ public sealed class ModuleGridViewComponent : ViewComponent
 
 
 
-public sealed record PageHeaderViewModel(string Title,string? Subtitle,string? ParentTitle,string? ParentUrl,string? StatusText,string StatusTone,string? PrimaryText,string? PrimaryUrl,string? SecondaryText,string? SecondaryUrl);
+public sealed record PageHeaderViewModel(string Title,string? Subtitle,string? ParentTitle,string? ParentUrl,string? StatusText,string StatusTone,string? PrimaryText,string? PrimaryUrl,string? PrimaryModalTarget,string? SecondaryText,string? SecondaryUrl,string? TertiaryText,string? TertiaryUrl);
 public sealed class PageHeaderViewComponent : ViewComponent
 {
-    public IViewComponentResult Invoke(string title,string? subtitle=null,string? parentTitle=null,string? parentUrl=null,string? statusText=null,string statusTone="neutral",string? primaryText=null,string? primaryUrl=null,string? secondaryText=null,string? secondaryUrl=null) =>
-        View(new PageHeaderViewModel(title,subtitle,parentTitle,parentUrl,statusText,statusTone,primaryText,primaryUrl,secondaryText,secondaryUrl));
+    public IViewComponentResult Invoke(string title,string? subtitle=null,string? parentTitle=null,string? parentUrl=null,string? statusText=null,string statusTone="neutral",string? primaryText=null,string? primaryUrl=null,string? primaryModalTarget=null,string? secondaryText=null,string? secondaryUrl=null,string? tertiaryText=null,string? tertiaryUrl=null) =>
+        View(new PageHeaderViewModel(title,subtitle,parentTitle,parentUrl,statusText,statusTone,primaryText,primaryUrl,primaryModalTarget,secondaryText,secondaryUrl,tertiaryText,tertiaryUrl));
 }
 public sealed record EmptyStateViewModel(string Title,string? Description,string Icon,string? ActionText,string? ActionUrl);
 public sealed class EmptyStateViewComponent : ViewComponent
