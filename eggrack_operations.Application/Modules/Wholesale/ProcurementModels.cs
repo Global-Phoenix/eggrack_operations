@@ -2,6 +2,14 @@ namespace Eggrack.Operations.Application.Modules.Wholesale;
 
 public enum ProcurementPlanStatus { Draft, Sourcing, Costing, PendingApproval, Approved, Rejected, EmailPending, Completed }
 
+public static class ProcurementPlanStatusParser
+{
+    public static ProcurementPlanStatus Parse(string value) =>
+        Enum.TryParse<ProcurementPlanStatus>(value, ignoreCase: true, out var status)
+            ? status
+            : ProcurementPlanStatus.Draft;
+}
+
 public sealed record ProcurementPlanListItem(
     long Id, string PlanNumber, string RequestNumber, int RequestVersion, string CustomerName,
     string ProductSummary, string? BuyerName, decimal? TotalCostCny, decimal? FinalQuoteUsd,

@@ -7,6 +7,12 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
 {
     private const string DatabaseName = "Eggrack";
 
+    private sealed record ProcurementPlanRow(
+        uint Id, string PlanNumber, string RequestNumber, uint RequestVersion, string CustomerName,
+        string ProductSummary, string? BuyerName, decimal? TotalCostCny, decimal? FinalQuoteUsd,
+        string Status, DateTime UpdatedAtUtc);
+
+
     public async Task<IReadOnlyList<PurchaseRequestSource>> GetPurchaseRequestsAsync(string? keyword,CancellationToken token=default)
     {
         const string sql = """
@@ -40,7 +46,11 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         ORDER BY p.updated_at DESC,p.id DESC
         """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        return await db.QueryAsync<ProcurementPlanListItem>(sql,cancellationToken:token);
+        var rows = await db.QueryAsync<ProcurementPlanRow>(sql,cancellationToken:token);
+        return rows.Select(row => new ProcurementPlanListItem(
+            row.Id, row.PlanNumber, row.RequestNumber, checked((int)row.RequestVersion),
+            row.CustomerName, row.ProductSummary, row.BuyerName, row.TotalCostCny,
+            row.FinalQuoteUsd, ProcurementPlanStatusParser.Parse(row.Status), row.UpdatedAtUtc)).ToArray();
     }
 
     public async Task<long> CreatePlanAsync(CreateProcurementPlanCommand command,CancellationToken token=default)

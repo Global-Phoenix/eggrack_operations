@@ -22,4 +22,14 @@ public sealed class ProcurementPricingTests
     [Fact]
     public void ValidateFinalQuote_RejectsMinimumAmount() =>
         Assert.Throws<InvalidOperationException>(() => ProcurementPricing.ValidateFinalQuote(4000m,3400m));
+    [Theory]
+    [InlineData("Draft", ProcurementPlanStatus.Draft)]
+    [InlineData("PendingApproval", ProcurementPlanStatus.PendingApproval)]
+    [InlineData("Completed", ProcurementPlanStatus.Completed)]
+    [InlineData("unknown", ProcurementPlanStatus.Draft)]
+    public void ParseStorageStatus_MapsKnownValuesAndFallsBackToDraft(string value, ProcurementPlanStatus expected)
+    {
+        Assert.Equal(expected, ProcurementPlanStatusParser.Parse(value));
+    }
+
 }

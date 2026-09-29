@@ -15,6 +15,14 @@ builder.Services.AddWholesaleProcurement();
 builder.Services.AddFileCenter();
 builder.Services.AddSecurityArea();
 builder.Services.AddInternalIdentity(builder.Configuration);
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.ConfigureApplicationCookie(options =>
+    {
+        options.Cookie.Name = "eggrack-identity-dev";
+        options.Cookie.SecurePolicy = Microsoft.AspNetCore.Http.CookieSecurePolicy.SameAsRequest;
+    });
+}
 builder.Services.AddHttpContextAccessor();
 
 var app = builder.Build();
