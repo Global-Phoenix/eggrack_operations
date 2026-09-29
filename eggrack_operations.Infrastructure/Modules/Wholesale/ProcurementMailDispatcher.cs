@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
-public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,LegacySmtpSender smtp,ILogger<ProcurementMailDispatcher> logger)
+public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,LegacySmtpSender smtp,ProcurementScopePolicy scopePolicy,ILogger<ProcurementMailDispatcher> logger)
 {
     private const string DatabaseName="Eggrack";
     private sealed record PendingMail(uint Id,uint PlanId,string Recipient,string TemplateCode,uint InvoiceId,string PiNumber,string ContactName,decimal TotalAmount,string Currency);
@@ -15,6 +15,7 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
     public async Task<string> PreviewHtmlAsync(uint mailTaskId,CancellationToken token)
     {
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsureMailTaskAsync(db,mailTaskId,token);
         var rows=await db.QueryAsync<PendingMail>("""
         SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,
           i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency
@@ -32,6 +33,7 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
         PendingMail? task;
         await using(var db=await databases.OpenMySqlAsync(DatabaseName,token))
         {
+            await scopePolicy.EnsureMailTaskAsync(db,mailTaskId,token);
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var rows=await db.QueryAsync<PendingMail>("""
             SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,

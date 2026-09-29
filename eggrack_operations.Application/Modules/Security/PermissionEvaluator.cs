@@ -36,6 +36,7 @@ public sealed class PermissionEvaluator
             true,
             permissionCode,
             scope,
+            authorization.StaffId,
             authorization.StaffRef,
             authorization.AuthVersion,
             departmentIds);
@@ -48,6 +49,7 @@ public sealed class PermissionEvaluator
             false,
             permissionCode,
             DataScope.None,
+            authorization.StaffId,
             authorization.StaffRef,
             authorization.AuthVersion,
             new HashSet<long>());

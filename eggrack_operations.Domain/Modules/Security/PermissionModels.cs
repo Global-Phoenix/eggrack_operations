@@ -25,6 +25,7 @@ public sealed record AuthorizationDecision(
     bool Allowed,
     string PermissionCode,
     DataScope Scope,
+    long StaffId,
     string StaffRef,
     long AuthVersion,
     IReadOnlySet<long> DepartmentIds);

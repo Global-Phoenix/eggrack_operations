@@ -38,6 +38,7 @@ public sealed class CurrentStaffAccessor(
 public sealed class InternalPermissionFilter(
     CurrentStaffAccessor currentStaff,
     PermissionEvaluator evaluator,
+    CurrentAuthorizationContext authorizationContext,
     string permissionCode) : IAsyncAuthorizationFilter
 {
     public async Task OnAuthorizationAsync(AuthorizationFilterContext context)
@@ -63,6 +64,8 @@ public sealed class InternalPermissionFilter(
         }
 
         context.HttpContext.Items["InternalAuthorization"] = decision;
+        context.HttpContext.Items[$"InternalAuthorization:{permissionCode}"] = decision;
+        authorizationContext.Set(decision);
     }
 }
 

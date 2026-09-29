@@ -81,6 +81,7 @@ public sealed partial class ProcurementDataService
         if(command.Items.Any(item=>item.UnitPrice<=0)) throw new BusinessRuleException("PI 产品单价必须大于零。","procurement.pi.unit-price-invalid");
         if(command.Items.Select(item=>item.Id).Distinct().Count()!=command.Items.Count) throw new BusinessRuleException("PI 产品明细不能重复。","procurement.pi.item-duplicate");
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
         return await db.ExecuteInTransactionAsync<ProformaInvoicePricing>(async transactionToken=>
         {
             var headers=await db.QueryAsync<InvoicePricingHeader>("SELECT i.id Id,i.status Status,p.approved_quote_amount_usd ApprovedQuoteUsd,i.packaging_fee PackagingFee,i.shipping_fee ShippingFee,i.other_fee OtherFee,i.discount_amount DiscountAmount FROM proforma_invoices i JOIN purchase_plans p ON p.id=i.purchase_plan_id WHERE i.id=@InvoiceId AND i.purchase_plan_id=@PlanId FOR UPDATE",new{command.InvoiceId,PlanId=planId},cancellationToken:transactionToken);
@@ -119,6 +120,7 @@ public sealed partial class ProcurementDataService
     public async Task<ProcurementLifecycleResult> IssueProformaInvoiceAsync(uint planId,long staffId,CancellationToken token=default)
     {
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
         return await db.ExecuteInTransactionAsync<ProcurementLifecycleResult>(async transactionToken=>
         {
             var plans=await db.QueryAsync<InvoiceIssuePlan>("SELECT status Status,approved_quote_amount_usd ApprovedQuoteUsd FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
@@ -142,6 +144,7 @@ public sealed partial class ProcurementDataService
     public async Task<ProcurementLifecycleResult> CompletePlanAsync(uint planId,long staffId,CancellationToken token=default)
     {
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
         return await db.ExecuteInTransactionAsync<ProcurementLifecycleResult>(async transactionToken=>
         {
             var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT i.id Id,i.pi_number Number,CASE i.status WHEN 3 THEN 'Issued' ELSE 'Invalid' END Status,i.total_amount TotalAmount,i.currency Currency,FROM_UNIXTIME(i.created_at) CreatedAtUtc,FROM_UNIXTIME(i.issued_at) IssuedAtUtc FROM purchase_plans p JOIN proforma_invoices i ON i.purchase_plan_id=p.id AND i.status=3 WHERE p.id=@PlanId AND p.status=4 AND EXISTS(SELECT 1 FROM procurement_mail_tasks m WHERE m.plan_id=p.id AND m.status='sent') ORDER BY i.id DESC LIMIT 1 FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);

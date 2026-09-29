@@ -11,8 +11,8 @@ VALUES
 ON DUPLICATE KEY UPDATE permission_name=VALUES(permission_name),
  resource_type=VALUES(resource_type),status=1;
 
--- Procurement currently has no department data-scope enforcement. Grant only
--- the six registered permissions to global roles until scoped queries exist.
+-- Global roles retain ALL scope. Department roles are added by migration 008,
+-- after purchase plan ownership and scoped queries are available.
 INSERT INTO eggrack_auth_role_permission(role_id,permission_id,effect)
 SELECT r.id,p.id,'ALLOW'
 FROM eggrack_auth_role r
