@@ -14,11 +14,10 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         var publicFile = await TryOpenPublicAsync(file, token);
         if (publicFile is not null) return publicFile;
 
-        var siteRoot = ResolveSiteRoot();
         return file.SourceKind switch
         {
-            "request" => await OpenEncryptedRequestAsync(siteRoot, file, token),
-            "plan" => OpenPlanFile(siteRoot, file),
+            "request" => await OpenEncryptedRequestAsync(ResolveSiteRoot(), file, token),
+            "plan" => OpenPlanFile(file),
             _ => throw new FileNotFoundException("不支持的文件来源。")
         };
     }
@@ -27,9 +26,9 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
     {
         var safeName=Path.GetFileName(originalName);
         if(string.IsNullOrWhiteSpace(safeName)||safeName.Length>255)throw new InvalidDataException("文件名无效或过长。");
-        var relative=$"{planId}/{Guid.NewGuid():N}.bin";
-        var root=Path.GetFullPath(Path.Combine(ResolveSiteRoot(),"u_file","purchase_plans"));
-        var path=ResolveInside(root,relative);
+        var fileRelative=$"{planId}/{Guid.NewGuid():N}.bin";
+        var relative=$"managed/{fileRelative}";
+        var path=ResolveInside(ResolvePlanUploadRoot(),fileRelative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         const long maximumBytes=50L*1024*1024;
         long length=0;
@@ -77,6 +76,7 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
     public static IReadOnlyList<Uri> BuildPublicCandidates(string? baseUrl, string storagePath, string sourceKind)
     {
         var relative = NormalizeRelative(storagePath);
+        if(sourceKind=="plan"&&relative.StartsWith("managed/",StringComparison.OrdinalIgnoreCase))return [];
         if (sourceKind == "request" && RequestPathPattern.IsMatch(relative)) return [];
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) || origin.Scheme != Uri.UriSchemeHttps ||
             (origin.Host != "test.eggracks.com" && origin.Host != "www.eggracks.com"))
@@ -101,6 +101,14 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         path = Path.GetFullPath(path);
         if (!Directory.Exists(path)) throw new FileNotFoundException("文件存储目录不可用。", path);
         return path;
+    }
+
+    private string ResolvePlanUploadRoot()
+    {
+        var configured=configuration["FileCenter:PlanUploadRoot"];
+        if(string.IsNullOrWhiteSpace(configured))configured="App_Data/file-center/plans";
+        var path=Path.IsPathRooted(configured)?configured:Path.Combine(environment.ContentRootPath,configured);
+        path=Path.GetFullPath(path);Directory.CreateDirectory(path);return path;
     }
 
     private static async Task<Stream> OpenEncryptedRequestAsync(string siteRoot, FileCenterStoredFile file, CancellationToken token)
@@ -139,9 +147,20 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         return new MemoryStream(plaintext, writable: false);
     }
 
-    private static Stream OpenPlanFile(string siteRoot, FileCenterStoredFile file)
+    private Stream OpenPlanFile(FileCenterStoredFile file)
     {
         var relative = NormalizeRelative(file.StoragePath);
+        if(relative.StartsWith("managed/",StringComparison.OrdinalIgnoreCase))
+        {
+            var managedRelative=relative["managed/".Length..];
+            var managedRoot=ResolvePlanUploadRoot();
+            var managedPath=ResolveInside(managedRoot,managedRelative);
+            if(!File.Exists(managedPath))throw new FileNotFoundException("内部文件不可用。");
+            var managedInfo=new FileInfo(managedPath);
+            if(managedInfo.Length!=file.FileSize)throw new InvalidDataException("内部文件长度校验失败。");
+            return new FileStream(managedPath,FileMode.Open,FileAccess.Read,FileShare.Read,64*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
+        }
+        var siteRoot=ResolveSiteRoot();
         var uploadRoot = Path.GetFullPath(Path.Combine(siteRoot, "u_file"));
         var planRoot = Path.GetFullPath(Path.Combine(uploadRoot, "purchase_plans"));
         var candidates = new List<(string Root, string Relative)>();

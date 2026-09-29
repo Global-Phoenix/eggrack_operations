@@ -80,11 +80,30 @@ public sealed partial class ProcurementController
     public async Task<IActionResult> SaveSample([FromForm]SaveSampleCommand command,CancellationToken token)
     { try{return Json(new{ok=true,id=await procurement.SaveSampleAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
 
+    [HttpPost("plans/{planId:long}/items")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
+    public async Task<IActionResult> SavePlanItem(uint planId,[FromForm]SaveProcurementPlanItemCommand command,CancellationToken token)
+    {
+        if(!TryStaffIdUnsigned(out var staffId))return Forbid();
+        try{return Json(new{ok=true,id=await procurement.SavePlanItemAsync(planId,command,staffId,token)});}
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
+
+    [HttpPost("plans/{planId:long}/items/{itemId:long}/delete")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.manage")]
+    public async Task<IActionResult> DeletePlanItem(uint planId,uint itemId,CancellationToken token)
+    {
+        try{await procurement.DeletePlanItemAsync(planId,itemId,token);return Json(new{ok=true});}
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
+
     [HttpPost("plans/{planId:long}/sample-files")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(52_428_800)]
     [InternalPermission("wholesale.procurement.manage")]
-    public async Task<IActionResult> UploadSampleFile(uint planId,[FromForm]IFormFile file,[FromForm]uint? sampleId,[FromForm]string? description,CancellationToken token)
+    public async Task<IActionResult> UploadSampleFile(uint planId,[FromForm]IFormFile file,[FromForm]uint? sampleId,[FromForm]uint fileTypeId,[FromForm]string? description,CancellationToken token)
     {
         if(!TryStaffIdUnsigned(out var staffId))return Forbid();
         if(file is null||file.Length==0)return UnprocessableEntity(new{ok=false,message="请选择需要上传的文件。"});
@@ -93,7 +112,7 @@ public sealed partial class ProcurementController
         {
             await using var stream=file.OpenReadStream();
             stored=await fileStorage.SavePlanFileAsync(planId,file.FileName,file.ContentType,stream,token);
-            var id=await procurement.AddSampleFileAsync(planId,sampleId,stored.OriginalName,stored.StoragePath,stored.MimeType,stored.FileSize,description,staffId,token);
+            var id=await procurement.AddSampleFileAsync(planId,sampleId,fileTypeId,stored.OriginalName,stored.StoragePath,stored.MimeType,stored.FileSize,description,staffId,token);
             return Json(new{ok=true,id});
         }
         catch(Exception error) when(error is InvalidDataException or InvalidOperationException)

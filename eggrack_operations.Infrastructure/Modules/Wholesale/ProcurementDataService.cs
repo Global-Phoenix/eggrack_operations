@@ -8,7 +8,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
 {
     private const string DatabaseName = "Eggrack";
 
-    private sealed record PlanIdentityRow(uint Id,uint RequestId,byte Status);
+    private sealed record PlanIdentityRow(uint Id,uint RequestId,uint RequestVersionId,byte Status);
 
     private sealed record ProcurementPlanRow(
         uint Id, string PlanNumber, string RequestNumber, uint RequestVersion, string CustomerName,
@@ -71,18 +71,12 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
     public async Task<uint> CreatePlanAsync(CreateProcurementPlanCommand command,CancellationToken token=default)
     {
         const string versionSql="SELECT id Id,request_id RequestId,version_number VersionNumber,COALESCE(company_name,contact_name) CustomerName,email Email,FROM_UNIXTIME(submitted_at) SubmittedAtUtc FROM purchase_request_versions WHERE id=@VersionId AND request_id=@RequestId";
-        const string itemSql="""
-        SELECT id Id,request_id RequestId,version_id VersionId,product_key ProductKey,product_name ProductName,
-          quantity Quantity,quantity_unit Unit,
-          JSON_OBJECT('sku',sku,'brand',brand,'description',description,'specifications',specifications,'color',color,'size',size,'packagingRequirements',packaging_requirements,'customizationRequirements',customization_requirements,'customerNote',customer_note) SnapshotJson
-        FROM purchase_request_version_items WHERE request_id=@RequestId AND version_id=@VersionId ORDER BY sort_order,id
-        """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         var departmentId=await scopePolicy.ResolveBuyerDepartmentAsync(db,command.AssignedBuyerStaffId,token);
         var version=(await db.QueryAsync<PurchaseRequestVersionSource>(versionSql,new{command.RequestId,VersionId=command.RequestVersionId},cancellationToken:token)).SingleOrDefault()
             ?? throw new InvalidOperationException("采购申请版本不存在。");
-        var items=await db.QueryAsync<PurchaseRequestItemSource>(itemSql,new{command.RequestId,VersionId=command.RequestVersionId},cancellationToken:token);
-        if(items.Count==0) throw new InvalidOperationException("采购申请版本没有产品。");
+        var itemCount=(await db.QueryAsync<long>("SELECT COUNT(*) FROM purchase_request_version_items WHERE request_id=@RequestId AND version_id=@VersionId",new{command.RequestId,VersionId=command.RequestVersionId},cancellationToken:token)).Single();
+        if(itemCount==0) throw new InvalidOperationException("采购申请版本没有产品。");
 
         await db.BeginTransactionAsync(cancellationToken:token);
         try
@@ -96,12 +90,6 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             VALUES(@Number,@RequestId,@VersionId,@Status,@BuyerId,@DepartmentId,@StaffId,@AssignedAt,@StaffId,@StaffId,@Now,@Now)
             """,new{Number=number,command.RequestId,VersionId=command.RequestVersionId,Status=2,BuyerId=command.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=command.CreatedByStaffId,AssignedAt=now,Now=now},cancellationToken:token);
             var planId=(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
-            const string insertItem="""
-            INSERT purchase_plan_items(plan_id,request_item_id,product_key,sort_order,product_name,quantity,quantity_unit,buyer_id,assigned_by,assigned_at,created_by,updated_by,created_at,updated_at)
-            VALUES(@PlanId,@Id,@ProductKey,@SortOrder,@ProductName,@Quantity,@Unit,@BuyerId,@StaffId,@AssignedAt,@StaffId,@StaffId,@Now,@Now)
-            """;
-            var order=0;
-            foreach(var item in items) await db.ExecuteAsync(insertItem,new{PlanId=planId,item.Id,item.ProductKey,SortOrder=order++,item.ProductName,item.Quantity,item.Unit,BuyerId=command.AssignedBuyerStaffId,StaffId=command.CreatedByStaffId,AssignedAt=now,Now=now},cancellationToken:token);
             await db.CommitAsync(token);
             return planId;
         }
@@ -134,27 +122,37 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,planId,token);
         var plan=(await db.QueryAsync<FlexibleCostPlan>("SELECT COALESCE(cny_per_usd,7.12) CnyPerUsd,COALESCE(profit_rate,0.15) ProfitRate,COALESCE(total_cost_cny,0) TotalCostCny,COALESCE(total_cost_usd,0) TotalCostUsd,COALESCE(approved_quote_amount_usd,0) SuggestedQuoteUsd FROM purchase_plans WHERE id=@PlanId",new{PlanId=planId},cancellationToken:token)).Single();
-        var items=await db.QueryAsync<ProcurementCostItem>("SELECT id Id,cost_name Name,amount_cny AmountCny,sort_order SortOrder FROM procurement_plan_cost_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
-        return new(plan.CnyPerUsd,plan.ProfitRate,plan.TotalCostCny,plan.TotalCostUsd,plan.SuggestedQuoteUsd,items);
+        var items=await db.QueryAsync<ProcurementCostItem>("SELECT id Id,cost_type_id TypeId,cost_name Name,amount_cny AmountCny,sort_order SortOrder FROM procurement_plan_cost_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
+        var types=await db.QueryAsync<ProcurementManagedOption>("SELECT id Id,type_code Code,type_name Name,description Description,NULL AllowedExtensions,NULL MaxFileSizeMb FROM procurement_cost_types WHERE is_active=1 ORDER BY sort_order,id",cancellationToken:token);
+        return new(plan.CnyPerUsd,plan.ProfitRate,plan.TotalCostCny,plan.TotalCostUsd,plan.SuggestedQuoteUsd,items,types);
     }
     public async Task<ProcurementCosts> SaveFlexibleCostsAsync(uint planId,SaveProcurementCostsCommand command,long staffId,CancellationToken token=default)
     {
         if(command.CnyPerUsd<=0)throw new ArgumentOutOfRangeException(nameof(command.CnyPerUsd),"汇率必须大于 0。");
         if(command.ProfitRate is <0.10m or >0.20m)throw new ArgumentOutOfRangeException(nameof(command.ProfitRate),"利润率必须在 10% 到 20% 之间。");
-        var items=(command.Items??[]).Where(x=>!string.IsNullOrWhiteSpace(x.Name)).Select(x=>new ProcurementCostItemInput(x.Name.Trim(),x.AmountCny)).ToArray();
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanAsync(db,planId,token);
+        var types=await db.QueryAsync<ProcurementManagedOption>("SELECT id Id,type_code Code,type_name Name,description Description,NULL AllowedExtensions,NULL MaxFileSizeMb FROM procurement_cost_types WHERE is_active=1 ORDER BY sort_order,id",cancellationToken:token);
+        var typeMap=types.ToDictionary(x=>x.Id);
+        var items=(command.Items??[]).Where(x=>x.TypeId.HasValue||!string.IsNullOrWhiteSpace(x.Name)).Select(x=>
+        {
+            if(x.TypeId.HasValue&&!typeMap.TryGetValue(x.TypeId.Value,out _))throw new InvalidOperationException("成本类型不存在或已停用。");
+            var name=x.TypeId.HasValue?typeMap[x.TypeId.Value].Name:x.Name?.Trim();
+            if(string.IsNullOrWhiteSpace(name))throw new InvalidOperationException("自定义成本必须填写名称。");
+            return new ProcurementCostItemInput(x.TypeId,name,x.AmountCny);
+        }).ToArray();
         if(items.Length==0)throw new InvalidOperationException("请至少添加一项成本。");
         if(items.Any(x=>x.AmountCny<0))throw new InvalidOperationException("成本金额不能为负数。");
         var total=items.Sum(x=>x.AmountCny);var usd=decimal.Round(total/command.CnyPerUsd,2,MidpointRounding.AwayFromZero);var quote=decimal.Round(usd/(1-command.ProfitRate),2,MidpointRounding.AwayFromZero);
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanAsync(db,planId,token);
         await db.ExecuteInTransactionAsync(async transactionToken=>
         {
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await db.ExecuteAsync("DELETE FROM procurement_plan_cost_items WHERE plan_id=@PlanId",new{PlanId=planId},cancellationToken:transactionToken);
-            for(var index=0;index<items.Length;index++)await db.ExecuteAsync("INSERT procurement_plan_cost_items(plan_id,cost_name,amount_cny,sort_order,created_by,updated_by,created_at,updated_at) VALUES(@PlanId,@Name,@Amount,@Sort,@StaffId,@StaffId,@Now,@Now)",new{PlanId=planId,items[index].Name,Amount=items[index].AmountCny,Sort=index,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            for(var index=0;index<items.Length;index++)await db.ExecuteAsync("INSERT procurement_plan_cost_items(plan_id,cost_type_id,cost_name,amount_cny,sort_order,created_by,updated_by,created_at,updated_at) VALUES(@PlanId,@TypeId,@Name,@Amount,@Sort,@StaffId,@StaffId,@Now,@Now)",new{PlanId=planId,items[index].TypeId,items[index].Name,Amount=items[index].AmountCny,Sort=index,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             var changed=await db.ExecuteAsync("UPDATE purchase_plans SET product_cost_cny=0,packaging_cost_cny=0,sample_cost_cny=0,domestic_shipping_cny=0,international_shipping_cny=0,other_cost_cny=@Total,total_cost_cny=@Total,cny_per_usd=@Rate,total_cost_usd=@Usd,profit_method=2,profit_rate=@Profit,approved_quote_amount_usd=@Quote,status=3,cost_updated_by=@StaffId,cost_updated_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status IN(1,2,3)",new{PlanId=planId,Total=total,Rate=command.CnyPerUsd,Usd=usd,Profit=command.ProfitRate,Quote=quote,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             if(changed!=1)throw new InvalidOperationException("采购计划当前状态不能修改成本。");
         },cancellationToken:token);
-        return new(command.CnyPerUsd,command.ProfitRate,total,usd,quote,(await GetFlexibleCostsAsync(planId,token)).Items);
+        var saved=await GetFlexibleCostsAsync(planId,token);
+        return new(command.CnyPerUsd,command.ProfitRate,total,usd,quote,saved.Items,saved.Types);
     }
     private sealed record FlexibleCostPlan(decimal CnyPerUsd,decimal ProfitRate,decimal TotalCostCny,decimal TotalCostUsd,decimal SuggestedQuoteUsd);
     public async Task<IReadOnlyList<ProcurementBuyerOption>> GetBuyersAsync(CancellationToken token=default)
@@ -163,7 +161,8 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         const string sql="""
         SELECT DISTINCT s.id Id,s.staff_name Name
         FROM eggrack_auth_staff s
-        LEFT JOIN eggrack_auth_staff_department sd ON sd.staff_id=s.id
+        JOIN eggrack_auth_staff_department sd ON sd.staff_id=s.id
+        JOIN eggrack_auth_department d ON d.id=sd.department_id AND d.department_code='development' AND d.status=1 AND d.deleted_at IS NULL
         WHERE s.status=1 AND s.deleted_at IS NULL
           AND (@ScopeAll=1 OR (@ScopeSelf=1 AND s.id=@ScopeStaffId)
             OR sd.department_id IN @ScopeDepartmentIds)
@@ -219,36 +218,21 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
 
     public async Task UpdatePlanAsync(UpdateProcurementPlanCommand command,CancellationToken token=default)
     {
-        const string itemSql="""
-        SELECT id Id,request_id RequestId,version_id VersionId,product_key ProductKey,product_name ProductName,
-          quantity Quantity,quantity_unit Unit,
-          JSON_OBJECT('sku',sku,'brand',brand,'description',description,'specifications',specifications,'color',color,'size',size,'packagingRequirements',packaging_requirements,'customizationRequirements',customization_requirements,'customerNote',customer_note) SnapshotJson
-        FROM purchase_request_version_items WHERE request_id=@RequestId AND version_id=@VersionId ORDER BY sort_order,id
-        """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,command.PlanId,token);
         var departmentId=await scopePolicy.ResolveBuyerDepartmentAsync(db,command.AssignedBuyerStaffId,token);
         await db.BeginTransactionAsync(cancellationToken:token);
         try
         {
-            var plan=(await db.QueryAsync<PlanIdentityRow>("SELECT id Id,request_id RequestId,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:token)).SingleOrDefault()
+            var plan=(await db.QueryAsync<PlanIdentityRow>("SELECT id Id,request_id RequestId,request_version_id RequestVersionId,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:token)).SingleOrDefault()
                 ?? throw new InvalidOperationException("采购计划不存在。");
             if(plan.Status>2) throw new InvalidOperationException("采购计划已进入成本或审批阶段，不能更换申请版本。");
             var sourcingCount=(await db.QueryAsync<long>("SELECT (SELECT COUNT(*) FROM procurement_candidate_products c JOIN purchase_plan_items i ON i.id=c.plan_item_id WHERE i.plan_id=@PlanId)+(SELECT COUNT(*) FROM procurement_inquiries q JOIN purchase_plan_items i ON i.id=q.plan_item_id WHERE i.plan_id=@PlanId)+(SELECT COUNT(*) FROM procurement_samples s JOIN purchase_plan_items i ON i.id=s.plan_item_id WHERE i.plan_id=@PlanId)",new{command.PlanId},cancellationToken:token)).Single();
-            if(sourcingCount>0) throw new InvalidOperationException("采购计划已有候选产品、询价或样品记录，不能更换申请版本。");
+            if(sourcingCount>0&&plan.RequestVersionId!=command.RequestVersionId) throw new InvalidOperationException("采购计划已有询价或样品记录，不能更换申请版本。");
             var versions=await db.QueryAsync<uint>("SELECT id FROM purchase_request_versions WHERE id=@VersionId AND request_id=@RequestId",new{VersionId=command.RequestVersionId,plan.RequestId},cancellationToken:token);
             if(versions.Count!=1) throw new InvalidOperationException("采购申请版本与计划不匹配。");
-            var items=await db.QueryAsync<PurchaseRequestItemSource>(itemSql,new{plan.RequestId,VersionId=command.RequestVersionId},cancellationToken:token);
-            if(items.Count==0) throw new InvalidOperationException("采购申请版本没有产品。");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await db.ExecuteAsync("UPDATE purchase_plans SET request_version_id=@RequestVersionId,assigned_buyer_id=@AssignedBuyerStaffId,department_id=@DepartmentId,assigned_by=@UpdatedByStaffId,assigned_at=@Now,status=2,updated_by=@UpdatedByStaffId,updated_at=@Now WHERE id=@PlanId",new{command.PlanId,command.RequestVersionId,command.AssignedBuyerStaffId,DepartmentId=departmentId,command.UpdatedByStaffId,Now=now},cancellationToken:token);
-            await db.ExecuteAsync("DELETE FROM purchase_plan_items WHERE plan_id=@PlanId",new{command.PlanId},cancellationToken:token);
-            const string insertItem="""
-            INSERT purchase_plan_items(plan_id,request_item_id,product_key,sort_order,product_name,quantity,quantity_unit,buyer_id,assigned_by,assigned_at,created_by,updated_by,created_at,updated_at)
-            VALUES(@PlanId,@Id,@ProductKey,@SortOrder,@ProductName,@Quantity,@Unit,@BuyerId,@StaffId,@Now,@StaffId,@StaffId,@Now,@Now)
-            """;
-            var order=0;
-            foreach(var item in items) await db.ExecuteAsync(insertItem,new{PlanId=command.PlanId,item.Id,item.ProductKey,SortOrder=order++,item.ProductName,item.Quantity,item.Unit,BuyerId=command.AssignedBuyerStaffId,StaffId=command.UpdatedByStaffId,Now=now},cancellationToken:token);
             await db.CommitAsync(token);
         }
         catch { await db.RollbackAsync(token); throw; }

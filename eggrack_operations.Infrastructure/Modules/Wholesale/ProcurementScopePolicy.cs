@@ -87,6 +87,7 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
             SELECT sd.department_id
             FROM eggrack_auth_staff_department sd
             JOIN eggrack_auth_staff s ON s.id=sd.staff_id AND s.status=1 AND s.deleted_at IS NULL
+            JOIN eggrack_auth_department d ON d.id=sd.department_id AND d.department_code='development' AND d.status=1 AND d.deleted_at IS NULL
             WHERE sd.staff_id=@BuyerStaffId AND
               (@ScopeAll=1 OR sd.department_id IN @ScopeDepartmentIds
                OR (@ScopeSelf=1 AND sd.staff_id=@ScopeStaffId))
@@ -98,7 +99,7 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
         var departmentId = rows.SingleOrDefault();
         return departmentId > 0
             ? departmentId
-            : throw new BusinessRuleException("采购人员没有可用的部门归属，或不在当前授权部门内。", "procurement.buyer.department-denied");
+            : throw new BusinessRuleException("采购人员必须属于开发部，并且在当前授权部门范围内。", "procurement.buyer.department-denied");
     }
 
     public static object Params(ProcurementAccessScope scope, object values)
