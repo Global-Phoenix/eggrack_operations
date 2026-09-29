@@ -1,2 +1,13 @@
 @model DepartmentFormViewModel
-<div class="row g-3"><div class="col-6"><label class="form-label">部门编码</label><input class="form-control" name="Code" value="@Model.Code" required/></div><div class="col-6"><label class="form-label">排序</label><input class="form-control" name="SortOrder" type="number" value="@Model.SortOrder"/></div><div class="col-12"><label class="form-label">部门名称</label><input class="form-control" name="Name" value="@Model.Name" required/></div><div class="col-12"><label class="form-label">上级部门</label><select class="form-select" name="ParentId"><option value="">无上级部门</option>@foreach(var department in Model.Departments.Where(x=>x.Id!=Model.CurrentId)){<option value="@department.Id" selected="@(department.Id==Model.ParentId)">@department.Name</option>}</select></div></div>
+<div class="row g-3">
+  <div class="col-12">
+    <label class="form-label d-block">常用部门模板</label>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-department-template data-code="sales" data-name="销售部">销售部</button>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-department-template data-code="development" data-name="开发部">开发部</button>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-department-template data-code="operations" data-name="运营部">运营部</button>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-department-template data-code="finance" data-name="财务部">财务部</button>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-department-template data-code="hr" data-name="人事部">人事部</button>
+    </div>
+    <div class="form-text">模板仅用于快速填写，编码、名称、上级部门和排序均可自由修改。</div>
+  </div><div class="col-6"><label class="form-label">部门编码</label><input class="form-control" name="Code" value="@Model.Code" required/></div><div class="col-6"><label class="form-label">排序</label><input class="form-control" name="SortOrder" type="number" value="@Model.SortOrder"/></div><div class="col-12"><label class="form-label">部门名称</label><input class="form-control" name="Name" value="@Model.Name" required/></div><div class="col-12"><label class="form-label">上级部门</label><select class="form-select" name="ParentId"><option value="">无上级部门</option>@foreach(var department in Model.Departments.Where(x=>x.Id!=Model.CurrentId)){<option value="@department.Id" selected="@(department.Id==Model.ParentId)">@department.Name</option>}</select></div></div>

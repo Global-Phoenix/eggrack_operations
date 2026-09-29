@@ -32,17 +32,13 @@ public sealed class SecurityController(
     [InternalPermission("auth.staff.read")]
     public async Task<IActionResult> Staff(string? keyword, CancellationToken cancellationToken)
     {
-        var staffTask = admin.GetStaffAsync(keyword, cancellationToken);
-        var rolesTask = admin.GetRolesAsync(cancellationToken);
-        var departmentsTask = admin.GetDepartmentsAsync(cancellationToken);
-        var assignmentsTask = admin.GetRoleAssignmentsAsync(cancellationToken);
-        await Task.WhenAll(staffTask, rolesTask, departmentsTask, assignmentsTask);
+        var data = await admin.GetStaffAdministrationAsync(keyword, cancellationToken);
         return View(new StaffIndexViewModel(
             keyword,
-            await staffTask,
-            await rolesTask,
-            await departmentsTask,
-            await assignmentsTask));
+            data.Staff,
+            data.Roles,
+            data.Departments,
+            data.Assignments));
     }
 
     [HttpGet("roles")]

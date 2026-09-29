@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Dapper;
 using Eggrack.Operations.Application.Modules.Security;
 using Eggrack.Operations.Infrastructure.Database;
 
@@ -46,6 +47,70 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         return await session.QueryAsync<StaffListItem>(sql, new { Keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim() }, cancellationToken: cancellationToken);
     }
 
+    public async Task<(
+        IReadOnlyList<StaffListItem> Staff,
+        IReadOnlyList<RoleListItem> Roles,
+        IReadOnlyList<DepartmentOption> Departments,
+        IReadOnlyList<StaffRoleAssignment> Assignments)> GetStaffAdministrationAsync(
+            string? keyword,
+            CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT CAST(s.id AS SIGNED) Id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
+              s.status=1 IsEnabled,
+              COALESCE(GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR '、'),'—') Departments,
+              COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_level SEPARATOR '、'),'未授权') Roles
+            FROM eggrack_auth_staff s
+            LEFT JOIN eggrack_auth_staff_department sd ON sd.staff_id=s.id
+            LEFT JOIN eggrack_auth_department d ON d.id=sd.department_id AND d.deleted_at IS NULL
+            LEFT JOIN eggrack_auth_staff_role sr ON sr.staff_id=s.id
+              AND (sr.valid_from IS NULL OR sr.valid_from<=UTC_TIMESTAMP(3))
+              AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+            LEFT JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.status=1
+            WHERE s.deleted_at IS NULL
+              AND (@Keyword IS NULL OR s.staff_name LIKE CONCAT('%',@Keyword,'%')
+                   OR s.staff_ref LIKE CONCAT('%',@Keyword,'%'))
+            GROUP BY s.id,s.staff_ref,s.staff_name,s.email,s.status
+            ORDER BY s.status DESC,s.staff_name
+            LIMIT 200;
+
+            SELECT CAST(r.id AS SIGNED) Id,r.role_code Code,r.role_name Name,r.role_level Level,
+              r.default_scope DefaultScope,r.status=1 IsEnabled,
+              COUNT(DISTINCT sr.staff_id) StaffCount,
+              COUNT(DISTINCT rp.permission_id) PermissionCount
+            FROM eggrack_auth_role r
+            LEFT JOIN eggrack_auth_staff_role sr ON sr.role_id=r.id
+            LEFT JOIN eggrack_auth_role_permission rp ON rp.role_id=r.id
+            GROUP BY r.id,r.role_code,r.role_name,r.role_level,r.default_scope,r.status
+            ORDER BY r.role_level;
+
+            SELECT CAST(id AS SIGNED) Id,department_name Name
+            FROM eggrack_auth_department
+            WHERE status=1 AND deleted_at IS NULL
+            ORDER BY sort_order,department_name;
+
+            SELECT CAST(sr.id AS SIGNED) Id,CAST(sr.staff_id AS SIGNED) StaffId,
+              r.role_code RoleCode,r.role_name RoleName,d.department_name DepartmentName
+            FROM eggrack_auth_staff_role sr
+            INNER JOIN eggrack_auth_role r ON r.id=sr.role_id
+            LEFT JOIN eggrack_auth_department d ON d.id=sr.department_id
+            WHERE (sr.valid_from IS NULL OR sr.valid_from<=UTC_TIMESTAMP(3))
+              AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+            ORDER BY r.role_level,d.department_name;
+            """;
+
+        await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        var command = new CommandDefinition(
+            sql,
+            new { Keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim() },
+            cancellationToken: cancellationToken);
+        using var results = await session.Connection.QueryMultipleAsync(command);
+        var staff = (await results.ReadAsync<StaffListItem>()).AsList();
+        var roles = (await results.ReadAsync<RoleListItem>()).AsList();
+        var departments = (await results.ReadAsync<DepartmentOption>()).AsList();
+        var assignments = (await results.ReadAsync<StaffRoleAssignment>()).AsList();
+        return (staff, roles, departments, assignments);
+    }
     public async Task<IReadOnlyList<RoleListItem>> GetRolesAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
