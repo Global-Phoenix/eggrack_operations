@@ -26,6 +26,16 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     public async Task<IActionResult> Sourcing(CancellationToken token) =>
         View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token)));
 
+    [HttpGet("plans/{planId:long}/details")]
+    public async Task<IActionResult> Details(uint planId,CancellationToken token)
+    {
+        var plans=await procurement.GetPlansAsync(token);
+        var plan=plans.SingleOrDefault(item=>item.Id==planId);
+        if(plan is null)return NotFound();
+        ViewData["Title"]=$"{plan.PlanNumber} 详情";
+        return View("Sourcing",new SourcingPageViewModel(plans,plan.Id,plan.PlanNumber));
+    }
+
     [HttpGet("request-options")]
     public async Task<IActionResult> RequestOptions([FromQuery]string? keyword,CancellationToken token) =>
         Json(await procurement.GetPurchaseRequestsAsync(keyword,token));

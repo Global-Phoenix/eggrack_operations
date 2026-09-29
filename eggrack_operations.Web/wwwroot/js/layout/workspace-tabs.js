@@ -54,6 +54,26 @@
         if (closesCurrent) window.location.href = tabs[Math.max(0, currentIndex - 1)]?.path || tabs.at(-1)?.path || '/';
         else render();
     };
+    window.Eggrack = window.Eggrack || {};
+    window.Eggrack.workspaceTabs = {
+        open(path, title) {
+            const existing = tabs.find(tab => tab.path === path);
+            if (existing) existing.title = title || existing.title;
+            else tabs.push({ path, title: title || '详情' });
+            save();
+            window.location.href = path;
+        },
+        closeCurrent(fallback = '/') {
+            const currentIndex = tabs.findIndex(tab => tab.path === currentPath);
+            if (currentIndex < 0) {
+                window.location.href = fallback;
+                return;
+            }
+            tabs.splice(currentIndex, 1);
+            save();
+            window.location.href = tabs[Math.max(0, currentIndex - 1)]?.path || tabs.at(-1)?.path || fallback;
+        }
+    };
 
     save();
     render();
