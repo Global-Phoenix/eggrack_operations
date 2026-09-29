@@ -8,6 +8,10 @@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/layout/shell.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/components/admin-components.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/themes/wholesale-portal.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/layout/navigation.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
@@ -20,7 +24,9 @@
 </div>
 <script src="~/lib/jquery/dist/jquery.min.js" asp-append-version="true"></script>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
-<script src="~/js/site.js" asp-append-version="true"></script>
+<script src="~/js/layout/shell.js" asp-append-version="true"></script>
+<script src="~/js/layout/workspace-tabs.js" asp-append-version="true"></script>
+<script src="~/js/layout/navigation.js" asp-append-version="true"></script>
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
