@@ -8,7 +8,7 @@ namespace eggrack_operations.Controllers;
 public sealed class WholesaleController : Controller
 {
     public IActionResult Orders() => View("~/Views/Shared/ModuleListPage.cshtml", new ModuleListPageViewModel(
-        "批发订单", "统一查看客户订单、金额、交付节点与订单状态", "批发管理", "bi-receipt",
+        "批发计划", "统一查看客户订单、金额、交付节点与订单状态", "批发管理", "bi-receipt",
         "搜索订单号、客户或产品", "新增订单", ["待确认", "处理中", "已完成", "已取消"],
         [new("number", "订单号", "150px"), new("customer", "客户"), new("product", "产品"), new("amount", "订单金额"), new("delivery", "预计交付"), new("owner", "负责人")],
         [
@@ -60,7 +60,7 @@ public sealed class MenusController : Controller
         [new("name","菜单名称"),new("parent","上级菜单"),new("route","路由"),new("permission","权限标识"),new("sort","排序"),new("icon","图标")],
         [
             Row("menu-wholesale","启用","success",("name","批发管理"),("parent","主导航"),("route","—"),("permission","—"),("sort","20"),("icon","bi-cart3")),
-            Row("menu-procurement","启用","success",("name","采购开发计划"),("parent","批发管理"),("route","/wholesale/procurement"),("permission","wholesale.purchase-plan.view"),("sort","10"),("icon","bi-clipboard-check")),
+            Row("menu-procurement","启用","success",("name","采购开发"),("parent","批发管理"),("route","/wholesale/procurement"),("permission","wholesale.purchase-plan.view"),("sort","10"),("icon","bi-clipboard-check")),
             Row("menu-email","启用","success",("name","邮件模板"),("parent","系统管理"),("route","/EmailTemplates"),("permission","system.email-template.view"),("sort","40"),("icon","bi-envelope-paper"))
         ]));
     private static ModuleListRow Row(string id,string status,string tone,params (string Key,string Value)[] values)=>new(id,values.ToDictionary(x=>x.Key,x=>x.Value),status,tone);

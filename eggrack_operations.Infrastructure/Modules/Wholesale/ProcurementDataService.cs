@@ -16,7 +16,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
     public async Task<IReadOnlyList<PurchaseRequestSource>> GetPurchaseRequestsAsync(string? keyword,CancellationToken token=default)
     {
         const string sql = """
-        SELECT r.id Id,r.request_number RequestNumber,r.current_version CurrentVersion,
+        SELECT r.id Id,v.id CurrentVersionId,r.request_number RequestNumber,r.current_version CurrentVersion,
           COALESCE(v.company_name,v.contact_name) CustomerName,r.email Email,
           FROM_UNIXTIME(r.last_submitted_at) SubmittedAtUtc
         FROM purchase_requests r

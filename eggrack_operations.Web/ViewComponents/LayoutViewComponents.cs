@@ -48,7 +48,7 @@ public sealed class ModuleGridViewComponent : ViewComponent
 {
     private static readonly IReadOnlyList<ModuleCard> Modules =
     [
-        new("批", "批发管理", "采购计划、批发订单", "orange", "/wholesale/procurement", "bi-cart3"),
+        new("批", "批发管理", "采购计划、批发计划", "orange", "/wholesale/procurement", "bi-cart3"),
         new("权", "权限管理", "用户、角色、权限", "blue", "/security", "bi-shield-lock"),
         new("文", "文件中心", "上传、下载、归档", "green", "/files", "bi-folder2-open"),
         new("任", "任务中心", "导入、导出、后台任务", "purple", "/tasks", "bi-list-task"),
