@@ -26,7 +26,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpGet("sourcing")]
     public async Task<IActionResult> Sourcing(CancellationToken token) =>
-        View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token),CanManageCosts:await CanManageCostsAsync(token)));
+        View("Sourcing",await CreateSourcingViewModelAsync(await procurement.GetPlansAsync(token),token:token));
 
     [HttpGet("suppliers")]
     public async Task<IActionResult> SupplierDirectory([FromQuery]string? keyword,CancellationToken token) =>
@@ -40,7 +40,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         var plan=plans.SingleOrDefault(item=>item.Id==planId);
         if(plan is null)return NotFound();
         ViewData["Title"]=$"{plan.PlanNumber} 详情";
-        return View("Sourcing",new SourcingPageViewModel(plans,plan.Id,plan.PlanNumber,await CanManageCostsAsync(token)));
+        return View("Sourcing",await CreateSourcingViewModelAsync(plans,plan.Id,plan.PlanNumber,token));
     }
 
     [HttpGet("request-options")]
@@ -94,18 +94,18 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     }
 
     [HttpGet("plans/{planId:long}/costs")]
-    [InternalPermission("wholesale.purchase-cost.manage")]
-    public async Task<IActionResult> Costs(uint planId,CancellationToken token) => Json(await procurement.GetFlexibleCostsAsync(planId,token));
+    [InternalPermission("wholesale.purchase-cost.edit")]
+    public async Task<IActionResult> Costs(uint planId,CancellationToken token) => Json(await procurement.GetPhaseOneCostsAsync(planId,token));
 
     [HttpPost("plans/{planId:long}/costs")]
     [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-cost.manage")]
+    [InternalPermission("wholesale.purchase-cost.edit")]
     public async Task<IActionResult> SaveCosts(uint planId,[FromForm]SaveProcurementCostsCommand command,CancellationToken token)
     {
         if(!TryStaffId(out var staffId)) return Forbid();
         try
         {
-            return Json(new{ok=true,data=await procurement.SaveFlexibleCostsAsync(planId,command,staffId,token)});
+            return Json(new{ok=true,data=await procurement.SaveDraftCostsAsync(planId,command,staffId,token)});
         }
         catch(Exception error) when(error is ArgumentOutOfRangeException or InvalidOperationException)
         {
@@ -113,9 +113,18 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         }
     }
 
+    [HttpPost("plans/{planId:long}/costs/submit")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.submit")]
+    public async Task<IActionResult> SubmitCosts(uint planId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{return Json(new{ok=true,data=await procurement.SubmitCostReviewAsync(planId,staffId,token)});}
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
     [HttpPost("pricing")]
     [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-cost.manage")]
+    [InternalPermission("wholesale.purchase-cost.edit")]
     public IActionResult Pricing([FromForm]ProcurementCostInput input)
     {
         try{return Json(new{ok=true,data=ProcurementPricing.Calculate(input)});}
@@ -125,9 +134,13 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     private bool TryStaffIdUnsigned(out ulong staffId) =>
         ulong.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
-    private async Task<bool> CanManageCostsAsync(CancellationToken token)
+    private async Task<SourcingPageViewModel> CreateSourcingViewModelAsync(IReadOnlyList<ProcurementPlanListItem> plans,uint? planId=null,string? planNumber=null,CancellationToken token=default)
     {
         var authorization=await currentStaff.LoadAsync(token);
-        return authorization is not null&&permissionEvaluator.Evaluate(authorization,"wholesale.purchase-cost.manage").Allowed;
+        bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
+        return new(plans,planId,planNumber,
+            CanManageCosts:Has("wholesale.purchase-cost.edit"),CanSubmitQuote:Has("wholesale.purchase-quote.submit"),
+            CanReviewQuote:Has("wholesale.purchase-quote.review"),CanFinalApprove:Has("wholesale.purchase-quote.final-approve"),
+            CanManagePi:Has("wholesale.purchase-pi.manage"),CanIssuePi:Has("wholesale.purchase-pi.issue"),CanSendMail:Has("wholesale.purchase-mail.send"));
     }
 }

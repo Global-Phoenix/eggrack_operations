@@ -51,7 +51,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           COALESCE((SELECT i.product_name FROM purchase_plan_items i WHERE i.plan_id=p.id ORDER BY i.sort_order,i.id LIMIT 1),'—') ProductSummary,
           s.staff_name BuyerName,p.total_cost_cny TotalCostCny,p.approved_quote_amount_usd FinalQuoteUsd,
           CASE p.status WHEN 1 THEN 'Draft' WHEN 2 THEN 'Sourcing' WHEN 3 THEN 'PendingApproval'
-            WHEN 4 THEN 'Approved' WHEN 5 THEN 'Completed' ELSE 'Draft' END Status,
+            WHEN 4 THEN 'Approved' WHEN 5 THEN 'Completed' WHEN 6 THEN 'PendingFinalApproval' ELSE 'Draft' END Status,
           FROM_UNIXTIME(p.updated_at) UpdatedAtUtc
         FROM purchase_plans p
         JOIN purchase_requests r ON r.id=p.request_id

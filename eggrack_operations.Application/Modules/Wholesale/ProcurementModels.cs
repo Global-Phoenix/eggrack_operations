@@ -1,6 +1,6 @@
 namespace Eggrack.Operations.Application.Modules.Wholesale;
 
-public enum ProcurementPlanStatus { Draft, Sourcing, Costing, PendingApproval, Approved, Rejected, EmailPending, Completed }
+public enum ProcurementPlanStatus { Draft=1,Sourcing=2,Costing=2,PendingApproval=3,Approved=4,Completed=5,PendingFinalApproval=6,Rejected=7,EmailPending=8 }
 
 public static class ProcurementPlanStatusParser
 {

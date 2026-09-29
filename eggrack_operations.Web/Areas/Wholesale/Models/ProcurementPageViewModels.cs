@@ -10,7 +10,13 @@ public sealed record SourcingPageViewModel(
     IReadOnlyList<ProcurementPlanListItem> Plans,
     uint? InitialPlanId = null,
     string? InitialPlanNumber = null,
-    bool CanManageCosts = false);
+    bool CanManageCosts = false,
+    bool CanSubmitQuote = false,
+    bool CanReviewQuote = false,
+    bool CanFinalApprove = false,
+    bool CanManagePi = false,
+    bool CanIssuePi = false,
+    bool CanSendMail = false);
 
 public sealed record SupplierDirectoryPageViewModel(
     IReadOnlyList<SupplierListItem> Suppliers,
