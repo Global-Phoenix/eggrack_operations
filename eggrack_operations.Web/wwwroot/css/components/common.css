@@ -1,0 +1,10 @@
+/* Shared controls, forms, overlays and responsive data presentation. */
+:root{--ui-focus:#2563eb;--ui-focus-ring:#2563eb16;--ui-surface:#fff;--ui-surface-muted:#f8fafc;--ui-line:#e5e7eb}
+.form-control,.form-select{border-color:#dfe3e8}.form-control:focus,.form-select:focus{border-color:#93c5fd;box-shadow:0 0 0 .2rem var(--ui-focus-ring)}
+.form-control:disabled,.form-select:disabled{background:#f8fafc;color:#94a3b8}.form-label{color:#64748b;font-size:12px}.form-text{color:#94a3b8;font-size:11px}
+.modal-content{overflow:hidden;border:0;border-radius:12px;box-shadow:0 20px 50px rgba(15,23,42,.18)}.modal-header,.modal-footer{border-color:#edf0f3}.modal-header{background:var(--ui-surface-muted)}.modal-title{color:#1e293b;font-weight:650}
+.btn[data-busy=true]{pointer-events:none;opacity:.68}.btn[data-busy=true]::before{content:"";width:.8rem;height:.8rem;margin-right:.4rem;display:inline-block;vertical-align:-.1rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:ui-spin .65s linear infinite}@keyframes ui-spin{to{transform:rotate(360deg)}}
+.ui-inline-error{margin-top:10px;color:#b42318;font-size:12px}.ui-list-empty{padding:24px;color:#94a3b8;text-align:center;font-size:12px}
+.table-responsive>.table{margin-bottom:0}.table thead th{vertical-align:middle;white-space:nowrap}.table tbody td{vertical-align:middle}.table [data-actions]{white-space:nowrap}
+@media(max-width:767.98px){.modal-dialog:not(.modal-fullscreen){margin:.75rem}.modal-footer{flex-wrap:wrap}.modal-footer>.btn{flex:1 1 auto}.ui-page-actions{flex-wrap:wrap}}
+@media(prefers-reduced-motion:reduce){.btn[data-busy=true]::before{animation-duration:1.5s}}
