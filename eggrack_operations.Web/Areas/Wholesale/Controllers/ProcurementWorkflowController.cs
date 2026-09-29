@@ -70,6 +70,16 @@ public sealed partial class ProcurementController
     public async Task<IActionResult> SaveSample([FromForm]SaveSampleCommand command,CancellationToken token)
     { try{return Json(new{ok=true,id=await procurement.SaveSampleAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
 
+    [HttpPost("plans/{planId:long}/pi/pricing")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.approve")]
+    public async Task<IActionResult> UpdateProformaInvoicePricing(uint planId,[FromForm]UpdateProformaInvoicePricingCommand command,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId)) return Forbid();
+        try{return Json(new{ok=true,data=await procurement.UpdateProformaInvoicePricingAsync(planId,command,staffId,token)});}
+        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+    }
+
     [HttpPost("plans/{planId:long}/pi/issue")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.purchase-quote.approve")]

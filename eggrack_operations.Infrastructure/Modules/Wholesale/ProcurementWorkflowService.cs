@@ -85,7 +85,8 @@ public sealed partial class ProcurementDataService
         var mails=await db.QueryAsync<MailTaskItem>("SELECT id Id,recipient Recipient,status Status,template_code TemplateCode,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(sent_at) SentAtUtc FROM procurement_mail_tasks WHERE plan_id=@PlanId ORDER BY created_at DESC,id DESC",new{PlanId=planId},cancellationToken:token);
         var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT id Id,pi_number Number,CASE status WHEN 1 THEN 'Draft' WHEN 2 THEN 'Approved' WHEN 3 THEN 'Issued' ELSE 'Cancelled' END Status,total_amount TotalAmount,currency Currency,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1",new{PlanId=planId},cancellationToken:token);
         var invoice=invoices.SingleOrDefault();
-        return new(planItems,suppliers,candidates,inquiries,samples,mails,invoice);
+        var pricing=invoice is null?null:await GetProformaInvoicePricingAsync(db,invoice.Id,token);
+        return new(planItems,suppliers,candidates,inquiries,samples,mails,invoice,pricing);
     }
 
     public async Task<uint> SaveCandidateAsync(SaveCandidateProductCommand command,CancellationToken token=default)

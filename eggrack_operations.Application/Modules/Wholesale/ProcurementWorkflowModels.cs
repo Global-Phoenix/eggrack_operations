@@ -12,8 +12,12 @@ public sealed record InquiryItem(uint Id,uint PlanItemId,uint SupplierId,string 
 public sealed record SampleItem(uint Id,uint PlanItemId,uint? SupplierId,string ProductName,string? SupplierName,decimal Quantity,string Status,decimal CostCny,string? TrackingNumber,string? Notes);
 public sealed record MailTaskItem(uint Id,string Recipient,string Status,string TemplateCode,DateTime CreatedAtUtc,DateTime? SentAtUtc);
 public sealed record ProformaInvoiceSummary(uint Id,string Number,string Status,decimal TotalAmount,string Currency,DateTime CreatedAtUtc,DateTime? IssuedAtUtc);
+public sealed record ProformaInvoicePriceItem(uint Id,string ProductName,decimal Quantity,string Unit,decimal UnitPrice,decimal LineAmount);
+public sealed record ProformaInvoicePricing(uint InvoiceId,decimal ProductAmount,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,decimal TotalAmount,IReadOnlyList<ProformaInvoicePriceItem> Items);
+public sealed record UpdateProformaInvoicePriceItem(uint Id,decimal UnitPrice);
+public sealed record UpdateProformaInvoicePricingCommand(uint InvoiceId,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,List<UpdateProformaInvoicePriceItem> Items);
 public sealed record ProcurementLifecycleResult(uint PlanId,string PlanStatus,uint ProformaInvoiceId,string ProformaInvoiceNumber,string ProformaInvoiceStatus);
-public sealed record SourcingWorkspace(IReadOnlyList<ProcurementPlanItemOption> PlanItems,IReadOnlyList<SupplierListItem> Suppliers,IReadOnlyList<CandidateProductItem> Candidates,IReadOnlyList<InquiryItem> Inquiries,IReadOnlyList<SampleItem> Samples,IReadOnlyList<MailTaskItem> MailTasks,ProformaInvoiceSummary? ProformaInvoice);
+public sealed record SourcingWorkspace(IReadOnlyList<ProcurementPlanItemOption> PlanItems,IReadOnlyList<SupplierListItem> Suppliers,IReadOnlyList<CandidateProductItem> Candidates,IReadOnlyList<InquiryItem> Inquiries,IReadOnlyList<SampleItem> Samples,IReadOnlyList<MailTaskItem> MailTasks,ProformaInvoiceSummary? ProformaInvoice,ProformaInvoicePricing? ProformaInvoicePricing);
 public sealed record SaveCandidateProductCommand(uint? Id,uint PlanItemId,uint? SupplierId,string ProductName,string? ReferenceUrl,string? SpecificationJson,string Status);
 public sealed record SaveInquiryCommand(uint? Id,uint PlanItemId,uint SupplierId,string Currency,decimal? UnitPrice,decimal? Moq,uint? LeadDays,DateTime? ValidUntil,string? Terms,string Status,string? Notes);
 public sealed record SaveSampleCommand(uint? Id,uint PlanItemId,uint? SupplierId,decimal Quantity,string Status,decimal CostCny,string? TrackingNumber,string? Notes);
