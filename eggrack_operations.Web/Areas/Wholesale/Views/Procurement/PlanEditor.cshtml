@@ -1,0 +1,74 @@
+@model eggrack_operations.Areas.Wholesale.Models.ProcurementPlanEditorPageViewModel
+@{
+    var isUpdate = Model.Plan is not null;
+    var pageTitle = isUpdate ? "更新采购计划" : "创建采购计划";
+    var planTitle = Model.Plan?.PlanTitle ?? $"{Model.Request.RequestNumber} 采购计划";
+    var startTime = Model.Plan?.PlannedStartDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.ToString("yyyy-MM-dd");
+    var completedTime = Model.Plan?.CompletedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "计划完成时自动记录";
+}
+<section class="proc proc-plan-editor-page"
+         data-plan-editor-page
+         data-request-id="@Model.Request.Id"
+         data-plan-id="@Model.Plan?.Id"
+         data-current-version-id="@(Model.Plan?.RequestVersionId ?? Model.Request.CurrentVersionId)">
+@await Component.InvokeAsync("PageHeader", new {
+    title = pageTitle,
+    subtitle = isUpdate ? "维护内部采购计划，客户申请仅作为参考资料" : $"基于 {Model.Request.RequestNumber} 建立独立的内部采购计划",
+    parentTitle = "采购申请",
+    parentUrl = Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" }),
+    secondaryText = "返回申请列表",
+    secondaryUrl = Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" })
+})
+
+<form data-plan-form>
+ @Html.AntiForgeryToken()
+ <input type="hidden" name="requestId" value="@Model.Request.Id">
+ <div class="request-overview mb-3">
+  <div><small>申请编号</small><strong>@Model.Request.RequestNumber</strong></div>
+  <div><small>客户</small><strong data-request-customer>@Model.Request.CustomerName</strong></div>
+  <div><small>邮箱</small><strong data-request-email>@Model.Request.Email</strong></div>
+  <div><small>提交时间</small><strong data-request-submitted>@Model.Request.SubmittedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong></div>
+  <div><small>当前计划</small><strong>@(Model.Plan?.PlanNumber ?? "未创建")</strong></div>
+  <div><small>参考版本</small><strong>V@(Model.Request.CurrentVersion)</strong></div>
+ </div>
+
+ <div class="plan-profile-card">
+  <div class="section-heading"><div><h6>内部计划信息</h6><p>计划名称和生命周期时间由系统维护，人员只能调整业务资料。</p></div></div>
+  <div class="row g-3">
+   <div class="col-lg-6"><label class="form-label">计划名称</label><input class="form-control system-field" value="@planTitle" readonly aria-readonly="true"><div class="form-text">根据申请编号自动生成，创建后不可更改。</div></div>
+   <div class="col-lg-3 col-md-6"><label class="form-label">计划开始时间</label><input class="form-control system-field" value="@startTime" readonly aria-readonly="true"><div class="form-text">默认为计划创建时间。</div></div>
+   <div class="col-lg-3 col-md-6"><label class="form-label">完成时间</label><input class="form-control system-field" value="@completedTime" readonly aria-readonly="true"><div class="form-text">提交完成时由系统自动记录。</div></div>
+   <div class="col-lg-3 col-md-6"><label class="form-label">优先级</label><select class="form-select" name="Priority" data-priority><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option></select></div>
+   <div class="col-lg-3 col-md-6"><label class="form-label">采购人员</label><select class="form-select" name="AssignedBuyerStaffId" data-buyer required><option value="">请选择开发部采购人员</option>@foreach(var buyer in Model.Buyers){<option value="@buyer.Id">@buyer.Name</option>}</select></div>
+   <div class="col-lg-3 col-md-6"><label class="form-label">参考申请版本</label><select class="form-select" name="RequestVersionId" data-version required><option value="">正在加载版本…</option></select></div>
+   <div class="col-lg-3 col-md-6"><label class="form-label">计划编号</label><input class="form-control system-field" value="@(Model.Plan?.PlanNumber ?? "保存后生成")" readonly aria-readonly="true"></div>
+   <div class="col-12"><label class="form-label">内部说明</label><textarea class="form-control" name="InternalNote" data-internal-note rows="3" placeholder="采购策略、交付要求、风险提示或内部协作说明"></textarea></div>
+  </div>
+ </div>
+
+ <div class="alert alert-info py-2 mt-3 mb-0 small"><i class="bi bi-info-circle me-1"></i>客户申请仅作参考。预填后会生成独立的计划产品，后续申请变更不会覆盖计划内容。</div>
+
+ <div class="editor-workspace mt-3">
+  <div class="request-version-detail">
+   <div class="d-flex justify-content-between align-items-center mb-2"><h6 class="mb-0">申请版本与附件</h6><span class="small text-secondary" data-version-summary></span></div>
+   <div data-version-items class="text-secondary small">正在加载申请版本…</div>
+  </div>
+  <div class="plan-products-editor">
+   <div class="section-heading"><div><h6>内部计划产品</h6><p>至少录入一项；可引用申请内容后再修改，也可完全手工录入。</p></div><button class="btn btn-sm btn-outline-primary" type="button" data-add-plan-item><i class="bi bi-plus-lg"></i> 手工新增</button></div>
+   <div class="input-group mb-3"><select class="form-select" data-reference-item><option value="">选择申请产品作为预填参考</option></select><button class="btn btn-outline-secondary" type="button" data-add-reference-item>预填到计划</button></div>
+   <div data-plan-items-editor></div>
+  </div>
+ </div>
+
+ <div class="alert alert-danger d-none mt-3 mb-0" data-error></div>
+ <div class="editor-actions">
+  <a class="btn btn-outline-secondary" href="@Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" })">取消</a>
+  <button class="btn btn-primary" type="submit" data-submit>@(isUpdate ? "保存计划" : "创建计划")</button>
+ </div>
+</form>
+</section>
+@section Styles { <link rel="stylesheet" href="~/css/pages/procurement.css" asp-append-version="true" /> }
+@section Scripts {
+ <script src="~/js/pages/procurement-request-view.js" asp-append-version="true"></script>
+ <script src="~/js/pages/procurement-plan-editor.js" asp-append-version="true"></script>
+}

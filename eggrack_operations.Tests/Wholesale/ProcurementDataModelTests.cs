@@ -23,7 +23,6 @@ public sealed class ProcurementDataModelTests
         {
             RequestVersionId = 7,
             AssignedBuyerStaffId = 3,
-            PlanTitle = "内部采购计划",
             Priority = "high",
             Items = [new SaveProcurementPlanItemCommand { ProductName = "内部产品", Quantity = 12, Unit = "pcs" }]
         };
@@ -32,5 +31,9 @@ public sealed class ProcurementDataModelTests
         Assert.Equal("内部产品", input.Items[0].ProductName);
         Assert.Null(input.Items[0].RequestItemId);
         Assert.True(typeof(ProcurementPlanEditor).GetProperty(nameof(ProcurementPlanEditor.Items))!.CanWrite);
+        Assert.Null(typeof(SaveProcurementPlanInput).GetProperty("PlanTitle"));
+        Assert.Null(typeof(SaveProcurementPlanInput).GetProperty("PlannedStartDate"));
+        Assert.Null(typeof(SaveProcurementPlanInput).GetProperty("TargetCompletionDate"));
+        Assert.True(typeof(ProcurementPlanEditor).GetProperty(nameof(ProcurementPlanEditor.CompletedAtUtc))!.CanWrite);
     }
 }

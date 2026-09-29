@@ -9,6 +9,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
     private const string DatabaseName = "Eggrack";
 
     private sealed record PlanIdentityRow(uint Id,uint RequestId,uint RequestVersionId,byte Status);
+    private sealed record PlanRequestVersionRow(uint Id,uint RequestId,uint VersionNumber,string RequestNumber,string CustomerName,string Email,DateTime SubmittedAtUtc);
 
     private sealed record ProcurementPlanRow(
         uint Id, string PlanNumber, string RequestNumber, uint RequestVersion, string CustomerName,
@@ -25,7 +26,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           FROM_UNIXTIME(r.last_submitted_at) SubmittedAtUtc,
           p.id PlanId,p.plan_number PlanNumber,p.request_version_id PlannedVersionId,p.assigned_buyer_id BuyerId,s.staff_name BuyerName,
           p.plan_title PlanTitle,p.priority_code Priority,p.planned_start_date PlannedStartDate,
-          p.target_completion_date TargetCompletionDate,p.internal_note InternalNote
+          p.target_completion_date TargetCompletionDate,FROM_UNIXTIME(p.completed_at) CompletedAtUtc,p.internal_note InternalNote
         FROM purchase_requests r
         JOIN purchase_request_versions v ON v.request_id=r.id AND v.version_number=r.current_version
         LEFT JOIN purchase_plans p ON p.request_id=r.id
@@ -40,6 +41,30 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         return await db.QueryAsync<PurchaseRequestSource>(sql,
           ProcurementScopePolicy.Params(scope,new{Keyword=string.IsNullOrWhiteSpace(keyword)?null:keyword.Trim()}),
           cancellationToken:token);
+    }
+
+    public async Task<PurchaseRequestSource?> GetPurchaseRequestAsync(uint requestId,CancellationToken token=default)
+    {
+        var scope=scopePolicy.Current();
+        const string sql="""
+        SELECT r.id Id,v.id CurrentVersionId,r.request_number RequestNumber,r.current_version CurrentVersion,
+          COALESCE(v.company_name,v.contact_name) CustomerName,r.email Email,
+          FROM_UNIXTIME(r.last_submitted_at) SubmittedAtUtc,
+          p.id PlanId,p.plan_number PlanNumber,p.request_version_id PlannedVersionId,p.assigned_buyer_id BuyerId,s.staff_name BuyerName,
+          p.plan_title PlanTitle,p.priority_code Priority,p.planned_start_date PlannedStartDate,
+          p.target_completion_date TargetCompletionDate,FROM_UNIXTIME(p.completed_at) CompletedAtUtc,p.internal_note InternalNote
+        FROM purchase_requests r
+        JOIN purchase_request_versions v ON v.request_id=r.id AND v.version_number=r.current_version
+        LEFT JOIN purchase_plans p ON p.request_id=r.id
+        LEFT JOIN eggrack_auth_staff s ON s.id=p.assigned_buyer_id
+        WHERE r.id=@RequestId
+          AND (@ScopeAll=1 OR (@ScopeSelf=1 AND p.assigned_buyer_id=@ScopeStaffId)
+            OR p.department_id IN @ScopeDepartmentIds)
+        LIMIT 1
+        """;
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        return (await db.QueryAsync<PurchaseRequestSource>(
+          sql,ProcurementScopePolicy.Params(scope,new{RequestId=requestId}),cancellationToken:token)).SingleOrDefault();
     }
 
     public async Task<IReadOnlyList<ProcurementPlanListItem>> GetPlansAsync(CancellationToken token=default)
@@ -73,10 +98,10 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
     public async Task<uint> CreatePlanAsync(uint requestId,SaveProcurementPlanInput input,ulong staffId,CancellationToken token=default)
     {
         ValidatePlanInput(input);
-        const string versionSql="SELECT id Id,request_id RequestId,version_number VersionNumber,COALESCE(company_name,contact_name) CustomerName,email Email,FROM_UNIXTIME(submitted_at) SubmittedAtUtc FROM purchase_request_versions WHERE id=@VersionId AND request_id=@RequestId";
+        const string versionSql="SELECT v.id Id,v.request_id RequestId,v.version_number VersionNumber,r.request_number RequestNumber,COALESCE(v.company_name,v.contact_name) CustomerName,v.email Email,FROM_UNIXTIME(v.submitted_at) SubmittedAtUtc FROM purchase_request_versions v JOIN purchase_requests r ON r.id=v.request_id WHERE v.id=@VersionId AND v.request_id=@RequestId";
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         var departmentId=await scopePolicy.ResolveBuyerDepartmentAsync(db,input.AssignedBuyerStaffId,token);
-        var version=(await db.QueryAsync<PurchaseRequestVersionSource>(versionSql,new{RequestId=requestId,VersionId=input.RequestVersionId},cancellationToken:token)).SingleOrDefault()
+        var version=(await db.QueryAsync<PlanRequestVersionRow>(versionSql,new{RequestId=requestId,VersionId=input.RequestVersionId},cancellationToken:token)).SingleOrDefault()
             ?? throw new InvalidOperationException("采购申请版本不存在。");
         await db.BeginTransactionAsync(cancellationToken:token);
         try
@@ -85,10 +110,12 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             if(existing.Count>0) throw new InvalidOperationException("该采购申请已经创建采购计划，不能重复创建。");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var number="PP-"+DateTime.UtcNow.ToString("yyMMdd-HHmmssfff");
+            var title=$"{version.RequestNumber} 采购计划";
+            var startDate=DateTime.Now.Date;
             await db.ExecuteAsync("""
             INSERT purchase_plans(plan_number,plan_title,request_id,request_version_id,status,priority_code,planned_start_date,target_completion_date,assigned_buyer_id,department_id,assigned_by,assigned_at,internal_note,created_by,updated_by,created_at,updated_at)
             VALUES(@Number,@Title,@RequestId,@VersionId,@Status,@Priority,@StartDate,@TargetDate,@BuyerId,@DepartmentId,@StaffId,@AssignedAt,@InternalNote,@StaffId,@StaffId,@Now,@Now)
-            """,new{Number=number,Title=input.PlanTitle.Trim(),RequestId=requestId,VersionId=input.RequestVersionId,Status=2,Priority=input.Priority,StartDate=input.PlannedStartDate,TargetDate=input.TargetCompletionDate,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,AssignedAt=now,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
+            """,new{Number=number,Title=title,RequestId=requestId,VersionId=input.RequestVersionId,Status=2,Priority=input.Priority,StartDate=startDate,TargetDate=(DateTime?)null,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,AssignedAt=now,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
             var planId=(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
             await SynchronizePlanItemsAsync(db,planId,requestId,input.RequestVersionId,input.Items,staffId,now,token);
             await db.CommitAsync(token);
@@ -221,7 +248,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
     {
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,planId,token);
-        var plan=(await db.QueryAsync<ProcurementPlanEditor>("SELECT id Id,request_id RequestId,request_version_id RequestVersionId,assigned_buyer_id AssignedBuyerStaffId,plan_number PlanNumber,COALESCE(plan_title,plan_number) PlanTitle,priority_code Priority,planned_start_date PlannedStartDate,target_completion_date TargetCompletionDate,internal_note InternalNote FROM purchase_plans WHERE id=@PlanId",new{PlanId=planId},cancellationToken:token)).SingleOrDefault()
+        var plan=(await db.QueryAsync<ProcurementPlanEditor>("SELECT id Id,request_id RequestId,request_version_id RequestVersionId,assigned_buyer_id AssignedBuyerStaffId,plan_number PlanNumber,COALESCE(plan_title,plan_number) PlanTitle,priority_code Priority,planned_start_date PlannedStartDate,target_completion_date TargetCompletionDate,FROM_UNIXTIME(completed_at) CompletedAtUtc,internal_note InternalNote FROM purchase_plans WHERE id=@PlanId",new{PlanId=planId},cancellationToken:token)).SingleOrDefault()
           ?? throw new InvalidOperationException("采购计划不存在。");
         plan.Items=await db.QueryAsync<ProcurementPlanItemOption>("SELECT id Id,request_item_id RequestItemId,product_name ProductName,quantity Quantity,quantity_unit Unit,sku Sku,brand Brand,description Description,specifications Specifications,color Color,size Size,packaging_requirements PackagingRequirements,customization_requirements CustomizationRequirements,internal_note InternalNote FROM purchase_plan_items WHERE plan_id=@PlanId ORDER BY sort_order,id",new{PlanId=planId},cancellationToken:token);
         return plan;
@@ -242,7 +269,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             var versions=await db.QueryAsync<uint>("SELECT id FROM purchase_request_versions WHERE id=@VersionId AND request_id=@RequestId",new{VersionId=input.RequestVersionId,plan.RequestId},cancellationToken:token);
             if(versions.Count!=1) throw new InvalidOperationException("采购申请版本与计划不匹配。");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await db.ExecuteAsync("UPDATE purchase_plans SET plan_title=@Title,request_version_id=@VersionId,priority_code=@Priority,planned_start_date=@StartDate,target_completion_date=@TargetDate,assigned_buyer_id=@BuyerId,department_id=@DepartmentId,assigned_by=@StaffId,assigned_at=@Now,internal_note=@InternalNote,status=2,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{PlanId=planId,Title=input.PlanTitle.Trim(),VersionId=input.RequestVersionId,Priority=input.Priority,StartDate=input.PlannedStartDate,TargetDate=input.TargetCompletionDate,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
+            await db.ExecuteAsync("UPDATE purchase_plans SET request_version_id=@VersionId,priority_code=@Priority,assigned_buyer_id=@BuyerId,department_id=@DepartmentId,assigned_by=@StaffId,assigned_at=@Now,internal_note=@InternalNote,status=2,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{PlanId=planId,VersionId=input.RequestVersionId,Priority=input.Priority,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
             await SynchronizePlanItemsAsync(db,planId,plan.RequestId,input.RequestVersionId,input.Items,staffId,now,token);
             await db.CommitAsync(token);
         }
@@ -251,11 +278,8 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
 
     private static void ValidatePlanInput(SaveProcurementPlanInput input)
     {
-        if(string.IsNullOrWhiteSpace(input.PlanTitle))throw new InvalidOperationException("请填写采购计划名称。");
-        if(input.PlanTitle.Trim().Length>200)throw new InvalidOperationException("采购计划名称不能超过 200 个字符。");
         if(input.AssignedBuyerStaffId==0)throw new InvalidOperationException("请选择采购人员。");
         if(input.Priority is not("low" or "normal" or "high" or "urgent"))throw new InvalidOperationException("采购计划优先级无效。");
-        if(input.PlannedStartDate.HasValue&&input.TargetCompletionDate.HasValue&&input.TargetCompletionDate<input.PlannedStartDate)throw new InvalidOperationException("目标完成日期不能早于计划开始日期。");
         if(input.Items is null||input.Items.Count==0)throw new InvalidOperationException("请至少录入一个内部计划产品。");
         if(input.Items.Any(x=>string.IsNullOrWhiteSpace(x.ProductName)||x.Quantity<=0||string.IsNullOrWhiteSpace(x.Unit)))throw new InvalidOperationException("计划产品必须填写名称、有效数量和单位。");
         if(input.Items.Where(x=>x.Id.HasValue).GroupBy(x=>x.Id).Any(group=>group.Count()>1))throw new InvalidOperationException("计划产品数据重复，请刷新后重试。");

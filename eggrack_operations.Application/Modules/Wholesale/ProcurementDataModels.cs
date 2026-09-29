@@ -18,6 +18,7 @@ public sealed class PurchaseRequestSource
     public string Priority { get; set; } = "normal";
     public DateTime? PlannedStartDate { get; set; }
     public DateTime? TargetCompletionDate { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
     public string? InternalNote { get; set; }
     public bool HasPlan => PlanId.HasValue;
 }
@@ -62,10 +63,7 @@ public sealed class SaveProcurementPlanInput
 {
     public uint RequestVersionId { get; set; }
     public ulong AssignedBuyerStaffId { get; set; }
-    public string PlanTitle { get; set; } = string.Empty;
     public string Priority { get; set; } = "normal";
-    public DateTime? PlannedStartDate { get; set; }
-    public DateTime? TargetCompletionDate { get; set; }
     public string? InternalNote { get; set; }
     public List<SaveProcurementPlanItemCommand> Items { get; set; } = [];
 }
@@ -80,6 +78,7 @@ public sealed class ProcurementPlanEditor
     public string Priority { get; set; } = "normal";
     public DateTime? PlannedStartDate { get; set; }
     public DateTime? TargetCompletionDate { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
     public string? InternalNote { get; set; }
     public IReadOnlyList<ProcurementPlanItemOption> Items { get; set; } = [];
 }

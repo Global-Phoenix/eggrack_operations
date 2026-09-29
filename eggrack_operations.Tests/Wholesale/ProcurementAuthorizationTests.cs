@@ -17,6 +17,18 @@ public sealed class ProcurementAuthorizationTests
     }
 
     [Theory]
+    [InlineData(nameof(ProcurementController.CreatePlanPage), "wholesale.purchase-plan.create")]
+    [InlineData(nameof(ProcurementController.EditPlanPage), "wholesale.purchase-plan.update")]
+    public void EditorPagesRequireSpecificPermission(string methodName,string expectedPermission)
+    {
+        var method=typeof(ProcurementController).GetMethod(methodName)
+            ?? throw new InvalidOperationException(methodName);
+        Assert.NotEmpty(method.GetCustomAttributes<HttpGetAttribute>());
+        var permission=Assert.Single(method.GetCustomAttributes<InternalPermissionAttribute>());
+        Assert.Equal(expectedPermission,Assert.Single(permission.Arguments!));
+    }
+
+    [Theory]
     [InlineData(nameof(ProcurementController.Create), "wholesale.purchase-plan.create")]
     [InlineData(nameof(ProcurementController.Update), "wholesale.purchase-plan.update")]
     [InlineData(nameof(ProcurementController.SaveCosts), "wholesale.purchase-cost.edit")]

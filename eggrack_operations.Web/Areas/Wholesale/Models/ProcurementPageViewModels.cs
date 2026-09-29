@@ -3,7 +3,11 @@ using Eggrack.Operations.Application.Modules.Wholesale;
 namespace eggrack_operations.Areas.Wholesale.Models;
 
 public sealed record PurchaseRequestsPageViewModel(
-    IReadOnlyList<PurchaseRequestSource> Requests,
+    IReadOnlyList<PurchaseRequestSource> Requests);
+
+public sealed record ProcurementPlanEditorPageViewModel(
+    PurchaseRequestSource Request,
+    ProcurementPlanEditor? Plan,
     IReadOnlyList<ProcurementBuyerOption> Buyers);
 
 public sealed record SourcingPageViewModel(

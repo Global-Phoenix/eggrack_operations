@@ -21,8 +21,35 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     [HttpGet("requests")]
     public async Task<IActionResult> PurchaseRequests(CancellationToken token) =>
         View("Requests",new PurchaseRequestsPageViewModel(
-            await procurement.GetPurchaseRequestsAsync(null,token),
-            await procurement.GetBuyersAsync(token)));
+            await procurement.GetPurchaseRequestsAsync(null,token)));
+
+    [HttpGet("requests/{requestId:long}/plan")]
+    [InternalPermission("wholesale.purchase-plan.create")]
+    public async Task<IActionResult> CreatePlanPage(uint requestId,CancellationToken token)
+    {
+        var request=await procurement.GetPurchaseRequestAsync(requestId,token);
+        if(request is null)return NotFound();
+        if(request.HasPlan)return RedirectToAction(nameof(EditPlanPage),new{planId=request.PlanId});
+        ViewData["Title"]="创建采购计划";
+        return View("PlanEditor",new ProcurementPlanEditorPageViewModel(
+            request,null,await procurement.GetBuyersAsync(token)));
+    }
+
+    [HttpGet("plans/{planId:long}/edit")]
+    [InternalPermission("wholesale.purchase-plan.update")]
+    public async Task<IActionResult> EditPlanPage(uint planId,CancellationToken token)
+    {
+        try
+        {
+            var plan=await procurement.GetPlanEditorAsync(planId,token);
+            var request=await procurement.GetPurchaseRequestAsync(plan.RequestId,token);
+            if(request is null)return NotFound();
+            ViewData["Title"]="更新采购计划";
+            return View("PlanEditor",new ProcurementPlanEditorPageViewModel(
+                request,plan,await procurement.GetBuyersAsync(token)));
+        }
+        catch(InvalidOperationException){return NotFound();}
+    }
 
     [HttpGet("sourcing")]
     public async Task<IActionResult> Sourcing(CancellationToken token) =>
