@@ -1,0 +1,53 @@
+@model PurchasePlanCostTabViewModel
+@{
+ var plan=Model.Plan;
+ var actualMargin=plan.ApprovedQuoteUsd>0?(plan.ApprovedQuoteUsd-plan.TotalCostUsd)/plan.ApprovedQuoteUsd:0;
+ var quoteWarnings=new List<string>();
+ if(plan.ApprovedQuoteUsd>0&&plan.ApprovedQuoteUsd<=4000)quoteWarnings.Add("最终报价未高于 USD 4,000");
+ if(plan.ApprovedQuoteUsd>0&&(actualMargin<.10m||actualMargin>.20m))quoteWarnings.Add("实际利润率不在 10%–20%");
+ string PiStatus(byte value)=>value switch{1=>"草稿",2=>"待签发",3=>"已签发",4=>"已取消",_=>"未知"};
+}
+<div class="cost-quote-layout">
+ <section class="ui-panel p-4">
+  <div class="er-section-header"><div><h2>成本核算</h2><p>产品采购成本由数量 × 采购单价服务端汇总。</p></div></div>
+  <form asp-action="SavePlanCostQuote" asp-route-planId="@plan.Id" method="post" class="row g-3">
+   <div class="col-md-6"><label class="form-label">产品采购成本 CNY</label><input class="form-control" value="@plan.Items.Sum(x=>x.LineCostCny??0).ToString("0.00")" readonly></div>
+   <div class="col-md-6"><label class="form-label">包装 CNY</label><input class="form-control" name="PackagingCostCny" type="number" min="0" step="0.01" value="@plan.PackagingCostCny"></div>
+   <div class="col-md-6"><label class="form-label">样品 CNY</label><input class="form-control" name="SampleCostCny" type="number" min="0" step="0.01" value="@plan.SampleCostCny"></div>
+   <div class="col-md-6"><label class="form-label">国内运输 CNY</label><input class="form-control" name="DomesticShippingCny" type="number" min="0" step="0.01" value="@plan.DomesticShippingCny"></div>
+   <div class="col-md-6"><label class="form-label">国际运输 CNY</label><input class="form-control" name="InternationalShippingCny" type="number" min="0" step="0.01" value="@plan.InternationalShippingCny"></div>
+   <div class="col-md-6"><label class="form-label">其他 CNY</label><input class="form-control" name="OtherCostCny" type="number" min="0" step="0.01" value="@plan.OtherCostCny"></div>
+   <div class="col-md-4"><label class="form-label">1 USD = X CNY</label><input class="form-control" name="CnyPerUsd" type="number" min=".000001" step=".000001" value="@(plan.CnyPerUsd>0?plan.CnyPerUsd:7.12m)" required></div>
+   <div class="col-md-4"><label class="form-label">利润方式</label><select class="form-select" name="ProfitMethod"><option value="1" selected="@(plan.ProfitMethod==1?"selected":null)">Markup</option><option value="2" selected="@(plan.ProfitMethod!=1?"selected":null)">Gross Margin</option></select></div>
+   <div class="col-md-4"><label class="form-label">利润率</label><input class="form-control" name="ProfitRate" type="number" min="0" max=".99" step=".0001" value="@(plan.ProfitRate>0?plan.ProfitRate:.15m)" required><div class="form-text">0.15 表示 15%</div></div>
+   @if(Model.CanManageCosts&&plan.Status is 1 or 2 or 3 or 7){<div class="col-12"><button class="btn btn-primary" type="submit">保存成本与建议报价</button></div>}
+  </form>
+ </section>
+ <aside class="ui-action-rail">
+  <section><h3>报价结果</h3><dl class="prototype-facts"><div><dt>Total CNY</dt><dd>@(plan.TotalCostCny>0?plan.TotalCostCny.ToString("N2"):"—")</dd></div><div><dt>Total USD</dt><dd>@(plan.TotalCostUsd>0?plan.TotalCostUsd.ToString("N2"):"—")</dd></div><div><dt>Approved Quote USD</dt><dd>@(plan.ApprovedQuoteUsd>0?plan.ApprovedQuoteUsd.ToString("N2"):"—")</dd></div><div><dt>实际利润率</dt><dd>@(plan.ApprovedQuoteUsd>0?actualMargin.ToString("P2"):"—")</dd></div></dl>
+  @if(quoteWarnings.Count>0){<div class="quote-warning"><i class="bi bi-exclamation-triangle"></i><span>@($"{string.Join("；",quoteWarnings)}。Boss 可特殊审批。")</span></div>}
+  </section>
+  @if(Model.CanSubmitQuote&&plan.Status==2){<section><h3>提交报价</h3><p>提交后进入 Boss 最终确认。</p><form asp-action="SubmitPlanQuote" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary w-100" type="submit">提交 Boss 确认</button></form></section>}
+  @if(Model.CanFinalApprove&&plan.Status==6){<section><h3>Boss 最终确认</h3><form asp-action="BossApprovePlanQuote" asp-route-planId="@plan.Id" method="post"><label class="form-label">最终报价 USD</label><input class="form-control mb-2" name="quoteUsd" type="number" min=".01" step=".01" value="@plan.ApprovedQuoteUsd" required><label class="form-label">审批说明</label><textarea class="form-control mb-3" name="note" rows="2"></textarea><button class="btn btn-primary w-100" type="submit">确认最终报价</button></form></section>}
+ </aside>
+</div>
+<section class="ui-panel p-4 mt-3">
+ <div class="er-section-header"><div><h2>Proforma Invoice</h2><p>PI 是客户销售价格快照，不展示内部采购单价。</p></div>@if((plan.Invoice is null||plan.Invoice.Status==4)&&plan.Status==4&&Model.CanManagePi){<form asp-action="GeneratePlanPi" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary" type="submit">生成 PI</button></form>}</div>
+ @if(plan.Invoice is null){<div class="compact-empty"><i class="bi bi-receipt"></i><span>Boss 确认报价后可以生成 PI。</span></div>}
+ else{
+  var invoice=plan.Invoice;
+  <div class="pi-editor-header"><div><strong>@invoice.Number</strong><span class="ui-status ui-status-@(invoice.Status==3?"success":invoice.Status==4?"danger":"warning")"><i></i>@PiStatus(invoice.Status)</span></div><span>@(string.IsNullOrWhiteSpace(invoice.CompanyName)?invoice.ContactName:invoice.CompanyName) · @invoice.Email · <a asp-action="ProformaInvoiceDetails" asp-route-invoiceId="@invoice.Id">独立详情</a></span></div>
+  <form asp-action="SavePlanPi" asp-route-planId="@plan.Id" method="post">
+   <input type="hidden" name="InvoiceId" value="@invoice.Id">
+   <div class="table-responsive"><table class="table align-middle"><thead><tr><th>客户产品</th><th>数量</th><th>客户销售单价 USD</th><th class="numeric">金额</th></tr></thead><tbody>
+   @for(var i=0;i<invoice.Items.Count;i++){var item=invoice.Items[i];<tr><td><input type="hidden" name="Items[@i].Id" value="@item.Id"><strong>@item.ProductName</strong></td><td>@item.Quantity.ToString("0.###") @item.Unit</td><td><input class="form-control" name="Items[@i].UnitPrice" type="number" min="0" step=".0001" value="@item.UnitPrice" readonly="@(invoice.Status>=3?"readonly":null)"></td><td class="numeric">USD @item.LineAmount.ToString("N2")</td></tr>}
+   </tbody></table></div>
+   <div class="row g-3">
+    <div class="col-md-3"><label class="form-label">Packaging Fee</label><input class="form-control" name="PackagingFee" type="number" min="0" step=".01" value="@invoice.PackagingFee" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Shipping Fee</label><input class="form-control" name="ShippingFee" type="number" min="0" step=".01" value="@invoice.ShippingFee" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Other Fee</label><input class="form-control" name="OtherFee" type="number" min="0" step=".01" value="@invoice.OtherFee" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Discount</label><input class="form-control" name="DiscountAmount" type="number" min="0" step=".01" value="@invoice.DiscountAmount" readonly="@(invoice.Status>=3?"readonly":null)"></div>
+    <div class="col-md-6"><label class="form-label">Payment Terms</label><textarea class="form-control" name="PaymentTerms" rows="2" readonly="@(invoice.Status>=3?"readonly":null)">@invoice.PaymentTerms</textarea></div><div class="col-md-6"><label class="form-label">Payment Instructions</label><textarea class="form-control" name="PaymentInstructions" rows="2" readonly="@(invoice.Status>=3?"readonly":null)">@invoice.PaymentInstructions</textarea></div><div class="col-md-4"><label class="form-label">Trade Terms</label><input class="form-control" name="TradeTerms" value="@invoice.TradeTerms" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Delivery Terms</label><input class="form-control" name="DeliveryTerms" value="@invoice.DeliveryTerms" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Lead Time</label><input class="form-control" name="LeadTime" value="@invoice.LeadTime" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Valid Until</label><input class="form-control" name="ValidUntil" type="date" value="@invoice.ValidUntil?.ToString("yyyy-MM-dd")" readonly="@(invoice.Status>=3?"readonly":null)"></div>
+    <div class="col-md-8 d-flex align-items-end justify-content-end gap-2"><strong class="me-auto">PI Total: USD @invoice.TotalAmount.ToString("N2")</strong>@if(Model.CanManagePi&&invoice.Status is 1 or 2){<button class="btn btn-primary" type="submit">保存 PI</button>}@if(Model.CanIssuePi&&invoice.Status==2){<button class="btn btn-success" type="submit" formaction="@Url.Action("IssuePlanPi",new{planId=plan.Id})">签发 PI</button>}</div>
+   </div>
+  </form>
+  @if(invoice.Status==3&&plan.Status==4&&Model.CanExecuteProcurement){<form asp-action="CompletePurchasePlan" asp-route-planId="@plan.Id" method="post" class="mt-3 text-end"><button class="btn btn-success" type="submit">完成采购计划</button></form>}
+ }
+</section>

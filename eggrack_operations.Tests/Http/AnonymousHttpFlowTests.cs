@@ -26,6 +26,7 @@ public sealed class AnonymousHttpFlowTests : IClassFixture<AnonymousHttpFlowTest
     [InlineData("/")]
     [InlineData("/wholesale/procurement/requests")]
     [InlineData("/wholesale/procurement/plans")]
+    [InlineData("/wholesale/procurement/plans/1/tabs/sourcing")]
     [InlineData("/security/staff")]
     [InlineData("/security/departments")]
     [InlineData("/files")]
@@ -61,6 +62,7 @@ public sealed class AnonymousHttpFlowTests : IClassFixture<AnonymousHttpFlowTest
     [InlineData("/css/pages/file-center.css","text/css")]
     [InlineData("/js/pages/file-center.js","text/javascript")]
     [InlineData("/js/layout/workspace-tabs.js","text/javascript")]
+    [InlineData("/js/pages/procurement-plan-details.js","text/javascript")]
     public async Task PublicShellAssetsLoadWithoutAuthentication(string path,string expectedMediaType)
     {
         using var client=CreateClient();

@@ -1,0 +1,15 @@
+@model PurchasePlanActivityTabViewModel
+@functions {
+ private static string Display(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
+ private static string EventName(string code)=>code switch{
+  "cost.quote-saved"=>"保存成本与报价","cost.draft-saved"=>"保存成本草稿",
+  "quote.submitted-to-boss"=>"提交 Boss 确认","quote.boss-approved"=>"Boss 确认报价",
+  "pi.generated"=>"生成 PI","pi.approved"=>"保存 PI","plan.completed"=>"完成采购计划",
+  "pi.cancelled"=>"取消 PI","pi.revision-created"=>"创建 PI 修订版本",
+  "inquiry.created"=>"创建供应商报价","inquiry.revised"=>"修订供应商报价","inquiry.selected"=>"选用供应商报价",
+  _=>code};
+}
+<div class="ui-timeline">
+@foreach(var item in Model.Events){<article><span class="ui-timeline-dot"></span><div><strong>@EventName(item.EventCode)</strong><p>@Display(item.Note)</p><small>@item.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm") · Staff #@item.ActorId</small></div></article>}
+@if(Model.Events.Count==0){<div class="compact-empty"><i class="bi bi-clock-history"></i><span>暂无采购计划操作记录。</span></div>}
+</div>

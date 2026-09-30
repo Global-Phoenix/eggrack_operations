@@ -29,11 +29,27 @@ public sealed class PurchasePlanDetail
     public decimal ProfitRate { get; set; }
     public decimal ApprovedQuoteUsd { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
+    public int InquiryCount { get; set; }
+    public int FileCount { get; set; }
+    public int EventCount { get; set; }
+    public byte? LatestInvoiceStatus { get; set; }
     public IReadOnlyList<PurchasePlanItemDetail> Items { get; set; } = [];
     public IReadOnlyList<PurchasePlanFileDetail> Files { get; set; } = [];
     public IReadOnlyList<ProcurementWorkflowEventItem> Events { get; set; } = [];
     public ProformaInvoiceDetail? Invoice { get; set; }
 }
+
+public sealed record PurchasePlanSourcingData(
+    IReadOnlyList<SupplierListItem> Suppliers,
+    IReadOnlyList<InquiryItem> Inquiries,
+    IReadOnlyList<SampleItem> Samples);
+
+public sealed record PurchasePlanFilesData(
+    IReadOnlyList<PurchasePlanFileDetail> Files,
+    IReadOnlyList<SupplierListItem> Suppliers,
+    IReadOnlyList<InquiryItem> Inquiries,
+    IReadOnlyList<SampleItem> Samples,
+    IReadOnlyList<ProcurementManagedOption> FileTypes);
 
 public sealed class PurchasePlanItemDetail
 {

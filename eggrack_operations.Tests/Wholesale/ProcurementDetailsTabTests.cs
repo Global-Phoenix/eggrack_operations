@@ -15,4 +15,14 @@ public sealed class ProcurementDetailsTabTests
 
         Assert.Equal("plans/{planId:long}/details",route.Template);
     }
+
+    [Fact]
+    public void BusinessTabsUseOneLazyLoadRoute()
+    {
+        var method=typeof(ProcurementController).GetMethod(nameof(ProcurementController.PlanTab))
+            ?? throw new InvalidOperationException();
+        var route=Assert.Single(method.GetCustomAttributes<HttpGetAttribute>());
+
+        Assert.Equal("plans/{planId:long}/tabs/{tab}",route.Template);
+    }
 }

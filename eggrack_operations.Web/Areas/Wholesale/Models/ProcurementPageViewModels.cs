@@ -23,7 +23,6 @@ public sealed record ProcurementPlanEditorPageViewModel(
 
 public sealed record PurchasePlanDetailPageViewModel(
     PurchasePlanDetail Plan,
-    SourcingWorkspace Sourcing,
     IReadOnlyList<ProcurementBuyerOption> Buyers,
     bool CanExecuteProcurement,
     bool CanManageCosts,
@@ -32,6 +31,28 @@ public sealed record PurchasePlanDetailPageViewModel(
     bool CanManagePi,
     bool CanIssuePi,
     bool CanManageFiles);
+
+public sealed record PurchasePlanSourcingTabViewModel(
+    PurchasePlanDetail Plan,
+    PurchasePlanSourcingData Data,
+    bool CanExecuteProcurement);
+
+public sealed record PurchasePlanFilesTabViewModel(
+    PurchasePlanDetail Plan,
+    PurchasePlanFilesData Data,
+    bool CanManageFiles);
+
+public sealed record PurchasePlanCostTabViewModel(
+    PurchasePlanDetail Plan,
+    bool CanExecuteProcurement,
+    bool CanManageCosts,
+    bool CanSubmitQuote,
+    bool CanFinalApprove,
+    bool CanManagePi,
+    bool CanIssuePi);
+
+public sealed record PurchasePlanActivityTabViewModel(
+    IReadOnlyList<ProcurementWorkflowEventItem> Events);
 
 public sealed record ProformaInvoiceDetailPageViewModel(
     ProformaInvoiceDetail Invoice,

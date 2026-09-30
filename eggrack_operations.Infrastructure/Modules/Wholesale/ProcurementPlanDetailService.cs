@@ -16,7 +16,7 @@ public sealed partial class ProcurementDataService
     {
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,planId,token);
-        var plan=(await db.QueryAsync<PurchasePlanDetail>("""
+        return await db.QueryMultipleAsync("""
             SELECT p.id Id,p.plan_number PlanNumber,r.request_number PlanTitle,
               p.request_id RequestId,p.request_version_id RequestVersionId,r.request_number RequestNumber,
               v.version_number RequestVersion,COALESCE(NULLIF(v.company_name,''),v.contact_name) CustomerName,
@@ -28,15 +28,17 @@ public sealed partial class ProcurementDataService
               COALESCE(p.total_cost_cny,0) TotalCostCny,COALESCE(p.cny_per_usd,0) CnyPerUsd,
               COALESCE(p.total_cost_usd,0) TotalCostUsd,COALESCE(p.profit_method,2) ProfitMethod,
               COALESCE(p.profit_rate,0) ProfitRate,COALESCE(p.approved_quote_amount_usd,0) ApprovedQuoteUsd,
-              FROM_UNIXTIME(p.updated_at) UpdatedAtUtc
+              FROM_UNIXTIME(p.updated_at) UpdatedAtUtc,
+              (SELECT COUNT(*) FROM procurement_inquiries q JOIN purchase_plan_items qi ON qi.id=q.plan_item_id WHERE qi.plan_id=p.id AND q.is_current=1) InquiryCount,
+              (SELECT COUNT(*) FROM purchase_plan_files f WHERE f.plan_id=p.id AND f.status=1) FileCount,
+              (SELECT COUNT(*) FROM procurement_workflow_events e WHERE e.plan_id=p.id) EventCount,
+              (SELECT pi.status FROM proforma_invoices pi WHERE pi.purchase_plan_id=p.id ORDER BY pi.id DESC LIMIT 1) LatestInvoiceStatus
             FROM purchase_plans p
             JOIN purchase_requests r ON r.id=p.request_id
             JOIN purchase_request_versions v ON v.id=p.request_version_id AND v.request_id=p.request_id
             LEFT JOIN eggrack_auth_staff b ON b.id=p.assigned_buyer_id
             WHERE p.id=@PlanId
-            """,new{PlanId=planId},cancellationToken:token)).SingleOrDefault()
-            ??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
-        plan.Items=await db.QueryAsync<PurchasePlanItemDetail>("""
+            ;
             SELECT i.id Id,i.request_item_id RequestItemId,i.product_name ProductName,i.quantity Quantity,
               i.quantity_unit Unit,i.sku Sku,i.brand Brand,i.specifications Specifications,i.color Color,i.size Size,
               i.packaging_requirements PackagingRequirements,i.customization_requirements CustomizationRequirements,
@@ -46,20 +48,20 @@ public sealed partial class ProcurementDataService
             LEFT JOIN purchase_request_version_items r ON r.id=i.request_item_id
             LEFT JOIN eggrack_auth_staff b ON b.id=i.buyer_id
             WHERE i.plan_id=@PlanId ORDER BY i.sort_order,i.id
-            """,new{PlanId=planId},cancellationToken:token);
-        plan.Files=await db.QueryAsync<PurchasePlanFileDetail>("""
-            SELECT f.id Id,f.plan_item_id PlanItemId,i.product_name ProductName,f.file_type FileType,
-              f.title Title,f.description Description,f.original_name OriginalName,f.mime_type MimeType,
-              f.file_size FileSize,f.is_customer_visible=1 IsCustomerVisible,FROM_UNIXTIME(f.uploaded_at) UploadedAtUtc
-            FROM purchase_plan_files f LEFT JOIN purchase_plan_items i ON i.id=f.plan_item_id
-            WHERE f.plan_id=@PlanId AND f.status=1 ORDER BY f.sort_order,f.id
-            """,new{PlanId=planId},cancellationToken:token);
-        plan.Events=await db.QueryAsync<ProcurementWorkflowEventItem>("""
-            SELECT id Id,event_code EventCode,from_status FromStatus,to_status ToStatus,note Note,
-              actor_id ActorId,FROM_UNIXTIME(created_at) CreatedAtUtc
-            FROM procurement_workflow_events WHERE plan_id=@PlanId ORDER BY created_at DESC,id DESC LIMIT 100
-            """,new{PlanId=planId},cancellationToken:token);
-        var invoices=await db.QueryAsync<ProformaInvoiceDetail>("""
+            """,async rows=>
+        {
+            var plan=(await rows.ReadAsync<PurchasePlanDetail>()).SingleOrDefault()
+                ??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
+            plan.Items=(await rows.ReadAsync<PurchasePlanItemDetail>()).ToList();
+            return plan;
+        },new{PlanId=planId},cancellationToken:token);
+    }
+
+    public async Task<ProformaInvoiceDetail?> GetLatestPlanInvoiceAsync(uint planId,CancellationToken token=default)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        return await db.QueryMultipleAsync("""
             SELECT id Id,pi_number Number,supersedes_pi_id SupersedesPiId,status Status,company_name CompanyName,
               contact_name ContactName,email Email,seller_name SellerName,currency Currency,
               product_amount ProductAmount,packaging_fee PackagingFee,shipping_fee ShippingFee,
@@ -68,13 +70,110 @@ public sealed partial class ProcurementDataService
               delivery_terms DeliveryTerms,lead_time LeadTime,FROM_UNIXTIME(valid_until) ValidUntil,
               FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc
             FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1
+            ;
+            SELECT x.id Id,x.product_name ProductName,x.quantity Quantity,x.quantity_unit Unit,
+              x.unit_price UnitPrice,x.line_amount LineAmount
+            FROM proforma_invoice_items x
+            JOIN (SELECT id FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1) latest
+              ON latest.id=x.pi_id
+            ORDER BY x.sort_order,x.id
+            """,async rows=>
+        {
+            var invoice=(await rows.ReadAsync<ProformaInvoiceDetail>()).SingleOrDefault();
+            var items=(await rows.ReadAsync<ProformaInvoiceItemDetail>()).ToList();
+            if(invoice is not null)invoice.Items=items;
+            return invoice;
+        },new{PlanId=planId},cancellationToken:token);
+    }
+
+    public async Task<PurchasePlanSourcingData> GetPurchasePlanSourcingDataAsync(uint planId,CancellationToken token=default)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        return await db.QueryMultipleAsync("""
+            SELECT id Id,supplier_name Name,supplier_code Code,address Address,legal_representative LegalRepresentative,
+              contact_name ContactName,contact_phone ContactPhone,website Website,contact_json ContactJson,status Status,
+              FROM_UNIXTIME(updated_at) UpdatedAtUtc
+            FROM procurement_suppliers ORDER BY supplier_name;
+            SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,
+              s.supplier_name SupplierName,q.offered_product_name OfferedProductName,q.length_cm LengthCm,
+              q.width_cm WidthCm,q.height_cm HeightCm,q.weight_kg WeightKg,q.color Color,q.size_details SizeDetails,
+              q.parameter_details ParameterDetails,q.currency Currency,q.unit_price_cny UnitPrice,q.moq Moq,
+              q.lead_days LeadDays,q.valid_until ValidUntil,q.terms Terms,q.status Status,q.notes Notes,
+              q.revision_no RevisionNo,EXISTS(SELECT 1 FROM procurement_selected_inquiries x WHERE x.inquiry_id=q.id) IsSelected
+            FROM procurement_inquiries q
+            JOIN purchase_plan_items i ON i.id=q.plan_item_id
+            JOIN procurement_suppliers s ON s.id=q.supplier_id
+            WHERE i.plan_id=@PlanId AND q.is_current=1 ORDER BY i.sort_order,q.updated_at DESC,q.id DESC;
+            SELECT x.id Id,x.plan_item_id PlanItemId,x.supplier_id SupplierId,i.product_name ProductName,
+              s.supplier_name SupplierName,x.quantity Quantity,x.status Status,x.cost_cny CostCny,
+              x.tracking_number TrackingNumber,x.notes Notes
+            FROM procurement_samples x
+            JOIN purchase_plan_items i ON i.id=x.plan_item_id
+            LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id
+            WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC
+            """,async rows=>new PurchasePlanSourcingData(
+                (await rows.ReadAsync<SupplierListItem>()).ToList(),
+                (await rows.ReadAsync<InquiryItem>()).ToList(),
+                (await rows.ReadAsync<SampleItem>()).ToList()),
+            new{PlanId=planId},cancellationToken:token);
+    }
+
+    public async Task<PurchasePlanFilesData> GetPurchasePlanFilesDataAsync(uint planId,CancellationToken token=default)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        return await db.QueryMultipleAsync("""
+            SELECT f.id Id,f.plan_item_id PlanItemId,i.product_name ProductName,f.file_type FileType,
+              f.title Title,f.description Description,f.original_name OriginalName,f.mime_type MimeType,
+              f.file_size FileSize,f.is_customer_visible=1 IsCustomerVisible,FROM_UNIXTIME(f.uploaded_at) UploadedAtUtc
+            FROM purchase_plan_files f LEFT JOIN purchase_plan_items i ON i.id=f.plan_item_id
+            WHERE f.plan_id=@PlanId AND f.status=1 ORDER BY f.sort_order,f.id;
+            SELECT DISTINCT s.id Id,s.supplier_name Name,s.supplier_code Code,s.address Address,
+              s.legal_representative LegalRepresentative,s.contact_name ContactName,s.contact_phone ContactPhone,
+              s.website Website,s.contact_json ContactJson,s.status Status,FROM_UNIXTIME(s.updated_at) UpdatedAtUtc
+            FROM procurement_suppliers s
+            LEFT JOIN procurement_inquiries q ON q.supplier_id=s.id AND q.is_current=1
+            LEFT JOIN procurement_samples x ON x.supplier_id=s.id
+            LEFT JOIN purchase_plan_items qi ON qi.id=q.plan_item_id
+            LEFT JOIN purchase_plan_items xi ON xi.id=x.plan_item_id
+            WHERE qi.plan_id=@PlanId OR xi.plan_id=@PlanId ORDER BY s.supplier_name;
+            SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,
+              s.supplier_name SupplierName,q.offered_product_name OfferedProductName,q.length_cm LengthCm,
+              q.width_cm WidthCm,q.height_cm HeightCm,q.weight_kg WeightKg,q.color Color,q.size_details SizeDetails,
+              q.parameter_details ParameterDetails,q.currency Currency,q.unit_price_cny UnitPrice,q.moq Moq,
+              q.lead_days LeadDays,q.valid_until ValidUntil,q.terms Terms,q.status Status,q.notes Notes,
+              q.revision_no RevisionNo,EXISTS(SELECT 1 FROM procurement_selected_inquiries z WHERE z.inquiry_id=q.id) IsSelected
+            FROM procurement_inquiries q JOIN purchase_plan_items i ON i.id=q.plan_item_id
+            JOIN procurement_suppliers s ON s.id=q.supplier_id
+            WHERE i.plan_id=@PlanId AND q.is_current=1 ORDER BY i.sort_order,q.updated_at DESC,q.id DESC;
+            SELECT x.id Id,x.plan_item_id PlanItemId,x.supplier_id SupplierId,i.product_name ProductName,
+              s.supplier_name SupplierName,x.quantity Quantity,x.status Status,x.cost_cny CostCny,
+              x.tracking_number TrackingNumber,x.notes Notes
+            FROM procurement_samples x JOIN purchase_plan_items i ON i.id=x.plan_item_id
+            LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id
+            WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC;
+            SELECT id Id,type_code Code,type_name Name,description Description,
+              allowed_extensions AllowedExtensions,max_file_size_mb MaxFileSizeMb
+            FROM procurement_file_types WHERE is_active=1 ORDER BY sort_order,id
+            """,async rows=>new PurchasePlanFilesData(
+                (await rows.ReadAsync<PurchasePlanFileDetail>()).ToList(),
+                (await rows.ReadAsync<SupplierListItem>()).ToList(),
+                (await rows.ReadAsync<InquiryItem>()).ToList(),
+                (await rows.ReadAsync<SampleItem>()).ToList(),
+                (await rows.ReadAsync<ProcurementManagedOption>()).ToList()),
+            new{PlanId=planId},cancellationToken:token);
+    }
+
+    public async Task<IReadOnlyList<ProcurementWorkflowEventItem>> GetPurchasePlanEventsAsync(uint planId,CancellationToken token=default)
+    {
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        return await db.QueryAsync<ProcurementWorkflowEventItem>("""
+            SELECT id Id,event_code EventCode,from_status FromStatus,to_status ToStatus,note Note,
+              actor_id ActorId,FROM_UNIXTIME(created_at) CreatedAtUtc
+            FROM procurement_workflow_events WHERE plan_id=@PlanId ORDER BY created_at DESC,id DESC LIMIT 100
             """,new{PlanId=planId},cancellationToken:token);
-        plan.Invoice=invoices.SingleOrDefault();
-        if(plan.Invoice is not null)
-            plan.Invoice.Items=await db.QueryAsync<ProformaInvoiceItemDetail>(
-                "SELECT id Id,product_name ProductName,quantity Quantity,quantity_unit Unit,unit_price UnitPrice,line_amount LineAmount FROM proforma_invoice_items WHERE pi_id=@InvoiceId ORDER BY sort_order,id",
-                new{InvoiceId=plan.Invoice.Id},cancellationToken:token);
-        return plan;
     }
 
     public async Task<ProformaInvoiceDetail?> GetProformaInvoiceDetailAsync(uint invoiceId,CancellationToken token=default)

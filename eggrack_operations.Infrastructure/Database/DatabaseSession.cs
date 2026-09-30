@@ -43,6 +43,19 @@ public sealed class DatabaseSession : IAsyncDisposable
         return rows.AsList();
     }
 
+    public async Task<TResult> QueryMultipleAsync<TResult>(
+        string commandText,
+        Func<SqlMapper.GridReader, Task<TResult>> read,
+        object? parameters = null,
+        CommandType commandType = CommandType.Text,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+        using var rows = await Connection.QueryMultipleAsync(
+            CreateCommand(commandText, parameters, commandType, cancellationToken));
+        return await read(rows);
+    }
+
     public Task<int> ExecuteStoredProcedureAsync(
         string procedureName,
         object? parameters = null,

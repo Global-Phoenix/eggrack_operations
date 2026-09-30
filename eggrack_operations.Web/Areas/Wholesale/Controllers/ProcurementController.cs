@@ -91,16 +91,63 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     {
         try
         {
-            var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
-            var authorization=await currentStaff.LoadAsync(token);
+            var planTask=procurement.GetPurchasePlanDetailAsync(planId,token);
+            var buyersTask=procurement.GetBuyersAsync(token);
+            var authorizationTask=currentStaff.LoadAsync(token);
+            await Task.WhenAll(planTask,buyersTask,authorizationTask);
+            var plan=await planTask;
+            var authorization=await authorizationTask;
             bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
             ViewData["Title"]=$"{plan.PlanNumber} 详情";
             return View("PlanDetails",new PurchasePlanDetailPageViewModel(
-                plan,await procurement.GetPhaseOneWorkspaceAsync(planId,token),await procurement.GetBuyersAsync(token),
+                plan,await buyersTask,
                 Has("wholesale.procurement.execute"),Has("wholesale.purchase-cost.edit"),
                 Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.final-approve"),
                 Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue"),
                 Has("wholesale.purchase-document.internal")));
+        }
+        catch(BusinessRuleException error) when(error.Code=="procurement.plan.missing"){return NotFound();}
+    }
+
+    [HttpGet("plans/{planId:long}/tabs/{tab}")]
+    public async Task<IActionResult> PlanTab(uint planId,string tab,CancellationToken token)
+    {
+        try
+        {
+            var authorization=await currentStaff.LoadAsync(token);
+            bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
+            if(string.Equals(tab,"sourcing",StringComparison.OrdinalIgnoreCase))
+            {
+                var planTask=procurement.GetPurchasePlanDetailAsync(planId,token);
+                var dataTask=procurement.GetPurchasePlanSourcingDataAsync(planId,token);
+                await Task.WhenAll(planTask,dataTask);
+                return PartialView("_PlanSourcingTab",new PurchasePlanSourcingTabViewModel(
+                    await planTask,await dataTask,Has("wholesale.procurement.execute")));
+            }
+            if(string.Equals(tab,"files",StringComparison.OrdinalIgnoreCase))
+            {
+                var planTask=procurement.GetPurchasePlanDetailAsync(planId,token);
+                var dataTask=procurement.GetPurchasePlanFilesDataAsync(planId,token);
+                await Task.WhenAll(planTask,dataTask);
+                return PartialView("_PlanFilesTab",new PurchasePlanFilesTabViewModel(
+                    await planTask,await dataTask,Has("wholesale.purchase-document.internal")));
+            }
+            if(string.Equals(tab,"cost",StringComparison.OrdinalIgnoreCase))
+            {
+                var planTask=procurement.GetPurchasePlanDetailAsync(planId,token);
+                var invoiceTask=procurement.GetLatestPlanInvoiceAsync(planId,token);
+                await Task.WhenAll(planTask,invoiceTask);
+                var plan=await planTask;
+                plan.Invoice=await invoiceTask;
+                return PartialView("_PlanCostTab",new PurchasePlanCostTabViewModel(plan,
+                    Has("wholesale.procurement.execute"),Has("wholesale.purchase-cost.edit"),
+                    Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.final-approve"),
+                    Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue")));
+            }
+            if(string.Equals(tab,"activity",StringComparison.OrdinalIgnoreCase))
+                return PartialView("_PlanActivityTab",new PurchasePlanActivityTabViewModel(
+                    await procurement.GetPurchasePlanEventsAsync(planId,token)));
+            return NotFound();
         }
         catch(BusinessRuleException error) when(error.Code=="procurement.plan.missing"){return NotFound();}
     }

@@ -1,3 +1,7 @@
+@{
+    var isWorkspaceFrame = Context.Request.Query["workspaceFrame"] == "1" ||
+        string.Equals(Context.Request.Headers["Sec-Fetch-Dest"], "iframe", StringComparison.OrdinalIgnoreCase);
+}
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -17,21 +21,31 @@
     <link rel="stylesheet" href="~/css/components/workspace-components.css" asp-append-version="true" />
     @await RenderSectionAsync("Styles", required: false)
 </head>
-<body>
+<body class="@(isWorkspaceFrame?"workspace-frame-body":null)">
+@if (isWorkspaceFrame)
+{
+<main class="workspace-frame-content"><div class="content-frame">@RenderBody()</div></main>
+}
+else
+{
 <div class="admin-shell" id="adminShell">
     @await Component.InvokeAsync("Navigation")
     <div class="main-panel">
         @await Component.InvokeAsync("Topbar", new { title = ViewData["Title"]?.ToString() })
         @await Component.InvokeAsync("WorkspaceTabs", new { title = ViewData["Title"]?.ToString() })
-        <main class="content-area"><div class="content-frame">@RenderBody()</div></main>
+        <main class="content-area" data-workspace-content><div class="content-frame" data-workspace-initial-page>@RenderBody()</div></main>
     </div>
 </div>
+}
 <script src="~/lib/jquery/dist/jquery.min.js" asp-append-version="true"></script>
 <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js" asp-append-version="true"></script>
 <script src="~/js/common/app.js" asp-append-version="true"></script>
+@if (!isWorkspaceFrame)
+{
 <script src="~/js/layout/shell.js" asp-append-version="true"></script>
 <script src="~/js/layout/navigation.js" asp-append-version="true"></script>
 <script src="~/js/layout/workspace-tabs.js" asp-append-version="true"></script>
+}
 @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

@@ -1,87 +1,44 @@
 @model PurchasePlanDetailPageViewModel
 @{
  var plan=Model.Plan;
- var sourcing=Model.Sourcing;
- var relatedSupplierIds=sourcing.Inquiries.Select(x=>x.SupplierId).Concat(sourcing.Samples.Where(x=>x.SupplierId.HasValue).Select(x=>x.SupplierId!.Value)).Distinct().ToHashSet();
- var relatedSuppliers=sourcing.Suppliers.Where(x=>relatedSupplierIds.Contains(x.Id)).ToArray();
  var status=ProcurementUi.PlanStatus(plan.Status);
- var actualMargin=plan.ApprovedQuoteUsd>0?(plan.ApprovedQuoteUsd-plan.TotalCostUsd)/plan.ApprovedQuoteUsd:0;
- var quoteWarnings=new List<string>();
- if(plan.ApprovedQuoteUsd>0&&plan.ApprovedQuoteUsd<=4000)quoteWarnings.Add("最终报价未高于 USD 4,000");
- if(plan.ApprovedQuoteUsd>0&&(actualMargin<.10m||actualMargin>.20m))quoteWarnings.Add("实际利润率不在 10%–20%");
  string Display(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
- string PiStatus(byte value)=>value switch{1=>"草稿",2=>"待签发",3=>"已签发",4=>"已取消",_=>"未知"};
- string EventName(string code)=>code switch{
-  "cost.quote-saved"=>"保存成本与报价","quote.submitted-to-boss"=>"提交 Boss 确认",
-  "quote.boss-approved"=>"Boss 确认报价","pi.generated"=>"生成 PI","pi.approved"=>"保存 PI",
-  "plan.completed"=>"完成采购计划","pi.cancelled"=>"取消 PI","pi.revision-created"=>"创建 PI 修订版本",
-  _=>code};
 }
-<section class="proc purchase-plan-detail">
+<section class="proc purchase-plan-detail" data-procurement-plan-details data-plan-id="@plan.Id">
 @await Component.InvokeAsync("PageHeader",new{title=plan.PlanNumber,subtitle=$"{plan.CustomerName} · {plan.RequestNumber} V{plan.RequestVersion} · 更新于 {plan.UpdatedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}",parentTitle="采购计划",parentUrl=Url.Action("Sourcing"),statusText=status.Text,statusTone=status.Tone})
 @if(TempData["Success"] is string success){<div class="alert alert-success">@success</div>}
 @if(TempData["Warning"] is string warning){<div class="alert alert-warning">@warning</div>}
 @if(TempData["Error"] is string error){<div class="alert alert-danger">@error</div>}
 <ul class="nav nav-tabs request-detail-tabs" role="tablist">
- <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#planOverview" type="button">概览</button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planSourcing" type="button">供应商与询价 <span>@sourcing.Inquiries.Count</span></button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planProducts" type="button">产品采购 <span>@plan.Items.Count</span></button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planFiles" type="button">文件 <span>@plan.Files.Count</span></button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planCost" type="button">成本与报价</button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planActivity" type="button">记录 <span>@plan.Events.Count</span></button></li>
+ <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#planOverview" type="button" data-plan-tab="overview">概览</button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planSourcing" type="button" data-plan-tab="sourcing">供应商与询价 <span>@plan.InquiryCount</span></button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planProducts" type="button" data-plan-tab="products">产品采购 <span>@plan.Items.Count</span></button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planFiles" type="button" data-plan-tab="files">文件 <span>@plan.FileCount</span></button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planCost" type="button" data-plan-tab="cost">成本与报价</button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planActivity" type="button" data-plan-tab="activity">记录 <span>@plan.EventCount</span></button></li>
 </ul>
 <div class="tab-content request-detail-content">
  <div class="tab-pane fade show active" id="planOverview">
   <div class="plan-detail-grid">
    <div class="d-flex flex-column gap-3">
-    <section class="ui-panel p-4"><div class="er-section-header"><div><h2>采购计划</h2><p>内部采购信息与当前负责人。</p></div></div><dl class="ui-fact-grid">
+    <section class="ui-panel p-4"><div class="er-section-header"><div><h2>采购计划</h2><p>计划信息与当前负责人。</p></div></div><dl class="ui-fact-grid">
      <div><dt>计划编号</dt><dd>@plan.PlanNumber</dd></div><div><dt>计划名称</dt><dd>@plan.PlanTitle</dd></div><div><dt>采购人员</dt><dd>@Display(plan.AssignedBuyerName)</dd></div><div><dt>优先级</dt><dd>@plan.Priority</dd></div><div><dt>申请版本</dt><dd>V@plan.RequestVersion</dd></div><div><dt>计划说明</dt><dd>@Display(plan.InternalNote)</dd></div>
     </dl></section>
-    <section class="ui-panel p-4"><div class="er-section-header"><div><h2>客户申请参考</h2><p>客户申请仅作为当前内部计划的来源快照。</p></div><a href="/wholesale/procurement/requests/@plan.RequestId/details">查看申请详情</a></div><dl class="ui-fact-grid">
+    <section class="ui-panel p-4"><div class="er-section-header"><div><h2>客户申请参考</h2><p>客户申请仅作为当前采购计划的来源快照。</p></div><a href="/wholesale/procurement/requests/@plan.RequestId/details">查看申请详情</a></div><dl class="ui-fact-grid">
      <div><dt>客户</dt><dd>@plan.CustomerName</dd></div><div><dt>邮箱</dt><dd>@plan.CustomerEmail</dd></div><div><dt>申请编号</dt><dd>@plan.RequestNumber</dd></div><div><dt>引用版本</dt><dd>V@plan.RequestVersion</dd></div>
     </dl></section>
    </div>
    <aside class="ui-action-rail">
     <section><h3>业务进度</h3><ol class="plan-stage-list">
-     <li class="done"><i></i><span>采购计划已创建</span></li><li class="@(plan.Items.Count>0&&plan.Items.All(x=>x.PurchaseUnitPriceCny.HasValue)?"done":"active")"><i></i><span>产品采购价</span></li><li class="@(plan.Status is 4 or 5 or 6 or 8?"done":plan.TotalCostCny>0?"active":"")"><i></i><span>成本与报价</span></li><li class="@(plan.Status is 4 or 5 or 8?"done":plan.Status==6?"active":"")"><i></i><span>Boss 确认</span></li><li class="@(plan.Invoice?.Status==3?"done":plan.Invoice is not null?"active":"")"><i></i><span>PI 签发</span></li>
+     <li class="done"><i></i><span>采购计划已创建</span></li><li class="@(plan.Items.Count>0&&plan.Items.All(x=>x.PurchaseUnitPriceCny.HasValue)?"done":"active")"><i></i><span>产品采购价</span></li><li class="@(plan.Status is 4 or 5 or 6 or 8?"done":plan.TotalCostCny>0?"active":"")"><i></i><span>成本与报价</span></li><li class="@(plan.Status is 4 or 5 or 8?"done":plan.Status==6?"active":"")"><i></i><span>Boss 确认</span></li><li class="@(plan.LatestInvoiceStatus==3?"done":plan.LatestInvoiceStatus.HasValue?"active":"")"><i></i><span>PI 签发</span></li>
     </ol></section>
     <section><h3>当前金额</h3><dl class="prototype-facts"><div><dt>总成本 CNY</dt><dd>@(plan.TotalCostCny>0?plan.TotalCostCny.ToString("N2"):"—")</dd></div><div><dt>总成本 USD</dt><dd>@(plan.TotalCostUsd>0?plan.TotalCostUsd.ToString("N2"):"—")</dd></div><div><dt>最终报价 USD</dt><dd>@(plan.ApprovedQuoteUsd>0?plan.ApprovedQuoteUsd.ToString("N2"):"—")</dd></div></dl></section>
    </aside>
   </div>
  </div>
- <div class="tab-pane fade" id="planSourcing">
-  <div class="er-section-header"><div><h2>供应商与询价</h2><p>供应商档案是公司级数据；报价和样品只关联当前采购计划。每个计划产品必须选择一条有效报价后才能提交审批。</p></div>
-   @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){<div class="d-flex gap-2"><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#supplierModal">新增供应商</button><button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#inquiryModal">录入供应商报价</button><button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#sampleModal">添加样品</button></div>}
-  </div>
-  <section class="ui-panel p-4 mb-3">
-   <div class="er-section-header"><div><h2>本计划相关供应商</h2><p>根据报价和样品记录自动汇总。</p></div><span class="ui-version">@relatedSuppliers.Length 家</span></div>
-   @if(relatedSuppliers.Length==0){<div class="compact-empty"><i class="bi bi-building"></i><span>尚未关联供应商，请先录入供应商报价。</span></div>}
-   else{<div class="row g-3">@foreach(var supplier in relatedSuppliers){<div class="col-lg-4"><article class="plan-file-card h-100"><span class="plan-file-icon"><i class="bi bi-building"></i></span><div><strong>@supplier.Name</strong><small>@Display(supplier.ContactName) · @Display(supplier.ContactPhone)</small><small>@Display(supplier.Address)</small></div></article></div>}</div>}
-  </section>
-  <section class="ui-panel p-4 mb-3">
-   <div class="er-section-header"><div><h2>供应商报价</h2><p>保留报价修订版本，选中的最新报价作为产品成本依据。</p></div></div>
-   <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>计划产品</th><th>供应商 / 提供产品</th><th>产品参数</th><th>报价</th><th>MOQ / 交期</th><th>有效期</th><th>状态</th><th></th></tr></thead><tbody>
-   @foreach(var inquiry in sourcing.Inquiries){
-    <tr><td><strong>@inquiry.ProductName</strong></td><td>@inquiry.SupplierName<small class="ui-cell-secondary">@Display(inquiry.OfferedProductName) · V@inquiry.RevisionNo</small></td><td><small>@(inquiry.LengthCm.HasValue?$"{inquiry.LengthCm:0.##}×{inquiry.WidthCm:0.##}×{inquiry.HeightCm:0.##} cm":"—")</small><small class="ui-cell-secondary">@Display(inquiry.Color) · @Display(inquiry.SizeDetails) · @Display(inquiry.ParameterDetails)</small></td><td><strong>@inquiry.Currency @(inquiry.UnitPrice?.ToString("N4")??"—")</strong></td><td>@(inquiry.Moq?.ToString("0.###")??"—") / @(inquiry.LeadDays.HasValue?$"{inquiry.LeadDays} 天":"—")</td><td>@(inquiry.ValidUntil?.ToString("yyyy-MM-dd")??"—")</td><td><span class="ui-status ui-status-@(inquiry.IsSelected?"success":inquiry.Status=="quoted"?"warning":"neutral")"><i></i>@(inquiry.IsSelected?"已选用":inquiry.Status=="quoted"?"已报价":inquiry.Status=="sent"?"已询价":"草稿")</span></td><td class="text-end">@if(Model.CanExecuteProcurement&&plan.Status==2&&inquiry.Status=="quoted"&&inquiry.UnitPrice>0&&!inquiry.IsSelected){<form asp-action="SelectPlanInquiry" asp-route-planId="@plan.Id" method="post"><input type="hidden" name="PlanItemId" value="@inquiry.PlanItemId"><input type="hidden" name="InquiryId" value="@inquiry.Id"><button class="btn btn-sm btn-outline-primary" type="submit">选用</button></form>}</td></tr>
-   }
-   @if(sourcing.Inquiries.Count==0){<tr><td colspan="8"><div class="compact-empty"><i class="bi bi-receipt-cutoff"></i><span>尚未录入供应商报价。</span></div></td></tr>}
-   </tbody></table></div>
-  </section>
-  <section class="ui-panel p-4">
-   <div class="er-section-header"><div><h2>样品记录</h2><p>样品为可选环节，可在文件页上传并关联样品附件。</p></div><span class="ui-version">@sourcing.Samples.Count 条</span></div>
-   <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>产品</th><th>供应商</th><th>数量</th><th>状态</th><th>成本 CNY</th><th>物流单号</th><th>说明</th></tr></thead><tbody>
-   @foreach(var sample in sourcing.Samples){<tr><td>@sample.ProductName</td><td>@Display(sample.SupplierName)</td><td>@sample.Quantity.ToString("0.###")</td><td>@sample.Status</td><td>@sample.CostCny.ToString("N2")</td><td>@Display(sample.TrackingNumber)</td><td>@Display(sample.Notes)</td></tr>}
-   @if(sourcing.Samples.Count==0){<tr><td colspan="7"><div class="compact-empty"><i class="bi bi-box-seam"></i><span>当前计划没有样品记录。</span></div></td></tr>}
-   </tbody></table></div>
-  </section>
-  @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){
-   <div class="modal fade" id="supplierModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form asp-action="CreatePlanSupplier" asp-route-planId="@plan.Id" method="post"><div class="modal-header"><div><h2 class="modal-title fs-5">新增供应商档案</h2><p class="mb-0 text-muted">供应商保存后可被其他采购计划复用。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">供应商名称</label><input class="form-control" name="Name" required></div><div class="col-md-6"><label class="form-label">供应商编码（可选）</label><input class="form-control" name="Code"></div><div class="col-12"><label class="form-label">地址</label><input class="form-control" name="Address"></div><div class="col-md-6"><label class="form-label">法人</label><input class="form-control" name="LegalRepresentative"></div><div class="col-md-6"><label class="form-label">联系人</label><input class="form-control" name="ContactName"></div><div class="col-md-6"><label class="form-label">联系电话</label><input class="form-control" name="ContactPhone"></div><div class="col-md-6"><label class="form-label">网址</label><input class="form-control" name="Website" type="url" placeholder="https://"></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存供应商</button></div></form></div></div></div>
-   <div class="modal fade" id="inquiryModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><form asp-action="SavePlanInquiry" asp-route-planId="@plan.Id" method="post"><div class="modal-header"><div><h2 class="modal-title fs-5">录入供应商报价</h2><p class="mb-0 text-muted">记录供应商实际提供产品、参数、价格、交期和条款。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">计划产品</label><select class="form-select" name="PlanItemId" required><option value="">请选择</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName · @item.Quantity.ToString("0.###") @item.Unit</option>}</select></div><div class="col-md-6"><label class="form-label">供应商</label><select class="form-select" name="SupplierId" required><option value="">请选择</option>@foreach(var supplier in sourcing.Suppliers.Where(x=>x.Status=="active")){<option value="@supplier.Id">@supplier.Name</option>}</select></div><div class="col-md-6"><label class="form-label">供应商提供产品</label><input class="form-control" name="OfferedProductName"></div><div class="col-md-2"><label class="form-label">长 cm</label><input class="form-control" name="LengthCm" type="number" min="0" step=".01"></div><div class="col-md-2"><label class="form-label">宽 cm</label><input class="form-control" name="WidthCm" type="number" min="0" step=".01"></div><div class="col-md-2"><label class="form-label">高 cm</label><input class="form-control" name="HeightCm" type="number" min="0" step=".01"></div><div class="col-md-3"><label class="form-label">重量 kg</label><input class="form-control" name="WeightKg" type="number" min="0" step=".001"></div><div class="col-md-3"><label class="form-label">颜色</label><input class="form-control" name="Color"></div><div class="col-md-3"><label class="form-label">尺寸说明</label><input class="form-control" name="SizeDetails"></div><div class="col-md-3"><label class="form-label">币种</label><select class="form-select" name="Currency"><option>CNY</option><option>USD</option></select></div><div class="col-md-4"><label class="form-label">单价</label><input class="form-control" name="UnitPrice" type="number" min="0" step=".0001"></div><div class="col-md-4"><label class="form-label">MOQ</label><input class="form-control" name="Moq" type="number" min="0" step=".001"></div><div class="col-md-4"><label class="form-label">交期/天</label><input class="form-control" name="LeadDays" type="number" min="0"></div><div class="col-md-4"><label class="form-label">有效日期</label><input class="form-control" name="ValidUntil" type="date"></div><div class="col-md-4"><label class="form-label">状态</label><select class="form-select" name="Status"><option value="draft">草稿</option><option value="sent">已询价</option><option value="quoted">已报价</option><option value="closed">已关闭</option></select></div><div class="col-md-4"><label class="form-label">条款</label><input class="form-control" name="Terms"></div><div class="col-12"><label class="form-label">参数详情</label><textarea class="form-control" name="ParameterDetails" rows="2"></textarea></div><div class="col-12"><label class="form-label">备注</label><textarea class="form-control" name="Notes" rows="2"></textarea></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存报价</button></div></form></div></div></div>
-   <div class="modal fade" id="sampleModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form asp-action="SavePlanSample" asp-route-planId="@plan.Id" method="post"><div class="modal-header"><div><h2 class="modal-title fs-5">添加样品记录</h2><p class="mb-0 text-muted">记录样品状态、费用与物流信息。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">计划产品</label><select class="form-select" name="PlanItemId" required><option value="">请选择</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName</option>}</select></div><div class="col-md-6"><label class="form-label">供应商（可选）</label><select class="form-select" name="SupplierId"><option value="">未指定</option>@foreach(var supplier in sourcing.Suppliers.Where(x=>x.Status=="active")){<option value="@supplier.Id">@supplier.Name</option>}</select></div><div class="col-md-4"><label class="form-label">数量</label><input class="form-control" name="Quantity" type="number" min=".001" step=".001" value="1" required></div><div class="col-md-4"><label class="form-label">状态</label><select class="form-select" name="Status"><option value="requested">已申请</option><option value="received">已收到</option><option value="approved">已确认</option><option value="rejected">不合格</option></select></div><div class="col-md-4"><label class="form-label">成本 CNY</label><input class="form-control" name="CostCny" type="number" min="0" step=".01" value="0"></div><div class="col-md-6"><label class="form-label">物流单号</label><input class="form-control" name="TrackingNumber"></div><div class="col-md-6"><label class="form-label">说明</label><input class="form-control" name="Notes"></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存样品</button></div></form></div></div></div>
-  }
- </div>
+ <div class="tab-pane fade" id="planSourcing" data-plan-lazy-pane data-url="@Url.Action("PlanTab",new{planId=plan.Id,tab="sourcing"})">@await Html.PartialAsync("_PlanTabLoading", "供应商与询价")</div>
  <div class="tab-pane fade" id="planProducts">
-  <div class="er-section-header"><div><h2>产品采购</h2><p>客户需求为只读参考；采购人员、采购单价和内部备注属于内部采购数据。</p></div></div>
+  <div class="er-section-header"><div><h2>产品采购</h2><p>客户需求为只读参考；采购人员、采购单价和备注属于采购计划数据。</p></div></div>
   <div class="plan-product-procurement-list">
   @foreach(var item in plan.Items){
    <article class="plan-product-procurement">
@@ -92,85 +49,17 @@
      <input type="hidden" name="ItemId" value="@item.Id">
      <div class="col-md-4"><label class="form-label">采购人员</label><select class="form-select" name="BuyerId" required><option value="">请选择采购部人员</option>@foreach(var buyer in Model.Buyers){if(item.BuyerId==buyer.Id){<option value="@buyer.Id" selected>@buyer.Name</option>}else{<option value="@buyer.Id">@buyer.Name</option>}}</select></div>
      <div class="col-md-3"><label class="form-label">采购单价 CNY</label><input class="form-control" name="PurchaseUnitPriceCny" type="number" min="0" step="0.0001" value="@item.PurchaseUnitPriceCny" required></div>
-     <div class="col-md-5"><label class="form-label">内部备注</label><input class="form-control" name="InternalNote" value="@item.InternalNote"></div>
+     <div class="col-md-5"><label class="form-label">备注</label><input class="form-control" name="InternalNote" value="@item.InternalNote"></div>
      <div class="col-12"><button class="btn btn-primary" type="submit">保存产品采购信息</button></div>
-    </form>}else{<dl class="ui-fact-grid compact mt-3"><div><dt>采购人员</dt><dd>@Display(item.BuyerName)</dd></div><div><dt>采购单价</dt><dd>@(item.PurchaseUnitPriceCny.HasValue?$"CNY {item.PurchaseUnitPriceCny:N4}":"—")</dd></div><div><dt>内部备注</dt><dd>@Display(item.InternalNote)</dd></div></dl>}
+    </form>}else{<dl class="ui-fact-grid compact mt-3"><div><dt>采购人员</dt><dd>@Display(item.BuyerName)</dd></div><div><dt>采购单价</dt><dd>@(item.PurchaseUnitPriceCny.HasValue?$"CNY {item.PurchaseUnitPriceCny:N4}":"—")</dd></div><div><dt>备注</dt><dd>@Display(item.InternalNote)</dd></div></dl>}
    </article>}
   </div>
  </div>
- <div class="tab-pane fade" id="planFiles">
-  @if(Model.CanManageFiles){
-  <section class="ui-panel p-4 mb-3"><div class="er-section-header"><div><h2>上传采购文件</h2><p>所有文件默认仅内部可见，上传后可单独授权客户查看。</p></div></div>
-   <form asp-action="UploadPlanFile" asp-route-planId="@plan.Id" method="post" enctype="multipart/form-data" class="row g-3">
-    <div class="col-lg-4"><label class="form-label">选择文件</label><input class="form-control" type="file" name="file" required></div>
-    @if(sourcing.FileTypes.Count>0){<div class="col-md-3 col-lg-2"><label class="form-label">文件类型</label><select class="form-select" name="fileTypeId" required>@foreach(var type in sourcing.FileTypes){<option value="@type.Id">@type.Name</option>}</select><input type="hidden" name="fileType" value="other"></div>}else{<div class="col-md-3 col-lg-2"><label class="form-label">文件类型</label><select class="form-select" name="fileType"><option value="image">图片</option><option value="pdf">PDF</option><option value="video">视频</option><option value="specification">规格</option><option value="design">设计文件</option><option value="document">文档</option><option value="other">其他</option></select></div>}
-    <div class="col-md-4 col-lg-3"><label class="form-label">关联产品（可选）</label><select class="form-select" name="planItemId"><option value="">计划级文件</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName</option>}</select></div>
-    <div class="col-md-5 col-lg-3"><label class="form-label">标题（可选）</label><input class="form-control" name="title"></div>
-    <div class="col-md-4"><label class="form-label">关联供应商（可选）</label><select class="form-select" name="supplierId"><option value="">未关联</option>@foreach(var supplier in relatedSuppliers){<option value="@supplier.Id">@supplier.Name</option>}</select></div>
-    <div class="col-md-4"><label class="form-label">关联报价（可选）</label><select class="form-select" name="inquiryId"><option value="">未关联</option>@foreach(var inquiry in sourcing.Inquiries){<option value="@inquiry.Id">@inquiry.ProductName · @inquiry.SupplierName · V@inquiry.RevisionNo</option>}</select></div>
-    <div class="col-md-4"><label class="form-label">关联样品（可选）</label><select class="form-select" name="sampleId"><option value="">未关联</option>@foreach(var sample in sourcing.Samples){<option value="@sample.Id">@sample.ProductName · @Display(sample.SupplierName)</option>}</select></div>
-    <div class="col-12"><label class="form-label">文件说明（可选）</label><input class="form-control" name="description"></div>
-    <div class="col-12"><button class="btn btn-primary" type="submit">上传文件</button></div>
-   </form>
-  </section>}
-  <div class="plan-file-grid">
-  @foreach(var file in plan.Files){var previewUrl=Url.Action("PlanFileContent",new{planId=plan.Id,fileId=file.Id});<article class="plan-file-card"><span class="plan-file-icon"><i class="bi @(file.MimeType.StartsWith("image/")?"bi-file-earmark-image":file.MimeType=="application/pdf"?"bi-file-earmark-pdf":file.MimeType.StartsWith("video/")?"bi-file-earmark-play":"bi-file-earmark-text")"></i></span><div><a href="@previewUrl" target="_blank" rel="noopener">@file.OriginalName</a><small>@file.FileType · @(file.FileSize/1024) KB · @Display(file.ProductName)</small><small>@Display(file.Description) · @file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</small></div><div class="text-end"><span class="ui-status ui-status-@(file.IsCustomerVisible?"success":"neutral")"><i></i>@(file.IsCustomerVisible?"客户可见":"内部")</span>@if(Model.CanManageFiles){<form asp-action="SetPlanFileVisibility" asp-route-planId="@plan.Id" asp-route-fileId="@file.Id" method="post" class="mt-2"><input type="hidden" name="customerVisible" value="@(!file.IsCustomerVisible)"><button class="btn btn-sm btn-outline-secondary" type="submit">@(file.IsCustomerVisible?"取消客户可见":"设为客户可见")</button></form>}</div></article>}
-  @if(plan.Files.Count==0){<div class="compact-empty"><i class="bi bi-folder2-open"></i><span>尚未上传采购计划文件。</span></div>}
-  </div>
- </div>
- <div class="tab-pane fade" id="planCost">
-  <div class="cost-quote-layout">
-   <section class="ui-panel p-4">
-    <div class="er-section-header"><div><h2>成本核算</h2><p>产品采购成本由数量 × 采购单价服务端汇总。</p></div></div>
-    <form asp-action="SavePlanCostQuote" asp-route-planId="@plan.Id" method="post" class="row g-3">
-     <div class="col-md-6"><label class="form-label">产品采购成本 CNY</label><input class="form-control" value="@plan.Items.Sum(x=>x.LineCostCny??0).ToString("0.00")" readonly></div>
-     <div class="col-md-6"><label class="form-label">包装 CNY</label><input class="form-control" name="PackagingCostCny" type="number" min="0" step="0.01" value="@plan.PackagingCostCny"></div>
-     <div class="col-md-6"><label class="form-label">样品 CNY</label><input class="form-control" name="SampleCostCny" type="number" min="0" step="0.01" value="@plan.SampleCostCny"></div>
-     <div class="col-md-6"><label class="form-label">国内运输 CNY</label><input class="form-control" name="DomesticShippingCny" type="number" min="0" step="0.01" value="@plan.DomesticShippingCny"></div>
-     <div class="col-md-6"><label class="form-label">国际运输 CNY</label><input class="form-control" name="InternationalShippingCny" type="number" min="0" step="0.01" value="@plan.InternationalShippingCny"></div>
-     <div class="col-md-6"><label class="form-label">其他 CNY</label><input class="form-control" name="OtherCostCny" type="number" min="0" step="0.01" value="@plan.OtherCostCny"></div>
-     <div class="col-md-4"><label class="form-label">1 USD = X CNY</label><input class="form-control" name="CnyPerUsd" type="number" min=".000001" step=".000001" value="@(plan.CnyPerUsd>0?plan.CnyPerUsd:7.12m)" required></div>
-     <div class="col-md-4"><label class="form-label">利润方式</label><select class="form-select" name="ProfitMethod"><option value="1" selected="@(plan.ProfitMethod==1?"selected":null)">Markup</option><option value="2" selected="@(plan.ProfitMethod!=1?"selected":null)">Gross Margin</option></select></div>
-     <div class="col-md-4"><label class="form-label">利润率</label><input class="form-control" name="ProfitRate" type="number" min="0" max=".99" step=".0001" value="@(plan.ProfitRate>0?plan.ProfitRate:.15m)" required><div class="form-text">0.15 表示 15%</div></div>
-     @if(Model.CanManageCosts&&plan.Status is 1 or 2 or 3 or 7){<div class="col-12"><button class="btn btn-primary" type="submit">保存成本与建议报价</button></div>}
-    </form>
-   </section>
-   <aside class="ui-action-rail">
-    <section><h3>报价结果</h3><dl class="prototype-facts"><div><dt>Total CNY</dt><dd>@(plan.TotalCostCny>0?plan.TotalCostCny.ToString("N2"):"—")</dd></div><div><dt>Total USD</dt><dd>@(plan.TotalCostUsd>0?plan.TotalCostUsd.ToString("N2"):"—")</dd></div><div><dt>Approved Quote USD</dt><dd>@(plan.ApprovedQuoteUsd>0?plan.ApprovedQuoteUsd.ToString("N2"):"—")</dd></div><div><dt>实际利润率</dt><dd>@(plan.ApprovedQuoteUsd>0?actualMargin.ToString("P2"):"—")</dd></div></dl>
-    @if(quoteWarnings.Count>0){<div class="quote-warning"><i class="bi bi-exclamation-triangle"></i><span>@($"{string.Join("；",quoteWarnings)}。Boss 可特殊审批。")</span></div>}
-    </section>
-    @if(Model.CanSubmitQuote&&plan.Status==2){<section><h3>提交报价</h3><p>提交后进入 Boss 最终确认。</p><form asp-action="SubmitPlanQuote" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary w-100" type="submit">提交 Boss 确认</button></form></section>}
-    @if(Model.CanFinalApprove&&plan.Status==6){<section><h3>Boss 最终确认</h3><form asp-action="BossApprovePlanQuote" asp-route-planId="@plan.Id" method="post"><label class="form-label">最终报价 USD</label><input class="form-control mb-2" name="quoteUsd" type="number" min=".01" step=".01" value="@plan.ApprovedQuoteUsd" required><label class="form-label">审批说明</label><textarea class="form-control mb-3" name="note" rows="2"></textarea><button class="btn btn-primary w-100" type="submit">确认最终报价</button></form></section>}
-   </aside>
-  </div>
-  <section class="ui-panel p-4 mt-3">
-   <div class="er-section-header"><div><h2>Proforma Invoice</h2><p>PI 是客户销售价格快照，不展示内部采购单价。</p></div>@if((plan.Invoice is null||plan.Invoice.Status==4)&&plan.Status==4&&Model.CanManagePi){<form asp-action="GeneratePlanPi" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary" type="submit">生成 PI</button></form>}</div>
-   @if(plan.Invoice is null){<div class="compact-empty"><i class="bi bi-receipt"></i><span>Boss 确认报价后可以生成 PI。</span></div>}
-   else{
-    var invoice=plan.Invoice;
-    <div class="pi-editor-header"><div><strong>@invoice.Number</strong><span class="ui-status ui-status-@(invoice.Status==3?"success":invoice.Status==4?"danger":"warning")"><i></i>@PiStatus(invoice.Status)</span></div><span>@(string.IsNullOrWhiteSpace(invoice.CompanyName)?invoice.ContactName:invoice.CompanyName) · @invoice.Email · <a asp-action="ProformaInvoiceDetails" asp-route-invoiceId="@invoice.Id">独立详情</a></span></div>
-    <form asp-action="SavePlanPi" asp-route-planId="@plan.Id" method="post">
-     <input type="hidden" name="InvoiceId" value="@invoice.Id">
-     <div class="table-responsive"><table class="table align-middle"><thead><tr><th>客户产品</th><th>数量</th><th>客户销售单价 USD</th><th class="numeric">金额</th></tr></thead><tbody>
-     @for(var i=0;i<invoice.Items.Count;i++){var item=invoice.Items[i];<tr><td><input type="hidden" name="Items[@i].Id" value="@item.Id"><strong>@item.ProductName</strong></td><td>@item.Quantity.ToString("0.###") @item.Unit</td><td><input class="form-control" name="Items[@i].UnitPrice" type="number" min="0" step=".0001" value="@item.UnitPrice" readonly="@(invoice.Status>=3?"readonly":null)"></td><td class="numeric">USD @item.LineAmount.ToString("N2")</td></tr>}
-     </tbody></table></div>
-     <div class="row g-3">
-      <div class="col-md-3"><label class="form-label">Packaging Fee</label><input class="form-control" name="PackagingFee" type="number" min="0" step=".01" value="@invoice.PackagingFee" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Shipping Fee</label><input class="form-control" name="ShippingFee" type="number" min="0" step=".01" value="@invoice.ShippingFee" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Other Fee</label><input class="form-control" name="OtherFee" type="number" min="0" step=".01" value="@invoice.OtherFee" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Discount</label><input class="form-control" name="DiscountAmount" type="number" min="0" step=".01" value="@invoice.DiscountAmount" readonly="@(invoice.Status>=3?"readonly":null)"></div>
-      <div class="col-md-6"><label class="form-label">Payment Terms</label><textarea class="form-control" name="PaymentTerms" rows="2" readonly="@(invoice.Status>=3?"readonly":null)">@invoice.PaymentTerms</textarea></div><div class="col-md-6"><label class="form-label">Payment Instructions</label><textarea class="form-control" name="PaymentInstructions" rows="2" readonly="@(invoice.Status>=3?"readonly":null)">@invoice.PaymentInstructions</textarea></div><div class="col-md-4"><label class="form-label">Trade Terms</label><input class="form-control" name="TradeTerms" value="@invoice.TradeTerms" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Delivery Terms</label><input class="form-control" name="DeliveryTerms" value="@invoice.DeliveryTerms" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Lead Time</label><input class="form-control" name="LeadTime" value="@invoice.LeadTime" readonly="@(invoice.Status>=3?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Valid Until</label><input class="form-control" name="ValidUntil" type="date" value="@invoice.ValidUntil?.ToString("yyyy-MM-dd")" readonly="@(invoice.Status>=3?"readonly":null)"></div>
-      <div class="col-md-8 d-flex align-items-end justify-content-end gap-2"><strong class="me-auto">PI Total: USD @invoice.TotalAmount.ToString("N2")</strong>@if(Model.CanManagePi&&invoice.Status is 1 or 2){<button class="btn btn-primary" type="submit">保存 PI</button>}@if(Model.CanIssuePi&&invoice.Status==2){<button class="btn btn-success" type="submit" formaction="@Url.Action("IssuePlanPi",new{planId=plan.Id})">签发 PI</button>}</div>
-     </div>
-    </form>
-    @if(invoice.Status==3&&plan.Status==4&&Model.CanExecuteProcurement){<form asp-action="CompletePurchasePlan" asp-route-planId="@plan.Id" method="post" class="mt-3 text-end"><button class="btn btn-success" type="submit">完成采购计划</button></form>}
-   }
-  </section>
- </div>
- <div class="tab-pane fade" id="planActivity">
-  <div class="ui-timeline">
-  @foreach(var item in plan.Events){<article><span class="ui-timeline-dot"></span><div><strong>@EventName(item.EventCode)</strong><p>@Display(item.Note)</p><small>@item.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm") · Staff #@item.ActorId</small></div></article>}
-  @if(plan.Events.Count==0){<div class="compact-empty"><i class="bi bi-clock-history"></i><span>暂无采购计划操作记录。</span></div>}
-  </div>
- </div>
+ <div class="tab-pane fade" id="planFiles" data-plan-lazy-pane data-url="@Url.Action("PlanTab",new{planId=plan.Id,tab="files"})">@await Html.PartialAsync("_PlanTabLoading", "文件")</div>
+ <div class="tab-pane fade" id="planCost" data-plan-lazy-pane data-url="@Url.Action("PlanTab",new{planId=plan.Id,tab="cost"})">@await Html.PartialAsync("_PlanTabLoading", "成本与报价")</div>
+ <div class="tab-pane fade" id="planActivity" data-plan-lazy-pane data-url="@Url.Action("PlanTab",new{planId=plan.Id,tab="activity"})">@await Html.PartialAsync("_PlanTabLoading", "采购记录")</div>
 </div>
 </section>
 
 @section Styles { <link rel="stylesheet" href="~/css/pages/procurement.css" asp-append-version="true" /> }
+@section Scripts { <script src="~/js/pages/procurement-plan-details.js" asp-append-version="true"></script> }
