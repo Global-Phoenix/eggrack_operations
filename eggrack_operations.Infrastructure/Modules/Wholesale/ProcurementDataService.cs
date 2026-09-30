@@ -149,9 +149,9 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         UPDATE purchase_plans SET product_cost_cny=@PurchaseCostCny,packaging_cost_cny=@PackagingCostCny,
           sample_cost_cny=@SampleCostCny,domestic_shipping_cny=@DomesticShippingCny,international_shipping_cny=@InternationalShippingCny,
           other_cost_cny=@OtherCostCny,total_cost_cny=@TotalCostCny,cny_per_usd=@CnyPerUsd,total_cost_usd=@TotalCostUsd,
-          profit_method=2,profit_rate=@ProfitRate,approved_quote_amount_usd=@SuggestedQuoteUsd,status=3,
+          profit_method=2,profit_rate=@ProfitRate,approved_quote_amount_usd=@SuggestedQuoteUsd,status=2,
           cost_updated_by=@StaffId,cost_updated_at=@Now,updated_by=@StaffId,updated_at=@Now
-        WHERE id=@PlanId AND status IN (1,2,3)
+        WHERE id=@PlanId AND status=2
         """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,checked((uint)planId),token);
@@ -189,7 +189,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await db.ExecuteAsync("DELETE FROM procurement_plan_cost_items WHERE plan_id=@PlanId",new{PlanId=planId},cancellationToken:transactionToken);
             for(var index=0;index<items.Length;index++)await db.ExecuteAsync("INSERT procurement_plan_cost_items(plan_id,cost_type_id,cost_name,amount_cny,sort_order,created_by,updated_by,created_at,updated_at) VALUES(@PlanId,@TypeId,@Name,@Amount,@Sort,@StaffId,@StaffId,@Now,@Now)",new{PlanId=planId,items[index].TypeId,items[index].Name,Amount=items[index].AmountCny,Sort=index,StaffId=staffId,Now=now},cancellationToken:transactionToken);
-            var changed=await db.ExecuteAsync("UPDATE purchase_plans SET product_cost_cny=0,packaging_cost_cny=0,sample_cost_cny=0,domestic_shipping_cny=0,international_shipping_cny=0,other_cost_cny=@Total,total_cost_cny=@Total,cny_per_usd=@Rate,total_cost_usd=@Usd,profit_method=2,profit_rate=@Profit,approved_quote_amount_usd=@Quote,status=3,cost_updated_by=@StaffId,cost_updated_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status IN(1,2,3)",new{PlanId=planId,Total=total,Rate=command.CnyPerUsd,Usd=usd,Profit=command.ProfitRate,Quote=quote,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            var changed=await db.ExecuteAsync("UPDATE purchase_plans SET product_cost_cny=0,packaging_cost_cny=0,sample_cost_cny=0,domestic_shipping_cny=0,international_shipping_cny=0,other_cost_cny=@Total,total_cost_cny=@Total,cny_per_usd=@Rate,total_cost_usd=@Usd,profit_method=2,profit_rate=@Profit,approved_quote_amount_usd=@Quote,status=2,cost_updated_by=@StaffId,cost_updated_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=2",new{PlanId=planId,Total=total,Rate=command.CnyPerUsd,Usd=usd,Profit=command.ProfitRate,Quote=quote,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             if(changed!=1)throw new InvalidOperationException("采购计划当前状态不能修改成本。");
         },cancellationToken:token);
         var saved=await GetFlexibleCostsAsync(planId,token);

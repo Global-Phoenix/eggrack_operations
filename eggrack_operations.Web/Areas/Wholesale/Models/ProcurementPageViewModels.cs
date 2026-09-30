@@ -28,9 +28,11 @@ public sealed record PurchasePlanDetailPageViewModel(
     bool CanExecuteProcurement,
     bool CanManageCosts,
     bool CanSubmitQuote,
+    bool CanReviewQuote,
     bool CanFinalApprove,
     bool CanManagePi,
     bool CanIssuePi,
+    bool CanSendMail,
     bool CanManageFiles);
 
 public sealed record PurchasePlanSourcingTabViewModel(
@@ -48,9 +50,11 @@ public sealed record PurchasePlanCostTabViewModel(
     bool CanExecuteProcurement,
     bool CanManageCosts,
     bool CanSubmitQuote,
+    bool CanReviewQuote,
     bool CanFinalApprove,
     bool CanManagePi,
-    bool CanIssuePi);
+    bool CanIssuePi,
+    bool CanSendMail);
 
 public sealed record PurchasePlanActivityTabViewModel(
     IReadOnlyList<ProcurementWorkflowEventItem> Events);
@@ -84,7 +88,8 @@ public static class ProcurementUi
         status switch
         {
             ProcurementPlanStatus.PendingApproval or ProcurementPlanStatus.PendingFinalApproval => new("审核中","warning"),
-            ProcurementPlanStatus.Approved or ProcurementPlanStatus.EmailPending => new("已报价","purple"),
+            ProcurementPlanStatus.Approved => new("已批准","purple"),
+            ProcurementPlanStatus.EmailPending => new("待发送","warning"),
             ProcurementPlanStatus.Completed => new("已完成","success"),
             ProcurementPlanStatus.Rejected => new("已退回","danger"),
             ProcurementPlanStatus.Draft => new("草稿","neutral"),

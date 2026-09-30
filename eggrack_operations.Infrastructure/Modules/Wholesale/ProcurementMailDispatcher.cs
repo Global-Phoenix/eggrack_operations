@@ -20,7 +20,8 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
         SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,
           i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency
         FROM procurement_mail_tasks t
-        JOIN proforma_invoices i ON i.purchase_plan_id=t.plan_id AND i.status=3
+        JOIN proforma_invoices i ON i.id=CAST(JSON_UNQUOTE(JSON_EXTRACT(t.payload_json,'$.proformaInvoiceId')) AS UNSIGNED)
+          AND i.purchase_plan_id=t.plan_id AND i.status=3
         WHERE t.id=@MailTaskId LIMIT 1
         """,new{MailTaskId=mailTaskId},cancellationToken:token);
         var task=rows.SingleOrDefault()??throw new InvalidOperationException("邮件任务不存在或 PI 尚未签发。");
@@ -28,7 +29,7 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
         return BuildHtml(task,products);
     }
 
-    public async Task<bool> DispatchAsync(uint mailTaskId,CancellationToken token)
+    public async Task<bool> DispatchAsync(uint mailTaskId,long staffId,CancellationToken token)
     {
         PendingMail? task;
         await using(var db=await databases.OpenMySqlAsync(DatabaseName,token))
@@ -39,9 +40,10 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
             SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,
               i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency
             FROM procurement_mail_tasks t
-            JOIN proforma_invoices i ON i.purchase_plan_id=t.plan_id AND i.status=3
+            JOIN proforma_invoices i ON i.id=CAST(JSON_UNQUOTE(JSON_EXTRACT(t.payload_json,'$.proformaInvoiceId')) AS UNSIGNED)
+              AND i.purchase_plan_id=t.plan_id AND i.status=3
             WHERE t.id=@MailTaskId AND ((t.status IN ('pending','failed')
-              OR (t.status='processing' AND t.locked_at<@StaleAt)) AND t.attempts<5
+              OR (t.status='processing' AND t.locked_at<@StaleAt)) AND t.attempts<5)
             ORDER BY t.created_at,t.id LIMIT 1
             """,new{MailTaskId=mailTaskId,Now=now,StaleAt=now-600},cancellationToken:token);
             task=rows.SingleOrDefault();
@@ -67,6 +69,7 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
             await smtp.SendHtmlAsync(settings,task.Recipient,subject,body,token);
             var sentAt=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             await db.ExecuteAsync("UPDATE procurement_mail_tasks SET status='sent',sent_at=@Now,locked_at=NULL,next_attempt_at=NULL,last_error=NULL,updated_at=@Now WHERE id=@Id AND status='processing'",new{task.Id,Now=sentAt},cancellationToken:token);
+            await db.ExecuteAsync("INSERT procurement_workflow_events(plan_id,event_code,from_status,to_status,entity_type,entity_id,note,actor_id,created_at) VALUES(@PlanId,'mail.sent',8,8,'mail_task',@Id,@Recipient,@StaffId,@Now)",new{task.PlanId,task.Id,task.Recipient,StaffId=staffId,Now=sentAt},cancellationToken:token);
             logger.LogInformation("Procurement mail task {MailTaskId} sent for PI {PiNumber}",task.Id,task.PiNumber);
             return true;
         }

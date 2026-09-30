@@ -73,7 +73,7 @@ public sealed partial class ProcurementDataService
     private sealed record InvoiceValidation(byte Status,decimal ApprovedQuoteUsd,decimal ProductAmount,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,decimal TotalAmount,decimal ItemAmount);
 
     private sealed record InvoicePricingViewHeader(uint InvoiceId,decimal ProductAmount,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,decimal TotalAmount);
-    private sealed record InvoiceIssuePlan(byte Status,decimal ApprovedQuoteUsd,uint RequestId);
+    private sealed record InvoiceIssuePlan(byte Status,decimal ApprovedQuoteUsd,decimal TotalCostUsd,uint RequestId);
     public async Task<ProformaInvoicePricing> UpdateProformaInvoicePricingAsync(uint planId,UpdateProformaInvoicePricingCommand command,long staffId,CancellationToken token=default)
     {
         if(command.Items is null||command.Items.Count==0) throw new BusinessRuleException("PI 至少需要一个产品明细。","procurement.pi.items-empty");
@@ -123,7 +123,7 @@ public sealed partial class ProcurementDataService
         await scopePolicy.EnsurePlanAsync(db,planId,token);
         return await db.ExecuteInTransactionAsync<ProcurementLifecycleResult>(async transactionToken=>
         {
-            var plans=await db.QueryAsync<InvoiceIssuePlan>("SELECT status Status,approved_quote_amount_usd ApprovedQuoteUsd,request_id RequestId FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
+            var plans=await db.QueryAsync<InvoiceIssuePlan>("SELECT status Status,approved_quote_amount_usd ApprovedQuoteUsd,total_cost_usd TotalCostUsd,request_id RequestId FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
             if(plans.Count==0) throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
             if(plans.Single().Status!=4) throw new BusinessRuleException("只有已批准报价的采购计划才能签发 PI。","procurement.pi.issue-state");
             var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT id Id,pi_number Number,CASE status WHEN 2 THEN 'Approved' WHEN 3 THEN 'Issued' ELSE 'Invalid' END Status,total_amount TotalAmount,currency Currency,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1 FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
@@ -136,23 +136,33 @@ public sealed partial class ProcurementDataService
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var changed=await db.ExecuteAsync("UPDATE proforma_invoices SET status=3,issued_by=@StaffId,issued_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@Id AND status=2",new{invoice.Id,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             if(changed!=1) throw new BusinessRuleException("PI 已被其他操作处理，请刷新后重试。","procurement.pi.concurrent-change");
-            await db.ExecuteAsync("UPDATE purchase_plans SET quoted_by=@StaffId,quoted_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{PlanId=planId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            await db.ExecuteAsync("UPDATE purchase_plans SET status=8,quoted_by=@StaffId,quoted_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=4",new{PlanId=planId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             await db.ExecuteAsync("UPDATE purchase_requests SET status=3,updated_at=@Now WHERE id=@RequestId AND status<3",new{RequestId=plans.Single().RequestId,Now=now},cancellationToken:transactionToken);
-            return new(planId,"Approved",invoice.Id,invoice.Number,"Issued");
+            var approvalId=(await db.QueryAsync<uint>("SELECT id FROM procurement_quote_approvals WHERE plan_id=@PlanId AND status='approved' ORDER BY id DESC LIMIT 1",new{PlanId=planId},cancellationToken:transactionToken)).SingleOrDefault();
+            if(approvalId==0)
+            {
+                var plan=plans.Single();
+                var margin=plan.ApprovedQuoteUsd>0?(plan.ApprovedQuoteUsd-plan.TotalCostUsd)/plan.ApprovedQuoteUsd:0;
+                await db.ExecuteAsync("INSERT procurement_quote_approvals(plan_id,status,quote_usd,profit_rate,submitted_by,decided_by,decision_note,submitted_at,decided_at) VALUES(@PlanId,'approved',@Quote,@Margin,@StaffId,@StaffId,'历史计划签发 PI 时补建审批记录',@Now,@Now)",new{PlanId=planId,Quote=plan.ApprovedQuoteUsd,Margin=margin,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+                approvalId=(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
+            }
+            var hasMailTask=(await db.QueryAsync<long>("SELECT COUNT(*) FROM procurement_mail_tasks WHERE plan_id=@PlanId AND CAST(JSON_UNQUOTE(JSON_EXTRACT(payload_json,'$.proformaInvoiceId')) AS UNSIGNED)=@InvoiceId",new{PlanId=planId,InvoiceId=invoice.Id},cancellationToken:transactionToken)).Single();
+            if(hasMailTask==0)
+            {
+                var recipient=(await db.QueryAsync<string>("SELECT email FROM proforma_invoices WHERE id=@InvoiceId",new{InvoiceId=invoice.Id},cancellationToken:transactionToken)).Single();
+                var payload=System.Text.Json.JsonSerializer.Serialize(new{planId,approvalId,quoteUsd=plans.Single().ApprovedQuoteUsd,proformaInvoiceId=invoice.Id,proformaInvoiceNumber=invoice.Number});
+                await db.ExecuteAsync("INSERT procurement_mail_tasks(plan_id,approval_id,template_code,recipient,status,payload_json,created_at,updated_at) VALUES(@PlanId,@ApprovalId,'wholesale.final-quote',@Recipient,'pending',@Payload,@Now,@Now)",new{PlanId=planId,ApprovalId=approvalId,Recipient=recipient,Payload=payload,Now=now},cancellationToken:transactionToken);
+            }
+            await AddWorkflowEventAsync(db,planId,"pi.issued",4,8,"proforma_invoice",invoice.Id,invoice.Number,staffId,now,transactionToken);
+            return new(planId,"EmailPending",invoice.Id,invoice.Number,"Issued");
         },cancellationToken:token);
     }
 
     public async Task<ProcurementLifecycleResult> CompletePlanAsync(uint planId,long staffId,CancellationToken token=default)
     {
+        await CompletePurchasePlanAsync(planId,staffId,token);
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        await scopePolicy.EnsurePlanAsync(db,planId,token);
-        return await db.ExecuteInTransactionAsync<ProcurementLifecycleResult>(async transactionToken=>
-        {
-            var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT i.id Id,i.pi_number Number,CASE i.status WHEN 3 THEN 'Issued' ELSE 'Invalid' END Status,i.total_amount TotalAmount,i.currency Currency,FROM_UNIXTIME(i.created_at) CreatedAtUtc,FROM_UNIXTIME(i.issued_at) IssuedAtUtc FROM purchase_plans p JOIN proforma_invoices i ON i.purchase_plan_id=p.id AND i.status=3 WHERE p.id=@PlanId AND p.status=4 AND EXISTS(SELECT 1 FROM procurement_mail_tasks m WHERE m.plan_id=p.id AND m.status='sent') ORDER BY i.id DESC LIMIT 1 FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
-            var invoice=invoices.SingleOrDefault()??throw new BusinessRuleException("只有 PI 已签发且客户邮件发送成功后才能完成采购计划。","procurement.plan.complete-state");
-            var changed=await db.ExecuteAsync("UPDATE purchase_plans SET status=5,completed_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=4",new{PlanId=planId,StaffId=staffId,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:transactionToken);
-            if(changed!=1) throw new BusinessRuleException("采购计划已被其他操作处理，请刷新后重试。","procurement.plan.concurrent-change");
-            return new(planId,"Completed",invoice.Id,invoice.Number,"Issued");
-        },cancellationToken:token);
+        var invoice=(await db.QueryAsync<ProformaInvoiceSummary>("SELECT id Id,pi_number Number,'Issued' Status,total_amount TotalAmount,currency Currency,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc FROM proforma_invoices WHERE purchase_plan_id=@PlanId AND status=3 ORDER BY id DESC LIMIT 1",new{PlanId=planId},cancellationToken:token)).Single();
+        return new(planId,"Completed",invoice.Id,invoice.Number,"Issued");
     }
 }

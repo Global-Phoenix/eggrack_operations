@@ -19,6 +19,7 @@ public sealed class ProcurementAuthorizationTests
     [Theory]
     [InlineData(nameof(ProcurementController.CreatePlanPage), "wholesale.purchase-plan.create")]
     [InlineData(nameof(ProcurementController.EditPlanPage), "wholesale.purchase-plan.update")]
+    [InlineData(nameof(ProcurementController.PreviewPlanMail), "wholesale.purchase-mail.send")]
     public void EditorPagesRequireSpecificPermission(string methodName,string expectedPermission)
     {
         var method=typeof(ProcurementController).GetMethod(methodName)
@@ -38,6 +39,9 @@ public sealed class ProcurementAuthorizationTests
     [InlineData(nameof(ProcurementController.SavePlanItemProcurement), "wholesale.procurement.execute")]
     [InlineData(nameof(ProcurementController.SavePlanCostQuote), "wholesale.purchase-cost.edit")]
     [InlineData(nameof(ProcurementController.SubmitPlanQuote), "wholesale.purchase-quote.submit")]
+    [InlineData(nameof(ProcurementController.ReviewPlanQuote), "wholesale.purchase-quote.review")]
+    [InlineData(nameof(ProcurementController.DepartmentRejectPlanQuote), "wholesale.purchase-quote.review")]
+    [InlineData(nameof(ProcurementController.FinalRejectPlanQuote), "wholesale.purchase-quote.final-approve")]
     [InlineData(nameof(ProcurementController.BossApprovePlanQuote), "wholesale.purchase-quote.final-approve")]
     [InlineData(nameof(ProcurementController.GeneratePlanPi), "wholesale.purchase-pi.manage")]
     [InlineData(nameof(ProcurementController.SavePlanPi), "wholesale.purchase-pi.manage")]
@@ -45,6 +49,7 @@ public sealed class ProcurementAuthorizationTests
     [InlineData(nameof(ProcurementController.CreatePlanPiRevision), "wholesale.purchase-pi.manage")]
     [InlineData(nameof(ProcurementController.CancelPlanPi), "wholesale.purchase-pi.manage")]
     [InlineData(nameof(ProcurementController.CompletePurchasePlan), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.SendPlanMail), "wholesale.purchase-mail.send")]
     [InlineData(nameof(ProcurementController.UploadPlanFile), "wholesale.purchase-document.internal")]
     [InlineData(nameof(ProcurementController.SetPlanFileVisibility), "wholesale.purchase-document.internal")]
     public void WriteActionsRequireSpecificPermission(string methodName,string expectedPermission)

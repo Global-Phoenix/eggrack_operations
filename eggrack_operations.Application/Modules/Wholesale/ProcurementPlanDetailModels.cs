@@ -36,6 +36,9 @@ public sealed class PurchasePlanDetail
     public int FileCount { get; set; }
     public int EventCount { get; set; }
     public byte? LatestInvoiceStatus { get; set; }
+    public ProcurementCostSnapshotSummary? LatestCostSnapshot { get; set; }
+    public IReadOnlyList<ProcurementQuoteReviewItem> QuoteReviews { get; set; } = [];
+    public IReadOnlyList<MailTaskItem> MailTasks { get; set; } = [];
     public IReadOnlyList<PurchasePlanItemDetail> Items { get; set; } = [];
     public IReadOnlyList<PurchasePlanFileDetail> Files { get; set; } = [];
     public IReadOnlyList<ProcurementWorkflowEventItem> Events { get; set; } = [];

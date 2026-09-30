@@ -89,43 +89,10 @@ public sealed partial class ProcurementDataService
         return (await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
     public async Task<QuoteDecisionResult> ApproveQuoteAsync(QuoteDecisionCommand command,string recipient,CancellationToken token=default)
-    {
-        if(string.IsNullOrWhiteSpace(recipient)) throw new BusinessRuleException("批准报价时必须填写收件人。","procurement.quote.recipient-required");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        await scopePolicy.EnsurePlanAsync(db,command.PlanId,token);
-        return await db.ExecuteInTransactionAsync<QuoteDecisionResult>(async transactionToken=>
-        {
-            var rows=await db.QueryAsync<PlanForApproval>("SELECT id Id,request_id RequestId,request_version_id RequestVersionId,total_cost_usd TotalCostUsd,profit_rate ProfitRate,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:transactionToken);
-            var plan=rows.SingleOrDefault()??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
-            if(plan.Status!=3) throw new BusinessRuleException("当前状态不能批准报价。","procurement.quote.approve-state");
-            ProcurementPricing.ValidateFinalQuote(command.QuoteUsd,plan.TotalCostUsd??0);
-            var margin=(command.QuoteUsd-plan.TotalCostUsd!.Value)/command.QuoteUsd;
-            var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await db.ExecuteAsync("INSERT procurement_quote_approvals(plan_id,status,quote_usd,profit_rate,submitted_by,decided_by,decision_note,submitted_at,decided_at) VALUES(@PlanId,'approved',@QuoteUsd,@Margin,@StaffId,@StaffId,@Note,@Now,@Now)",new{command.PlanId,command.QuoteUsd,Margin=margin,command.StaffId,command.Note,Now=now},cancellationToken:transactionToken);
-            var approvalId=(await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
-            await db.ExecuteAsync("UPDATE purchase_plans SET status=4,approved_quote_amount_usd=@QuoteUsd,approved_by=@StaffId,approved_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{command.PlanId,command.QuoteUsd,command.StaffId,Now=now},cancellationToken:transactionToken);
-            var invoice=await CreateApprovedInvoiceAsync(db,plan,command.QuoteUsd,command.Note,command.StaffId,now,transactionToken);
-            await db.ExecuteAsync("INSERT procurement_mail_tasks(plan_id,approval_id,template_code,recipient,status,payload_json,created_at) VALUES(@PlanId,@ApprovalId,'wholesale.final-quote',@Recipient,'pending',@Payload,@Now)",new{command.PlanId,ApprovalId=approvalId,Recipient=recipient.Trim(),Payload=System.Text.Json.JsonSerializer.Serialize(new{command.PlanId,approvalId,command.QuoteUsd,proformaInvoiceId=invoice.Id,proformaInvoiceNumber=invoice.Number}),Now=now},cancellationToken:transactionToken);
-            var taskId=(await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
-            return new(approvalId,taskId,invoice.Id,invoice.Number,"Approved");
-        },cancellationToken:token);
-    }
+        => await FinalApproveQuoteAsync(command,recipient,token);
 
     public async Task<QuoteDecisionResult> RejectQuoteAsync(QuoteDecisionCommand command,CancellationToken token=default)
-    {
-        if(string.IsNullOrWhiteSpace(command.Note)) throw new BusinessRuleException("退回时必须填写原因。","procurement.quote.reject-note-required");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        await scopePolicy.EnsurePlanAsync(db,command.PlanId,token);
-        return await db.ExecuteInTransactionAsync<QuoteDecisionResult>(async transactionToken=>
-        {
-            var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var changed=await db.ExecuteAsync("UPDATE purchase_plans SET status=2,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=3",new{command.PlanId,command.StaffId,Now=now},cancellationToken:transactionToken);
-            if(changed!=1) throw new BusinessRuleException("当前状态不能退回报价。","procurement.quote.reject-state");
-            await db.ExecuteAsync("INSERT procurement_quote_approvals(plan_id,status,quote_usd,profit_rate,submitted_by,decided_by,decision_note,submitted_at,decided_at) SELECT id,'rejected',@QuoteUsd,COALESCE(profit_rate,0),@StaffId,@StaffId,@Note,@Now,@Now FROM purchase_plans WHERE id=@PlanId",new{command.PlanId,command.QuoteUsd,command.StaffId,command.Note,Now=now},cancellationToken:transactionToken);
-            var approvalId=(await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
-            return new(approvalId,null,null,null,"Rejected");
-        },cancellationToken:token);
-    }
+        => await RejectPhaseOneQuoteAsync(command,token);
 
     public async Task<SourcingWorkspace> GetSourcingWorkspaceAsync(uint planId,CancellationToken token=default)
     {
@@ -217,12 +184,26 @@ public sealed partial class ProcurementDataService
         await db.ExecuteAsync("INSERT procurement_inquiries(plan_item_id,supplier_id,offered_product_name,length_cm,width_cm,height_cm,weight_kg,color,size_details,parameter_details,currency,unit_price_cny,moq,lead_days,valid_until,terms,status,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@OfferedProductName,@LengthCm,@WidthCm,@HeightCm,@WeightKg,@Color,@SizeDetails,@ParameterDetails,@Currency,@UnitPrice,@Moq,@LeadDays,@ValidUntil,@Terms,@Status,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.OfferedProductName,command.LengthCm,command.WidthCm,command.HeightCm,command.WeightKg,command.Color,command.SizeDetails,command.ParameterDetails,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
 
-    public async Task<uint> SaveSampleAsync(SaveSampleCommand command,CancellationToken token=default)
+    public async Task<uint> SaveSampleAsync(SaveSampleCommand command,long staffId,CancellationToken token=default)
     {
         if(command.Quantity<=0||command.CostCny<0)throw new InvalidOperationException("样品数量必须大于零，费用不能为负数。");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_samples",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_samples SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,quantity=@Quantity,status=@Status,cost_cny=@CostCny,tracking_number=@TrackingNumber,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("样品记录不存在。");return command.Id.Value;}
-        await db.ExecuteAsync("INSERT procurement_samples(plan_item_id,supplier_id,quantity,status,cost_cny,tracking_number,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Quantity,@Status,@CostCny,@TrackingNumber,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_samples",command.Id.Value,editablePlanId,token);
+        return await db.ExecuteInTransactionAsync<uint>(async transactionToken=>
+        {
+            var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();uint id;
+            if(command.Id.HasValue)
+            {
+                var changed=await db.ExecuteAsync("UPDATE procurement_samples SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,quantity=@Quantity,status=@Status,cost_cny=@CostCny,tracking_number=@TrackingNumber,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:transactionToken);
+                if(changed!=1)throw new InvalidOperationException("样品记录不存在。");id=command.Id.Value;
+            }
+            else
+            {
+                await db.ExecuteAsync("INSERT procurement_samples(plan_item_id,supplier_id,quantity,status,cost_cny,tracking_number,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Quantity,@Status,@CostCny,@TrackingNumber,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:transactionToken);
+                id=(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
+            }
+            await AddWorkflowEventAsync(db,editablePlanId,command.Id.HasValue?"sample.updated":"sample.created",2,2,"sample",id,command.Notes,staffId,now,transactionToken);
+            return id;
+        },cancellationToken:token);
     }
     public async Task<uint> SavePlanItemAsync(uint planId,SaveProcurementPlanItemCommand command,ulong staffId,CancellationToken token=default)
     {

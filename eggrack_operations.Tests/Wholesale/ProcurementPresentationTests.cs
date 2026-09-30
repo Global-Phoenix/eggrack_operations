@@ -49,7 +49,8 @@ public sealed class ProcurementPresentationTests
     [Theory]
     [InlineData(ProcurementPlanStatus.Draft, "草稿", "neutral")]
     [InlineData(ProcurementPlanStatus.PendingApproval, "审核中", "warning")]
-    [InlineData(ProcurementPlanStatus.Approved, "已报价", "purple")]
+    [InlineData(ProcurementPlanStatus.Approved, "已批准", "purple")]
+    [InlineData(ProcurementPlanStatus.EmailPending, "待发送", "warning")]
     [InlineData(ProcurementPlanStatus.Completed, "已完成", "success")]
     [InlineData(ProcurementPlanStatus.Rejected, "已退回", "danger")]
     public void PlanStatusesHaveStableUserFacingLabels(
