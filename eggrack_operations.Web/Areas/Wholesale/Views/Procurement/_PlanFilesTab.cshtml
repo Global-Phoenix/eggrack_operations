@@ -12,7 +12,7 @@
   <div class="col-md-4 col-lg-3"><label class="form-label">关联产品（可选）</label><select class="form-select" name="planItemId"><option value="">计划级文件</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName</option>}</select></div>
   <div class="col-md-5 col-lg-3"><label class="form-label">标题（可选）</label><input class="form-control" name="title"></div>
   <div class="col-md-4"><label class="form-label">关联供应商（可选）</label><select class="form-select" name="supplierId"><option value="">未关联</option>@foreach(var supplier in data.Suppliers){<option value="@supplier.Id">@supplier.Name</option>}</select></div>
-  <div class="col-md-4"><label class="form-label">关联报价（可选）</label><select class="form-select" name="inquiryId"><option value="">未关联</option>@foreach(var inquiry in data.Inquiries){<option value="@inquiry.Id">@inquiry.ProductName · @inquiry.SupplierName · V@inquiry.RevisionNo</option>}</select></div>
+  <div class="col-md-4"><label class="form-label">关联报价（可选）</label><select class="form-select" name="inquiryId"><option value="">未关联</option>@foreach(var inquiry in data.Inquiries){<option value="@inquiry.Id">@inquiry.ProductName · @inquiry.SupplierName · V@(inquiry.RevisionNo)</option>}</select></div>
   <div class="col-md-4"><label class="form-label">关联样品（可选）</label><select class="form-select" name="sampleId"><option value="">未关联</option>@foreach(var sample in data.Samples){<option value="@sample.Id">@sample.ProductName · @Display(sample.SupplierName)</option>}</select></div>
   <div class="col-12"><label class="form-label">文件说明（可选）</label><input class="form-control" name="description"></div>
   <div class="col-12"><button class="btn btn-primary" type="submit">上传文件</button></div>

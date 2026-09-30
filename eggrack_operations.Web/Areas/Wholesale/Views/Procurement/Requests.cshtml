@@ -27,7 +27,7 @@
   <td><a class="row-title" href="@detailUrl">@item.RequestNumber</a>@if(versionOutdated){<small class="cell-attention"><i class="bi bi-exclamation-circle"></i> 客户已提交新版本</small>}else{<small class="ui-cell-secondary">首次提交 @ProcurementUi.RelativeTime(item.CreatedAtUtc)</small>}</td>
   <td><span class="ui-customer-name">@item.CustomerName</span><small class="ui-cell-secondary">@item.Email</small></td>
   <td class="numeric">@item.ProductCount</td>
-  <td><span class="ui-version">V@item.CurrentVersion</span></td>
+  <td><span class="ui-version">V@(item.CurrentVersion)</span></td>
   <td><span class="er-status er-status-@status.Tone"><i></i>@status.Text</span></td>
   <td>@(item.BuyerName??"—")</td>
   <td><time title="@item.UpdatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">@ProcurementUi.RelativeTime(item.UpdatedAtUtc)</time></td>

@@ -20,7 +20,7 @@
  <section class="er-section">
   <div class="er-section-header"><div><h2>需要关注</h2><p>尚未建立采购计划的客户申请</p></div><a href="/wholesale/procurement/requests">查看全部</a></div>
   <div class="attention-list">
-   @foreach(var item in attentionRequests){<a href="/wholesale/procurement/requests/@item.Id/details"><span class="attention-icon"><i class="bi bi-file-earmark-plus"></i></span><span><strong>@item.RequestNumber</strong><small>@item.CustomerName · @item.ProductCount 项产品 · V@item.CurrentVersion</small></span><time>@item.SubmittedAtUtc.ToLocalTime().ToString("MM-dd HH:mm")</time><i class="bi bi-chevron-right"></i></a>}
+   @foreach(var item in attentionRequests){<a href="/wholesale/procurement/requests/@item.Id/details"><span class="attention-icon"><i class="bi bi-file-earmark-plus"></i></span><span><strong>@item.RequestNumber</strong><small>@item.CustomerName · @item.ProductCount 项产品 · V@(item.CurrentVersion)</small></span><time>@item.SubmittedAtUtc.ToLocalTime().ToString("MM-dd HH:mm")</time><i class="bi bi-chevron-right"></i></a>}
    @if(attentionRequests.Length==0){<div class="compact-empty"><i class="bi bi-check2-circle"></i><span>所有申请都已建立采购计划。</span></div>}
   </div>
  </section>
