@@ -2,9 +2,7 @@
 @{
     var isUpdate = Model.Plan is not null;
     var pageTitle = isUpdate ? "更新采购计划" : "创建采购计划";
-    var planTitle = Model.Plan?.PlanTitle ?? $"{Model.Request.RequestNumber} 采购计划";
-    var startTime = Model.Plan?.PlannedStartDate?.ToString("yyyy-MM-dd") ?? DateTime.Now.ToString("yyyy-MM-dd");
-    var completedTime = Model.Plan?.CompletedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "计划完成时自动记录";
+    var planTitle = Model.Request.RequestNumber;
 }
 <section class="proc proc-plan-editor-page"
          data-plan-editor-page
@@ -33,15 +31,12 @@
  </div>
 
  <div class="plan-profile-card">
-  <div class="section-heading"><div><h6>计划信息</h6><p>计划名称和生命周期时间由系统维护，人员只能调整业务资料。</p></div></div>
+  <div class="section-heading"><div><h6>计划信息</h6><p>计划名称由申请编号自动生成，人员只需维护采购业务资料。</p></div></div>
   <div class="row g-3">
-   <div class="col-lg-6"><label class="form-label">计划名称</label><input class="form-control system-field" value="@planTitle" readonly aria-readonly="true"><div class="form-text">根据申请编号自动生成，创建后不可更改。</div></div>
-   <div class="col-lg-3 col-md-6"><label class="form-label">计划开始时间</label><input class="form-control system-field" value="@startTime" readonly aria-readonly="true"><div class="form-text">默认为计划创建时间。</div></div>
-   <div class="col-lg-3 col-md-6"><label class="form-label">完成时间</label><input class="form-control system-field" value="@completedTime" readonly aria-readonly="true"><div class="form-text">提交完成时由系统自动记录。</div></div>
-   <div class="col-lg-3 col-md-6"><label class="form-label">优先级</label><select class="form-select" name="Priority" data-priority><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option></select></div>
-   <div class="col-lg-3 col-md-6"><label class="form-label">采购人员</label><select class="form-select" name="AssignedBuyerStaffId" data-buyer required><option value="">请选择采购部人员</option>@foreach(var buyer in Model.Buyers){<option value="@buyer.Id">@buyer.Name</option>}</select></div>
-   <div class="col-lg-3 col-md-6"><label class="form-label">参考申请版本</label><select class="form-select" name="RequestVersionId" data-version required><option value="">正在加载版本…</option></select></div>
-   <div class="col-lg-3 col-md-6"><label class="form-label">计划编号</label><input class="form-control system-field" value="@(Model.Plan?.PlanNumber ?? "保存后生成")" readonly aria-readonly="true"></div>
+   <div class="col-xl-3 col-md-6"><label class="form-label">计划名称</label><input class="form-control system-field" value="@planTitle" readonly aria-readonly="true"><div class="form-text">根据申请编号自动生成，创建后不可更改。</div></div>
+   <div class="col-xl-3 col-md-6"><label class="form-label">参考申请版本</label><select class="form-select" name="RequestVersionId" data-version required><option value="">正在加载版本…</option></select></div>
+   <div class="col-xl-3 col-md-6"><label class="form-label">采购人员</label><select class="form-select" name="AssignedBuyerStaffId" data-buyer required><option value="">请选择采购部人员</option>@foreach(var buyer in Model.Buyers){<option value="@buyer.Id">@buyer.Name</option>}</select></div>
+   <div class="col-xl-3 col-md-6"><label class="form-label">优先级</label><select class="form-select" name="Priority" data-priority><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option></select></div>
    <div class="col-12"><label class="form-label">计划说明</label><textarea class="form-control" name="InternalNote" data-internal-note rows="3" placeholder="采购策略、交付要求、风险提示或内部协作说明"></textarea></div>
   </div>
  </div>

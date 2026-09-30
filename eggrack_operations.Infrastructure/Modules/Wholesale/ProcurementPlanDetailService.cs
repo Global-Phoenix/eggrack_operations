@@ -17,7 +17,7 @@ public sealed partial class ProcurementDataService
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanAsync(db,planId,token);
         var plan=(await db.QueryAsync<PurchasePlanDetail>("""
-            SELECT p.id Id,p.plan_number PlanNumber,COALESCE(p.plan_title,p.plan_number) PlanTitle,
+            SELECT p.id Id,p.plan_number PlanNumber,r.request_number PlanTitle,
               p.request_id RequestId,p.request_version_id RequestVersionId,r.request_number RequestNumber,
               v.version_number RequestVersion,COALESCE(NULLIF(v.company_name,''),v.contact_name) CustomerName,
               v.email CustomerEmail,p.status Status,COALESCE(p.priority_code,'normal') Priority,

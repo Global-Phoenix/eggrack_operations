@@ -8,7 +8,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
 {
     private const string DatabaseName = "Eggrack";
 
-    private sealed record PlanIdentityRow(uint Id,uint RequestId,uint RequestVersionId,byte Status);
+    private sealed record PlanIdentityRow(uint Id,uint RequestId,uint RequestVersionId,byte Status,string RequestNumber);
     private sealed record PlanRequestVersionRow(uint Id,uint RequestId,uint VersionNumber,string RequestNumber,string CustomerName,string Email,DateTime SubmittedAtUtc);
 
     private sealed record ProcurementPlanRow(
@@ -119,7 +119,7 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             if(existing.Count>0) throw new InvalidOperationException("该采购申请已经创建采购计划，不能重复创建。");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var number="PP-"+DateTime.UtcNow.ToString("yyMMdd-HHmmssfff");
-            var title=$"{version.RequestNumber} 采购计划";
+            var title=version.RequestNumber;
             var startDate=DateTime.Now.Date;
             await db.ExecuteAsync("""
             INSERT purchase_plans(plan_number,plan_title,request_id,request_version_id,status,priority_code,planned_start_date,target_completion_date,assigned_buyer_id,department_id,assigned_by,assigned_at,internal_note,created_by,updated_by,created_at,updated_at)
@@ -285,13 +285,13 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         await db.BeginTransactionAsync(cancellationToken:token);
         try
         {
-            var plan=(await db.QueryAsync<PlanIdentityRow>("SELECT id Id,request_id RequestId,request_version_id RequestVersionId,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:token)).SingleOrDefault()
+            var plan=(await db.QueryAsync<PlanIdentityRow>("SELECT p.id Id,p.request_id RequestId,p.request_version_id RequestVersionId,p.status Status,r.request_number RequestNumber FROM purchase_plans p JOIN purchase_requests r ON r.id=p.request_id WHERE p.id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:token)).SingleOrDefault()
                 ?? throw new InvalidOperationException("采购计划不存在。");
             if(plan.Status>2) throw new InvalidOperationException("采购计划已进入成本或审批阶段，不能修改计划资料。");
             var versions=await db.QueryAsync<uint>("SELECT id FROM purchase_request_versions WHERE id=@VersionId AND request_id=@RequestId",new{VersionId=input.RequestVersionId,plan.RequestId},cancellationToken:token);
             if(versions.Count!=1) throw new InvalidOperationException("采购申请版本与计划不匹配。");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await db.ExecuteAsync("UPDATE purchase_plans SET request_version_id=@VersionId,priority_code=@Priority,assigned_buyer_id=@BuyerId,department_id=@DepartmentId,assigned_by=@StaffId,assigned_at=@Now,internal_note=@InternalNote,status=2,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{PlanId=planId,VersionId=input.RequestVersionId,Priority=input.Priority,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
+            await db.ExecuteAsync("UPDATE purchase_plans SET plan_title=@Title,request_version_id=@VersionId,priority_code=@Priority,assigned_buyer_id=@BuyerId,department_id=@DepartmentId,assigned_by=@StaffId,assigned_at=@Now,internal_note=@InternalNote,status=2,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{PlanId=planId,Title=plan.RequestNumber,VersionId=input.RequestVersionId,Priority=input.Priority,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
             await SynchronizePlanItemsAsync(db,planId,plan.RequestId,input.RequestVersionId,input.Items,staffId,now,token);
             await db.CommitAsync(token);
         }
