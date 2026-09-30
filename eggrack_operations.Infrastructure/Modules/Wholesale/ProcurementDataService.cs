@@ -1,10 +1,11 @@
 using System.Data.Common;
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Infrastructure.Database;
+using Microsoft.Extensions.Options;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
-public sealed partial class ProcurementDataService(DatabaseSessionFactory databases,ProcurementScopePolicy scopePolicy)
+public sealed partial class ProcurementDataService(DatabaseSessionFactory databases,ProcurementScopePolicy scopePolicy,IOptions<ProcurementOptions> procurementOptions)
 {
     private const string DatabaseName = "Eggrack";
 
@@ -202,13 +203,13 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         FROM eggrack_auth_staff s
         JOIN eggrack_auth_staff_department sd ON sd.staff_id=s.id
         JOIN eggrack_auth_department d ON d.id=sd.department_id
-          AND (LOWER(d.department_code) IN('procurement','purchasing','purchase') OR d.department_name='采购部')
+          AND LOWER(d.department_code) IN @BuyerDepartmentCodes
           AND d.status=1 AND d.deleted_at IS NULL
         WHERE s.status=1 AND s.deleted_at IS NULL
         ORDER BY s.staff_name,s.id
         """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        return await db.QueryAsync<ProcurementBuyerOption>(sql,cancellationToken:token);
+        return await db.QueryAsync<ProcurementBuyerOption>(sql,new{BuyerDepartmentCodes=procurementOptions.Value.NormalizedBuyerDepartmentCodes()},cancellationToken:token);
     }
     public async Task<IReadOnlyList<PurchaseRequestVersionDetail>> GetRequestVersionsAsync(uint requestId,CancellationToken token=default)
     {

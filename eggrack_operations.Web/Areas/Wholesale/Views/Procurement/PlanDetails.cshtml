@@ -47,7 +47,7 @@
     @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){
     <form asp-action="SavePlanItemProcurement" asp-route-planId="@plan.Id" method="post" class="row g-3 mt-1">
      <input type="hidden" name="ItemId" value="@item.Id">
-     <div class="col-md-4"><label class="form-label">采购人员</label><select class="form-select" name="BuyerId" required><option value="">请选择采购部人员</option>@foreach(var buyer in Model.Buyers){if(item.BuyerId==buyer.Id){<option value="@buyer.Id" selected>@buyer.Name</option>}else{<option value="@buyer.Id">@buyer.Name</option>}}</select></div>
+     <div class="col-md-4"><label class="form-label">采购人员</label><select class="form-select" name="BuyerId" required><option value="">请选择采购人员</option>@foreach(var buyer in Model.Buyers){if(item.BuyerId==buyer.Id){<option value="@buyer.Id" selected>@buyer.Name</option>}else{<option value="@buyer.Id">@buyer.Name</option>}}</select></div>
      <div class="col-md-3"><label class="form-label">采购单价 CNY</label><input class="form-control" name="PurchaseUnitPriceCny" type="number" min="0" step="0.0001" value="@item.PurchaseUnitPriceCny" required></div>
      <div class="col-md-5"><label class="form-label">备注</label><input class="form-control" name="InternalNote" value="@item.InternalNote"></div>
      <div class="col-12"><button class="btn btn-primary" type="submit">保存产品采购信息</button></div>

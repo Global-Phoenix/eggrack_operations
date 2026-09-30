@@ -18,7 +18,7 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.AddSingleton<NavigationService>();
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddWholesaleProcurement();
+builder.Services.AddWholesaleProcurement(builder.Configuration);
 builder.Services.AddFileCenter();
 builder.Services.AddSecurityArea();
 builder.Services.AddInternalIdentity(builder.Configuration);

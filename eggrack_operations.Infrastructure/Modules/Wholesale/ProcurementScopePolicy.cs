@@ -2,6 +2,7 @@ using Eggrack.Operations.Application.Modules.Security;
 using Eggrack.Operations.Common.Models;
 using Eggrack.Operations.Domain.Modules.Security;
 using Eggrack.Operations.Infrastructure.Database;
+using Microsoft.Extensions.Options;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
@@ -14,7 +15,7 @@ public sealed record ProcurementAccessScope(
     public long[] SqlDepartmentIds => DepartmentIds.Count == 0 ? [0] : DepartmentIds.ToArray();
 }
 
-public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authorization)
+public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authorization,IOptions<ProcurementOptions> procurementOptions)
 {
     public ProcurementAccessScope Current(string? permissionCode = null)
     {
@@ -103,18 +104,18 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
             FROM eggrack_auth_staff_department sd
             JOIN eggrack_auth_staff s ON s.id=sd.staff_id AND s.status=1 AND s.deleted_at IS NULL
             JOIN eggrack_auth_department d ON d.id=sd.department_id
-              AND (LOWER(d.department_code) IN('procurement','purchasing','purchase') OR d.department_name='采购部')
+              AND LOWER(d.department_code) IN @BuyerDepartmentCodes
               AND d.status=1 AND d.deleted_at IS NULL
             WHERE sd.staff_id=@BuyerStaffId
             ORDER BY sd.is_primary DESC,sd.id
             LIMIT 1
             """,
-            new { BuyerStaffId = buyerStaffId },
+            new { BuyerStaffId = buyerStaffId, BuyerDepartmentCodes = procurementOptions.Value.NormalizedBuyerDepartmentCodes() },
             cancellationToken: token);
         var departmentId = rows.SingleOrDefault();
         return departmentId > 0
             ? departmentId
-            : throw new BusinessRuleException("采购人员必须是启用状态并且属于采购部。", "procurement.buyer.department-denied");
+            : throw new BusinessRuleException($"采购人员必须是启用状态并且属于{procurementOptions.Value.BuyerDepartmentLabel}。", "procurement.buyer.department-denied");
     }
 
     public static object Params(ProcurementAccessScope scope, object values)
