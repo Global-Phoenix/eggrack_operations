@@ -235,7 +235,8 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           sql,ProcurementScopePolicy.Params(scope,new{RequestId=requestId}),cancellationToken:token);
         if(versions.Count==0)return [];
         const string itemSql="""
-        SELECT id Id,version_id VersionId,product_key ProductKey,product_name ProductName,quantity Quantity,
+        SELECT id Id,version_id VersionId,CAST(product_key AS CHAR(64)) ProductKey,
+          product_name ProductName,quantity Quantity,
           quantity_unit Unit,sku Sku,brand Brand,description Description,reference_url ReferenceUrl,
           target_unit_price TargetUnitPrice,currency Currency,specifications Specifications,
           color Color,size Size,packaging_requirements PackagingRequirements,

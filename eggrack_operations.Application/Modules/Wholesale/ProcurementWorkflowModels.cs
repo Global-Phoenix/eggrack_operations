@@ -37,7 +37,12 @@ public sealed class ProcurementPlanItemOption
     public string? InternalNote { get; set; }
 }
 public sealed record CandidateProductItem(uint Id,uint PlanItemId,uint? SupplierId,string ProductName,string? SupplierName,string? ReferenceUrl,string? SpecificationJson,string Status);
-public sealed record InquiryItem(uint Id,uint PlanItemId,uint SupplierId,string ProductName,string SupplierName,string? OfferedProductName,decimal? LengthCm,decimal? WidthCm,decimal? HeightCm,decimal? WeightKg,string? Color,string? SizeDetails,string? ParameterDetails,string Currency,decimal? UnitPrice,decimal? Moq,uint? LeadDays,DateTime? ValidUntil,string? Terms,string Status,string? Notes,uint RevisionNo=1,bool IsSelected=false);
+public sealed record InquiryItem(uint Id,uint PlanItemId,uint SupplierId,string ProductName,string SupplierName,string? OfferedProductName,decimal? LengthCm,decimal? WidthCm,decimal? HeightCm,decimal? WeightKg,string? Color,string? SizeDetails,string? ParameterDetails,string Currency,decimal? UnitPrice,decimal? Moq,uint? LeadDays,DateTime? ValidUntil,string? Terms,string Status,string? Notes,uint RevisionNo=1,bool IsSelected=false)
+{
+    // Dapper needs the property-mapping path here because MySQL returns non-null numeric
+    // columns and EXISTS expressions using provider-specific CLR types.
+    public InquiryItem():this(0,0,0,string.Empty,string.Empty,null,null,null,null,null,null,null,null,string.Empty,null,null,null,null,null,string.Empty,null){}
+}
 public sealed record SampleItem(uint Id,uint PlanItemId,uint? SupplierId,string ProductName,string? SupplierName,decimal Quantity,string Status,decimal CostCny,string? TrackingNumber,string? Notes);
 public sealed record ProcurementManagedOption(uint Id,string Code,string Name,string? Description,string? AllowedExtensions,uint? MaxFileSizeMb);
 public sealed record SampleFileItem(uint Id,uint? SampleId,uint? FileTypeId,string FileTypeName,string OriginalName,string? Description,string MimeType,uint FileSize,DateTime UploadedAtUtc,uint? PlanItemId=null,uint? SupplierId=null,uint? InquiryId=null,string Visibility="internal");

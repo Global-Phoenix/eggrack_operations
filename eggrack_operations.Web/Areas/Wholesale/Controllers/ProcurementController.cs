@@ -1,5 +1,6 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Application.Modules.Security;
+using Eggrack.Operations.Common.Models;
 using Eggrack.Operations.Infrastructure.Modules.Files;
 using Eggrack.Operations.Infrastructure.Modules.Wholesale;
 using eggrack_operations.Areas.Security;
@@ -74,7 +75,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
             return View("PlanEditor",new ProcurementPlanEditorPageViewModel(
                 request,plan,await procurement.GetBuyersAsync(token)));
         }
-        catch(InvalidOperationException){return NotFound();}
+        catch(BusinessRuleException error) when(error.Code=="procurement.plan.missing"){return NotFound();}
     }
 
     [HttpGet("sourcing")]
@@ -101,7 +102,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
                 Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue"),
                 Has("wholesale.purchase-document.internal")));
         }
-        catch(InvalidOperationException){return NotFound();}
+        catch(BusinessRuleException error) when(error.Code=="procurement.plan.missing"){return NotFound();}
     }
 
     [HttpGet("proforma-invoices/{invoiceId:long}")]
