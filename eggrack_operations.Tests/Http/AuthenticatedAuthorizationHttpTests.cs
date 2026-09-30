@@ -117,8 +117,7 @@ public sealed class AuthenticatedAuthorizationHttpTests
         {
             var identity=new ClaimsIdentity([
                 new Claim(ClaimTypes.NameIdentifier,"test-staff"),
-                new Claim(ClaimTypes.Name,"Integration Test"),
-                new Claim("eggrack_staff_id","1")
+                new Claim(ClaimTypes.Name,"Integration Test")
             ],SchemeName);
             var principal=new ClaimsPrincipal(identity);
             return Task.FromResult(AuthenticateResult.Success(

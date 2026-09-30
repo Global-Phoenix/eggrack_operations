@@ -236,5 +236,5 @@ public sealed partial class ProcurementController
     }
 
     private bool TryStaffId(out long staffId) =>
-        long.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
+        HttpContext.TryGetInternalStaffId(out staffId);
 }

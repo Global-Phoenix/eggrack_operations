@@ -257,5 +257,5 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         Request.Headers.Accept.ToString().Contains("application/json",StringComparison.OrdinalIgnoreCase);
 
     private bool TryStaffIdUnsigned(out ulong staffId) =>
-        ulong.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
+        HttpContext.TryGetInternalStaffId(out staffId);
 }

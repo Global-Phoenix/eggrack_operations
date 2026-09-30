@@ -75,4 +75,36 @@ public sealed class InternalPermissionFilter(
     }
 }
 
+public static class InternalAuthorizationHttpContextExtensions
+{
+    public static bool TryGetInternalStaffId(this HttpContext context, out long staffId)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        if (context.Items["InternalAuthorization"] is AuthorizationDecision
+            {
+                Allowed: true,
+                StaffId: > 0
+            } decision)
+        {
+            staffId = decision.StaffId;
+            return true;
+        }
+
+        staffId = 0;
+        return false;
+    }
+
+    public static bool TryGetInternalStaffId(this HttpContext context, out ulong staffId)
+    {
+        if (context.TryGetInternalStaffId(out long signedStaffId))
+        {
+            staffId = checked((ulong)signedStaffId);
+            return true;
+        }
+
+        staffId = 0;
+        return false;
+    }
+}
+
 
