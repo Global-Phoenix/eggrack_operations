@@ -1,0 +1,48 @@
+<button class="fc-drawer-backdrop" type="button" data-close-inspector aria-label="关闭文件详情"></button>
+
+<aside class="fc-detail" data-detail-panel aria-labelledby="fileDetailTitle" aria-hidden="true">
+    <div class="fc-detail-header">
+        <div class="fc-detail-title"><small class="text-secondary" data-detail-label>文件预览</small><h5 class="mt-1 mb-0" id="fileDetailTitle" data-detail-name>选择文件查看</h5></div>
+        <div class="fc-detail-tools">
+            <button class="fc-icon-button" type="button" data-expand-preview disabled aria-label="放大预览" title="放大预览"><i class="bi bi-arrows-fullscreen"></i></button>
+            <button class="fc-icon-button" type="button" data-close-inspector aria-label="关闭文件详情" title="关闭"><i class="bi bi-x-lg"></i></button>
+        </div>
+    </div>
+    <div class="fc-detail-body">
+        <small class="text-secondary" data-detail-sub>从左侧列表中选择一个文件</small>
+        <div class="fc-preview-shell">
+            <div class="fc-preview" data-preview><div><i class="bi bi-file-earmark"></i>暂无预览</div></div>
+            <button class="fc-preview-expand" type="button" data-expand-preview disabled><i class="bi bi-arrows-fullscreen"></i><span>大图预览</span></button>
+        </div>
+        <div data-detail-meta></div>
+    </div>
+    <div class="fc-detail-actions">
+        <button class="btn btn-outline-secondary flex-fill" type="button" data-open-source disabled><i class="bi bi-box-arrow-up-right"></i> 打开业务</button>
+        <button class="btn btn-outline-secondary flex-fill" type="button" data-secondary disabled><i class="bi bi-link-45deg"></i> 复制内部链接</button>
+        <button class="btn btn-primary flex-fill" type="button" data-primary disabled><i class="bi bi-download"></i> 下载</button>
+    </div>
+</aside>
+
+<div class="fc-large-preview" data-large-preview hidden role="dialog" aria-modal="true" aria-labelledby="largePreviewTitle">
+    <button class="fc-large-backdrop" type="button" data-close-large aria-label="关闭大图预览"></button>
+    <section class="fc-large-dialog" tabindex="-1">
+        <header class="fc-large-toolbar">
+            <div class="fc-large-title">
+                <span class="fc-file-icon" data-large-icon><i class="bi bi-file-earmark"></i></span>
+                <div><strong id="largePreviewTitle" data-large-name>文件预览</strong><small data-large-sub></small></div>
+            </div>
+            <div class="fc-large-tools">
+                <button class="btn btn-outline-secondary" type="button" data-large-new-window><i class="bi bi-box-arrow-up-right"></i><span>新窗口打开</span></button>
+                <button class="btn btn-primary" type="button" data-large-download><i class="bi bi-download"></i><span>下载</span></button>
+                <button class="fc-icon-button" type="button" data-close-large aria-label="关闭预览" title="关闭"><i class="bi bi-x-lg"></i></button>
+            </div>
+        </header>
+        <div class="fc-large-body">
+            <div class="fc-large-stage" data-large-stage></div>
+            <aside class="fc-large-info">
+                <div><span class="fc-section-label">文件信息</span><div data-large-meta></div></div>
+                <button class="btn btn-outline-secondary w-100" type="button" data-large-business><i class="bi bi-box-arrow-up-right"></i> 打开关联业务</button>
+            </aside>
+        </div>
+    </section>
+</div>

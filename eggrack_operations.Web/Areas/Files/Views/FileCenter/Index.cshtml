@@ -87,26 +87,13 @@
         </div>
     </div>
 
-    <aside class="fc-detail" data-detail-panel aria-labelledby="fileDetailTitle">
-        <div class="fc-detail-header">
-            <div><small class="text-secondary" data-detail-label>文件预览</small><h5 class="mt-1 mb-0" id="fileDetailTitle" data-detail-name>选择文件查看</h5></div>
-        </div>
-        <div class="fc-detail-body">
-            <small class="text-secondary" data-detail-sub>从左侧列表中选择一个文件</small>
-            <div class="fc-preview" data-preview><div><i class="bi bi-file-earmark"></i>暂无预览</div></div>
-            <div data-detail-meta></div>
-        </div>
-        <div class="fc-detail-actions">
-            <button class="btn btn-outline-secondary flex-fill" type="button" data-open-source disabled><i class="bi bi-box-arrow-up-right"></i> 打开业务</button>
-            <button class="btn btn-outline-secondary flex-fill" type="button" data-secondary disabled><i class="bi bi-link-45deg"></i> 复制内部链接</button>
-            <button class="btn btn-primary flex-fill" type="button" data-primary disabled><i class="bi bi-download"></i> 下载</button>
-        </div>
-    </aside>
+    @await Html.PartialAsync("_FilePreviewWorkspace")
 </section>
 
 @section Styles { <link rel="stylesheet" href="~/css/pages/file-center.css" asp-append-version="true" /> }
 
 @section Scripts {
 <script id="fileCenterData" type="application/json">@Html.Raw(JsonSerializer.Serialize(purchaseData))</script>
+<script src="~/js/components/file-preview.js" asp-append-version="true"></script>
 <script src="~/js/pages/file-center.js" asp-append-version="true"></script>
 }
