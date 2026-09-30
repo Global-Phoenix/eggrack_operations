@@ -36,7 +36,7 @@ public sealed class FileCenterStorageServiceTests
     }
 
     [Fact]
-    public void SupportsConfiguredCustomerFileHost()
+    public void SupportsConfiguredPublicFileHost()
     {
         var urls=FileCenterStorageService.BuildPublicCandidates(
             "https://files.example.com/", "customer/example.jpg", "request");
@@ -45,13 +45,16 @@ public sealed class FileCenterStorageServiceTests
     }
 
     [Fact]
-    public void DoesNotExposeEncryptedRequestBlobAsPublicFile()
+    public void BuildsPlainPurchaseRequestAddressFromDatabasePath()
     {
         var urls = FileCenterStorageService.BuildPublicCandidates(
             "https://test.eggracks.com/",
-            "ab/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.bin",
+            "/u_file/purchase_requests/2026-09/01234567-89ab-cdef-0123-456789abcdef.png",
             "request");
 
-        Assert.Empty(urls);
+        Assert.Single(urls);
+        Assert.Equal(
+            "https://test.eggracks.com/u_file/purchase_requests/2026-09/01234567-89ab-cdef-0123-456789abcdef.png",
+            urls[0].AbsoluteUri);
     }
 }

@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Eggrack.Operations.Application.Modules.Files;
 using Eggrack.Operations.Application.Modules.Security;
 using Eggrack.Operations.Web.Areas.Files.Services;
@@ -61,7 +60,6 @@ public sealed class FileCenterController(
         }
         catch (FileNotFoundException) { return NotFound(); }
         catch (InvalidDataException) { return UnprocessableEntity(); }
-        catch (CryptographicException) { return UnprocessableEntity(); }
     }
 
     private async Task<bool> CanViewInternalDocumentsAsync(CancellationToken token)

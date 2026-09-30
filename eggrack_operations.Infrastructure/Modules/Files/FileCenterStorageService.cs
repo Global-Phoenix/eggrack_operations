@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
@@ -7,8 +5,6 @@ namespace Eggrack.Operations.Infrastructure.Modules.Files;
 
 public sealed class FileCenterStorageService(IConfiguration configuration, IHostEnvironment environment, IHttpClientFactory httpClientFactory)
 {
-    private static readonly Regex RequestPathPattern = new("^[a-f0-9]{2}/[a-f0-9]{64}\\.bin$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-
     public async Task<Stream> OpenReadAsync(FileCenterStoredFile file, CancellationToken token = default)
     {
         var publicFile = await TryOpenPublicAsync(file, token);
@@ -16,8 +12,8 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
 
         return file.SourceKind switch
         {
-            "request" => await OpenEncryptedRequestAsync(ResolveSiteRoot(), file, token),
-            "plan" => OpenPlanFile(file),
+            "request" => throw new FileNotFoundException("客户文件公开地址不可用。"),
+            "plan" => OpenManagedPlanFile(file),
             _ => throw new FileNotFoundException("不支持的文件来源。")
         };
     }
@@ -26,7 +22,8 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
     {
         var safeName=Path.GetFileName(originalName);
         if(string.IsNullOrWhiteSpace(safeName)||safeName.Length>255)throw new InvalidDataException("文件名无效或过长。");
-        var fileRelative=$"{planId}/{Guid.NewGuid():N}.bin";
+        var extension=Path.GetExtension(safeName).ToLowerInvariant();
+        var fileRelative=$"{planId}/{Guid.NewGuid():N}{extension}";
         var relative=$"managed/{fileRelative}";
         var path=ResolveInside(ResolvePlanUploadRoot(),fileRelative);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -51,10 +48,8 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
 
     private async Task<Stream?> TryOpenPublicAsync(FileCenterStoredFile file, CancellationToken token)
     {
-        var baseUrl=file.SourceKind=="request"
-            ? configuration["FileCenter:CustomerFileAccessBaseUrl"]??configuration["FileCenter:PublicBaseUrl"]
-            : configuration["FileCenter:PublicBaseUrl"];
-        var candidates = BuildPublicCandidates(baseUrl, file.StoragePath, file.SourceKind);
+        var candidates = BuildPublicCandidates(
+            configuration["FileCenter:PublicBaseUrl"], file.StoragePath, file.SourceKind);
         if (candidates.Count == 0) return null;
 
         var client = httpClientFactory.CreateClient("FileCenterPublicFiles");
@@ -80,7 +75,6 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
     {
         var relative = NormalizeRelative(storagePath);
         if(sourceKind=="plan"&&relative.StartsWith("managed/",StringComparison.OrdinalIgnoreCase))return [];
-        if (sourceKind == "request" && RequestPathPattern.IsMatch(relative)) return [];
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) || origin.Scheme != Uri.UriSchemeHttps)
             throw new InvalidOperationException("文件中心公开站点配置无效。");
 
@@ -95,16 +89,6 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
             .Select(path => new Uri(origin, string.Join('/', path.Split('/').Select(Uri.EscapeDataString))))
             .ToArray();
     }
-    private string ResolveSiteRoot()
-    {
-        var configured = configuration["FileCenter:LegacySiteRoot"];
-        if (string.IsNullOrWhiteSpace(configured)) throw new FileNotFoundException("尚未配置文件存储目录。");
-        var path = Path.IsPathRooted(configured) ? configured : Path.Combine(environment.ContentRootPath, configured);
-        path = Path.GetFullPath(path);
-        if (!Directory.Exists(path)) throw new FileNotFoundException("文件存储目录不可用。", path);
-        return path;
-    }
-
     private string ResolvePlanUploadRoot()
     {
         var configured=configuration["FileCenter:PlanUploadRoot"];
@@ -113,73 +97,18 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         path=Path.GetFullPath(path);Directory.CreateDirectory(path);return path;
     }
 
-    private static async Task<Stream> OpenEncryptedRequestAsync(string siteRoot, FileCenterStoredFile file, CancellationToken token)
-    {
-        var relative = file.StoragePath.Replace('\\', '/');
-        if (!RequestPathPattern.IsMatch(relative)) throw new FileNotFoundException("客户文件路径无效。");
-        var storageRoot = Path.GetFullPath(Path.Combine(siteRoot, "u_file", "purchase_requests"));
-        var path = ResolveInside(storageRoot, relative);
-        var keyPath = ResolveInside(siteRoot, "inc/file/purchase_request_storage_key.php");
-        if (!File.Exists(path) || !File.Exists(keyPath)) throw new FileNotFoundException("客户文件不可用。");
-
-        var blob = await File.ReadAllBytesAsync(path, token);
-        if (blob.Length < 68 || !blob.AsSpan(0, 4).SequenceEqual("PRF1"u8)) throw new InvalidDataException("客户文件已损坏。");
-        var keyText = await File.ReadAllTextAsync(keyPath, token);
-        var match = Regex.Match(keyText, "\\A<\\?php exit; \\?>\\r?\\n([0-9a-f]{64})\\z", RegexOptions.CultureInvariant);
-        if (!match.Success) throw new InvalidDataException("客户文件密钥格式无效。");
-        var masterKey = Convert.FromHexString(match.Groups[1].Value);
-        var iv = blob.AsSpan(4, 16).ToArray();
-        var storedMac = blob.AsSpan(20, 32).ToArray();
-        var cipher = blob.AsSpan(52).ToArray();
-
-        var authenticationKey = HMACSHA256.HashData(masterKey, "authentication"u8);
-        var signed = new byte[20 + cipher.Length];
-        "PRF1"u8.CopyTo(signed);
-        iv.CopyTo(signed, 4);
-        cipher.CopyTo(signed, 20);
-        var expectedMac = HMACSHA256.HashData(authenticationKey, signed);
-        if (!CryptographicOperations.FixedTimeEquals(storedMac, expectedMac)) throw new InvalidDataException("客户文件完整性校验失败。");
-
-        var encryptionKey = HMACSHA256.HashData(masterKey, "encryption"u8);
-        using var aes = Aes.Create();
-        aes.Key = encryptionKey; aes.IV = iv; aes.Mode = CipherMode.CBC; aes.Padding = PaddingMode.PKCS7;
-        using var decryptor = aes.CreateDecryptor();
-        var plaintext = decryptor.TransformFinalBlock(cipher, 0, cipher.Length);
-        if (plaintext.LongLength != file.FileSize) throw new InvalidDataException("客户文件长度校验失败。");
-        return new MemoryStream(plaintext, writable: false);
-    }
-
-    private Stream OpenPlanFile(FileCenterStoredFile file)
+    private Stream OpenManagedPlanFile(FileCenterStoredFile file)
     {
         var relative = NormalizeRelative(file.StoragePath);
-        if(relative.StartsWith("managed/",StringComparison.OrdinalIgnoreCase))
-        {
-            var managedRelative=relative["managed/".Length..];
-            var managedRoot=ResolvePlanUploadRoot();
-            var managedPath=ResolveInside(managedRoot,managedRelative);
-            if(!File.Exists(managedPath))throw new FileNotFoundException("内部文件不可用。");
-            var managedInfo=new FileInfo(managedPath);
-            if(managedInfo.Length!=file.FileSize)throw new InvalidDataException("内部文件长度校验失败。");
-            return new FileStream(managedPath,FileMode.Open,FileAccess.Read,FileShare.Read,64*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
-        }
-        var siteRoot=ResolveSiteRoot();
-        var uploadRoot = Path.GetFullPath(Path.Combine(siteRoot, "u_file"));
-        var planRoot = Path.GetFullPath(Path.Combine(uploadRoot, "purchase_plans"));
-        var candidates = new List<(string Root, string Relative)>();
-        if (relative.StartsWith("u_file/", StringComparison.OrdinalIgnoreCase)) candidates.Add((siteRoot, relative));
-        else { candidates.Add((planRoot, relative)); candidates.Add((uploadRoot, relative)); }
-
-        foreach (var candidate in candidates)
-        {
-            string path;
-            try { path = ResolveInside(candidate.Root, candidate.Relative); }
-            catch (FileNotFoundException) { continue; }
-            if (!File.Exists(path)) continue;
-            var info = new FileInfo(path);
-            if (info.Length != file.FileSize) throw new InvalidDataException("内部文件长度校验失败。");
-            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        }
-        throw new FileNotFoundException("内部文件不可用。");
+        if(!relative.StartsWith("managed/",StringComparison.OrdinalIgnoreCase))
+            throw new FileNotFoundException("采购计划文件公开地址不可用。");
+        var managedRelative=relative["managed/".Length..];
+        var managedRoot=ResolvePlanUploadRoot();
+        var managedPath=ResolveInside(managedRoot,managedRelative);
+        if(!File.Exists(managedPath))throw new FileNotFoundException("内部文件不可用。");
+        var managedInfo=new FileInfo(managedPath);
+        if(managedInfo.Length!=file.FileSize)throw new InvalidDataException("内部文件长度校验失败。");
+        return new FileStream(managedPath,FileMode.Open,FileAccess.Read,FileShare.Read,64*1024,FileOptions.Asynchronous|FileOptions.SequentialScan);
     }
 
     private static string NormalizeRelative(string value)

@@ -10,10 +10,11 @@
 
 - `ConnectionStrings:OrdersConnection`：SQL Server 地址和数据库；
 - `ConnectionStrings:EggrackConnection`：MySQL 地址和数据库；
-- `FileCenter:CustomerFileAccessBaseUrl`：客户附件表中相对路径的访问地址前缀；
-- `FileCenter:PublicBaseUrl`：采购计划历史公开文件的访问地址前缀。
+- `FileCenter:PublicBaseUrl`：客户附件和采购计划历史公开文件中相对路径的统一访问地址前缀。
 
 `appsettings.Local.json` 在 `Program.cs` 中作为最后一层配置加载，会覆盖仓库中的默认配置且不会被 Git 提交。
+
+客户附件按明文文件保存，数据库 `storage_path` 应为 `/u_file/purchase_requests/YYYY-MM/UUID.ext` 一类公开相对路径。文件中心使用 `PublicBaseUrl + storage_path` 代理预览和下载，不再读取加密密钥，也不兼容旧 `.bin` 附件。新系统上传的采购计划文件仍保存在 `PlanUploadRoot`，并通过受控接口读取。
 
 ## 查询与存储过程
 
