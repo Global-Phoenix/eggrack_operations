@@ -14,11 +14,11 @@
          data-current-version-id="@(Model.Plan?.RequestVersionId ?? Model.Request.CurrentVersionId)">
 @await Component.InvokeAsync("PageHeader", new {
     title = pageTitle,
-    subtitle = isUpdate ? "维护内部采购计划，客户申请仅作为参考资料" : $"基于 {Model.Request.RequestNumber} 建立独立的内部采购计划",
+    subtitle = isUpdate ? "维护内部采购计划，客户申请仅作为参考资料" : "基于客户采购申请创建内部采购计划",
     parentTitle = "采购申请",
     parentUrl = Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" }),
-    secondaryText = "返回申请列表",
-    secondaryUrl = Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" })
+    secondaryText = "返回申请",
+    secondaryUrl = Url.Action("RequestDetails", "Procurement", new { area = "Wholesale", requestId = Model.Request.Id })
 })
 
 @if(TempData["Error"] is string serverError){<div class="alert alert-danger">@serverError</div>}
@@ -26,44 +26,57 @@
 <form data-plan-form action="@saveUrl" method="post">
  @Html.AntiForgeryToken()
  <input type="hidden" name="requestId" value="@Model.Request.Id">
- <div class="request-overview mb-3">
-  <div><small>申请编号</small><strong>@Model.Request.RequestNumber</strong></div>
-  <div><small>客户</small><strong data-request-customer>@Model.Request.CustomerName</strong></div>
-  <div><small>邮箱</small><strong data-request-email>@Model.Request.Email</strong></div>
-  <div><small>提交时间</small><strong data-request-submitted>@Model.Request.SubmittedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong></div>
-  <div><small>当前计划</small><strong>@(Model.Plan?.PlanNumber ?? "未创建")</strong></div>
-  <div><small>参考版本</small><strong>V@(Model.Request.CurrentVersion)</strong></div>
- </div>
-
- <div class="plan-profile-card">
-  <div class="section-heading"><div><h6>计划信息</h6><p>计划名称由申请编号自动生成，人员只需维护采购业务资料。</p></div></div>
-  <div class="row g-3">
-   <div class="col-xl-3 col-md-6"><label class="form-label">计划名称</label><input class="form-control system-field" value="@planTitle" readonly aria-readonly="true"><div class="form-text">根据申请编号自动生成，创建后不可更改。</div></div>
-   <div class="col-xl-3 col-md-6"><label class="form-label">参考申请版本</label><select class="form-select" name="RequestVersionId" data-version required><option value="">正在加载版本…</option></select></div>
-   <div class="col-xl-3 col-md-6"><label class="form-label">采购人员</label><select class="form-select" name="AssignedBuyerStaffId" data-buyer required><option value="">请选择采购人员</option>@foreach(var buyer in Model.Buyers){<option value="@buyer.Id">@buyer.Name</option>}</select></div>
-   <div class="col-xl-3 col-md-6"><label class="form-label">优先级</label><select class="form-select" name="Priority" data-priority><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option></select></div>
-   <div class="col-12"><label class="form-label">计划说明</label><textarea class="form-control" name="InternalNote" data-internal-note rows="3" placeholder="采购策略、交付要求、风险提示或内部协作说明"></textarea></div>
+ <div class="plan-request-summary" aria-label="采购申请摘要">
+  <div class="plan-request-summary-main">
+   <span>申请</span>
+   <strong>@Model.Request.RequestNumber</strong>
+   <small><b data-request-customer>@Model.Request.CustomerName</b><i></i><span data-request-email>@Model.Request.Email</span></small>
   </div>
+  <dl class="plan-request-summary-facts">
+   <div><dt>版本</dt><dd data-summary-version>V@(Model.Request.CurrentVersion)</dd></div>
+   <div><dt>产品</dt><dd data-summary-products>—</dd></div>
+   <div><dt>附件</dt><dd data-summary-files>—</dd></div>
+   <div><dt>提交</dt><dd data-request-submitted>@Model.Request.SubmittedAtUtc.ToLocalTime().ToString("MM/dd HH:mm")</dd></div>
+   @if(isUpdate){<div><dt>计划</dt><dd>@Model.Plan!.PlanNumber</dd></div>}
+  </dl>
  </div>
 
- <div class="alert alert-info py-2 mt-3 mb-0 small"><i class="bi bi-info-circle me-1"></i>客户申请仅作参考。预填后会生成独立的计划产品，后续申请变更不会覆盖计划内容。</div>
-
- <div class="editor-workspace mt-3">
-  <div class="request-version-detail">
-   <div class="d-flex justify-content-between align-items-center mb-2"><h6 class="mb-0">申请版本与附件</h6><span class="small text-secondary" data-version-summary></span></div>
+ <div class="plan-create-workspace">
+  <section class="request-version-detail plan-reference-panel" aria-labelledby="request-reference-title">
+   <header class="plan-workspace-header">
+    <div><span class="plan-workspace-kicker">Requirement reference</span><h2 id="request-reference-title">客户申请</h2></div>
+    <label class="plan-version-picker"><span>参考版本</span><select class="form-select form-select-sm" name="RequestVersionId" data-version required><option value="">正在加载…</option></select></label>
+   </header>
+   <div class="plan-reference-summary" data-version-summary>正在加载申请版本…</div>
    <div data-version-items class="text-secondary small">正在加载申请版本…</div>
-  </div>
-  <div class="plan-products-editor">
-   <div class="section-heading"><div><h6>内部计划产品</h6><p>至少录入一项；可引用申请内容后再修改，也可完全手工录入。</p></div><button class="btn btn-sm btn-outline-primary" type="button" data-add-plan-item><i class="bi bi-plus-lg"></i> 手工新增</button></div>
-   <div class="input-group mb-3"><select class="form-select" data-reference-item><option value="">选择申请产品作为预填参考</option></select><button class="btn btn-outline-secondary" type="button" data-add-reference-item>预填到计划</button></div>
-   <div data-plan-items-editor></div>
-  </div>
+  </section>
+
+  <section class="plan-compose-panel" aria-labelledby="internal-plan-title">
+   <header class="plan-workspace-header">
+    <div><span class="plan-workspace-kicker">Internal purchase plan</span><h2 id="internal-plan-title">内部采购计划</h2></div>
+    <span class="plan-independent-note"><i class="bi bi-shield-check"></i> 独立于客户申请保存</span>
+   </header>
+   <div class="plan-profile-card plan-settings-compact">
+    <div class="plan-settings-heading"><h3>计划设置</h3><span>分配人员并补充内部协作说明</span></div>
+    <div class="plan-settings-grid">
+     <div class="plan-name-field"><label class="form-label">计划名称</label><input class="form-control system-field" value="@planTitle" readonly aria-readonly="true"></div>
+     <div><label class="form-label">采购人员</label><select class="form-select" name="AssignedBuyerStaffId" data-buyer required><option value="">请选择采购人员</option>@foreach(var buyer in Model.Buyers){<option value="@buyer.Id">@buyer.Name</option>}</select></div>
+     <div><label class="form-label">优先级</label><select class="form-select" name="Priority" data-priority><option value="low">低</option><option value="normal">普通</option><option value="high">高</option><option value="urgent">紧急</option></select></div>
+     <div class="plan-note-field"><label class="form-label">计划说明 <span>选填</span></label><textarea class="form-control" name="InternalNote" data-internal-note rows="2" placeholder="采购策略、交付要求、风险或协作说明"></textarea></div>
+    </div>
+   </div>
+   <div class="plan-products-editor">
+    <div class="section-heading"><div><h3>内部计划产品</h3><p>可引用客户需求后修改，也可手工录入。</p></div><button class="btn btn-sm btn-outline-primary" type="button" data-add-plan-item><i class="bi bi-plus-lg"></i> 手工新增</button></div>
+    <div class="input-group plan-reference-toolbar"><select class="form-select" data-reference-item><option value="">选择客户产品作为预填参考</option></select><button class="btn btn-outline-secondary" type="button" data-add-reference-item>预填产品</button></div>
+    <div data-plan-items-editor></div>
+   </div>
+  </section>
  </div>
 
  <div class="alert alert-danger d-none mt-3 mb-0" data-error></div>
  <div class="editor-actions">
-  <a class="btn btn-outline-secondary" href="@Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" })">取消</a>
-  <button class="btn btn-primary" type="submit" data-submit>@(isUpdate ? "保存计划" : "创建计划")</button>
+  <span><i class="bi bi-info-circle"></i> 客户申请仅作参考，计划产品创建后独立维护。</span>
+  <div><a class="btn btn-outline-secondary" href="@Url.Action("RequestDetails", "Procurement", new { area = "Wholesale", requestId = Model.Request.Id })">取消</a><button class="btn btn-primary" type="submit" data-submit>@(isUpdate ? "保存计划" : "创建采购计划")</button></div>
  </div>
 </form>
 </section>

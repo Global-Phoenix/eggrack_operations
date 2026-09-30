@@ -13,6 +13,9 @@
     const submit = root.querySelector('[data-submit]');
     const versionSummary = root.querySelector('[data-version-summary]');
     const versionItems = root.querySelector('[data-version-items]');
+    const summaryVersion = root.querySelector('[data-summary-version]');
+    const summaryProducts = root.querySelector('[data-summary-products]');
+    const summaryFiles = root.querySelector('[data-summary-files]');
     const requestId = root.dataset.requestId;
     const planId = root.dataset.planId || '';
     let loadedVersions = [];
@@ -39,8 +42,15 @@
         }
         root.querySelector('[data-request-customer]').textContent = version.customerName || '—';
         root.querySelector('[data-request-email]').textContent = version.email || '—';
-        root.querySelector('[data-request-submitted]').textContent = new Date(version.submittedAtUtc).toLocaleString();
-        versionSummary.textContent = `V${version.versionNumber} · ${(version.items || []).length} 项产品 · ${(version.attachments || []).length} 个附件`;
+        root.querySelector('[data-request-submitted]').textContent = new Intl.DateTimeFormat('zh-CN', {
+            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        }).format(new Date(version.submittedAtUtc));
+        const productCount = (version.items || []).length;
+        const fileCount = (version.attachments || []).length;
+        versionSummary.textContent = `V${version.versionNumber} · ${productCount} 项产品 · ${fileCount} 个附件`;
+        summaryVersion.textContent = `V${version.versionNumber}`;
+        summaryProducts.textContent = `${productCount} 项`;
+        summaryFiles.textContent = `${fileCount} 个`;
         versionItems.className = 'request-detail-content';
         window.Eggrack.procurementRequestView.render(versionItems, version);
         renderReferenceOptions();
