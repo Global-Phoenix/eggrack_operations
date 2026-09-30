@@ -1,16 +1,32 @@
-using System.Net;
-using System.Text;
 using Eggrack.Operations.Infrastructure.Database;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
-public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,LegacySmtpSender smtp,ProcurementScopePolicy scopePolicy,ILogger<ProcurementMailDispatcher> logger)
+public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,LegacySmtpSender smtp,ProcurementScopePolicy scopePolicy,IConfiguration configuration,ILogger<ProcurementMailDispatcher> logger)
 {
     private const string DatabaseName="Eggrack";
-    private sealed record PendingMail(uint Id,uint PlanId,string Recipient,string TemplateCode,uint InvoiceId,string PiNumber,string ContactName,decimal TotalAmount,string Currency);
+    private sealed class PendingMail
+    {
+        public uint Id { get; set; }
+        public uint PlanId { get; set; }
+        public string Recipient { get; set; }=string.Empty;
+        public string TemplateCode { get; set; }=string.Empty;
+        public uint InvoiceId { get; set; }
+        public string PiNumber { get; set; }=string.Empty;
+        public string ContactName { get; set; }=string.Empty;
+        public decimal TotalAmount { get; set; }
+        public string Currency { get; set; }=string.Empty;
+        public string RequestNumber { get; set; }=string.Empty;
+        public DateTime? ValidUntil { get; set; }
+    }
     private sealed record LegacyMailConfig(string SmtpHost,int SmtpPort,string SmtpUserName,string FromEmail,string SmtpPassword,string? FromName,string? Smtpinbox);
-    private sealed record MailProduct(string ProductName,decimal Quantity,string Unit,decimal UnitPrice,decimal LineAmount);
+    private sealed class MailProduct
+    {
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; }=string.Empty;
+    }
 
     public async Task<string> PreviewHtmlAsync(uint mailTaskId,CancellationToken token)
     {
@@ -18,14 +34,16 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
         await scopePolicy.EnsureMailTaskAsync(db,mailTaskId,token);
         var rows=await db.QueryAsync<PendingMail>("""
         SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,
-          i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency
+          i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency,
+          r.request_number RequestNumber,FROM_UNIXTIME(i.valid_until) ValidUntil
         FROM procurement_mail_tasks t
         JOIN proforma_invoices i ON i.id=CAST(JSON_UNQUOTE(JSON_EXTRACT(t.payload_json,'$.proformaInvoiceId')) AS UNSIGNED)
           AND i.purchase_plan_id=t.plan_id AND i.status=3
+        JOIN purchase_requests r ON r.id=i.request_id
         WHERE t.id=@MailTaskId LIMIT 1
         """,new{MailTaskId=mailTaskId},cancellationToken:token);
         var task=rows.SingleOrDefault()??throw new InvalidOperationException("邮件任务不存在或 PI 尚未签发。");
-        var products=await db.QueryAsync<MailProduct>("SELECT product_name ProductName,quantity Quantity,quantity_unit Unit,unit_price UnitPrice,line_amount LineAmount FROM proforma_invoice_items WHERE pi_id=@InvoiceId ORDER BY sort_order,id",new{task.InvoiceId},cancellationToken:token);
+        var products=await LoadProductsAsync(db,task.InvoiceId,token);
         return BuildHtml(task,products);
     }
 
@@ -38,10 +56,12 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var rows=await db.QueryAsync<PendingMail>("""
             SELECT t.id Id,t.plan_id PlanId,t.recipient Recipient,t.template_code TemplateCode,
-              i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency
+              i.id InvoiceId,i.pi_number PiNumber,i.contact_name ContactName,i.total_amount TotalAmount,i.currency Currency,
+              r.request_number RequestNumber,FROM_UNIXTIME(i.valid_until) ValidUntil
             FROM procurement_mail_tasks t
             JOIN proforma_invoices i ON i.id=CAST(JSON_UNQUOTE(JSON_EXTRACT(t.payload_json,'$.proformaInvoiceId')) AS UNSIGNED)
               AND i.purchase_plan_id=t.plan_id AND i.status=3
+            JOIN purchase_requests r ON r.id=i.request_id
             WHERE t.id=@MailTaskId AND ((t.status IN ('pending','failed')
               OR (t.status='processing' AND t.locked_at<@StaleAt)) AND t.attempts<5)
             ORDER BY t.created_at,t.id LIMIT 1
@@ -62,9 +82,9 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
             """,new{task.TemplateCode},cancellationToken:token);
             var config=configurations.SingleOrDefault()??throw new InvalidOperationException("PHP 邮件配置表中没有匹配配置。");
             if(string.IsNullOrWhiteSpace(config.SmtpHost)||string.IsNullOrWhiteSpace(config.FromEmail)||string.IsNullOrWhiteSpace(config.SmtpPassword)||string.IsNullOrWhiteSpace(config.SmtpUserName))throw new InvalidOperationException("PHP 邮件配置不完整。");
-            var products=await db.QueryAsync<MailProduct>("SELECT product_name ProductName,quantity Quantity,quantity_unit Unit,unit_price UnitPrice,line_amount LineAmount FROM proforma_invoice_items WHERE pi_id=@InvoiceId ORDER BY sort_order,id",new{task.InvoiceId},cancellationToken:token);
+            var products=await LoadProductsAsync(db,task.InvoiceId,token);
             var settings=new LegacySmtpSettings(config.SmtpHost.Replace("ssl://",string.Empty,StringComparison.OrdinalIgnoreCase),config.SmtpPort>0?config.SmtpPort:465,config.FromEmail,config.SmtpPassword,config.SmtpUserName,string.IsNullOrWhiteSpace(config.FromName)?config.SmtpUserName:config.FromName,SplitRecipients(config.Smtpinbox));
-            var subject=$"Proforma Invoice {task.PiNumber}";
+            var subject=$"Your Quotation Is Ready: {task.PiNumber}";
             var body=BuildHtml(task,products);
             await smtp.SendHtmlAsync(settings,task.Recipient,subject,body,token);
             var sentAt=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
@@ -88,14 +108,30 @@ public sealed class ProcurementMailDispatcher(DatabaseSessionFactory databases,L
 
     private static IReadOnlyList<string> SplitRecipients(string? value)=>string.IsNullOrWhiteSpace(value)?Array.Empty<string>():value.Split(',',StringSplitOptions.RemoveEmptyEntries|StringSplitOptions.TrimEntries);
 
-    private static string BuildHtml(PendingMail task,IReadOnlyList<MailProduct> products)
+    private static Task<IReadOnlyList<MailProduct>> LoadProductsAsync(DatabaseSession db,uint invoiceId,CancellationToken token)
+        =>db.QueryAsync<MailProduct>("SELECT quantity Quantity,quantity_unit Unit FROM proforma_invoice_items WHERE pi_id=@InvoiceId ORDER BY sort_order,id",new{InvoiceId=invoiceId},cancellationToken:token);
+
+    private string BuildHtml(PendingMail task,IReadOnlyList<MailProduct> products)
     {
-        var html=new StringBuilder();
-        html.Append("<div style=\"font-family:Arial,sans-serif;color:#1f2937\"><p>Dear ").Append(WebUtility.HtmlEncode(task.ContactName)).Append(",</p>")
-          .Append("<p>Please find your proforma invoice <strong>").Append(WebUtility.HtmlEncode(task.PiNumber)).Append("</strong>.</p>")
-          .Append("<table style=\"border-collapse:collapse;width:100%\"><thead><tr><th align=\"left\">Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>");
-        foreach(var product in products)html.Append("<tr><td>").Append(WebUtility.HtmlEncode(product.ProductName)).Append("</td><td align=\"right\">").Append(product.Quantity.ToString("0.###")).Append(' ').Append(WebUtility.HtmlEncode(product.Unit)).Append("</td><td align=\"right\">").Append(product.UnitPrice.ToString("0.0000")).Append("</td><td align=\"right\">").Append(product.LineAmount.ToString("0.00")).Append("</td></tr>");
-        html.Append("</tbody></table><p><strong>Total: ").Append(WebUtility.HtmlEncode(task.Currency)).Append(' ').Append(task.TotalAmount.ToString("0.00")).Append("</strong></p><p>Best regards,<br>EGGRACKS</p></div>");
-        return html.ToString();
+        var baseUrl=configuration["FileCenter:PublicBaseUrl"];
+        if(!Uri.TryCreate(baseUrl,UriKind.Absolute,out var publicBase)||(publicBase.Scheme!=Uri.UriSchemeHttp&&publicBase.Scheme!=Uri.UriSchemeHttps))
+            throw new InvalidOperationException("FileCenter:PublicBaseUrl 必须配置为有效的 HTTP(S) 客户站点地址。");
+        publicBase=new Uri(publicBase.AbsoluteUri.TrimEnd('/')+"/");
+        var requestPath=$"wholesale/request/{Uri.EscapeDataString(task.RequestNumber)}";
+        var requestUrl=new Uri(publicBase,requestPath).AbsoluteUri;
+        var quotationUrl=new Uri(publicBase,requestPath+"/pi").AbsoluteUri;
+        var logoUrl=new Uri(publicBase,"u_file/2302/photo/2195670476.png").AbsoluteUri;
+        var model=new ProcurementQuotationMailModel(
+            task.ContactName,
+            task.PiNumber,
+            task.RequestNumber,
+            task.ValidUntil,
+            task.TotalAmount,
+            task.Currency,
+            quotationUrl,
+            requestUrl,
+            logoUrl,
+            products.Select(product=>new ProcurementQuotationMailProduct(product.Quantity,product.Unit)).ToArray());
+        return ProcurementQuotationMailTemplate.Build(model);
     }
 }
