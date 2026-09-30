@@ -35,7 +35,7 @@
   <div class="plan-detail-grid">
    <div class="d-flex flex-column gap-3">
     <section class="ui-panel p-4"><div class="er-section-header"><div><h2>采购计划</h2><p>内部采购信息与当前负责人。</p></div></div><dl class="ui-fact-grid">
-     <div><dt>计划编号</dt><dd>@plan.PlanNumber</dd></div><div><dt>计划名称</dt><dd>@plan.PlanTitle</dd></div><div><dt>采购人员</dt><dd>@Display(plan.AssignedBuyerName)</dd></div><div><dt>优先级</dt><dd>@plan.Priority</dd></div><div><dt>申请版本</dt><dd>V@plan.RequestVersion</dd></div><div><dt>内部说明</dt><dd>@Display(plan.InternalNote)</dd></div>
+     <div><dt>计划编号</dt><dd>@plan.PlanNumber</dd></div><div><dt>计划名称</dt><dd>@plan.PlanTitle</dd></div><div><dt>采购人员</dt><dd>@Display(plan.AssignedBuyerName)</dd></div><div><dt>优先级</dt><dd>@plan.Priority</dd></div><div><dt>申请版本</dt><dd>V@plan.RequestVersion</dd></div><div><dt>计划说明</dt><dd>@Display(plan.InternalNote)</dd></div>
     </dl></section>
     <section class="ui-panel p-4"><div class="er-section-header"><div><h2>客户申请参考</h2><p>客户申请仅作为当前内部计划的来源快照。</p></div><a href="/wholesale/procurement/requests/@plan.RequestId/details">查看申请详情</a></div><dl class="ui-fact-grid">
      <div><dt>客户</dt><dd>@plan.CustomerName</dd></div><div><dt>邮箱</dt><dd>@plan.CustomerEmail</dd></div><div><dt>申请编号</dt><dd>@plan.RequestNumber</dd></div><div><dt>引用版本</dt><dd>V@plan.RequestVersion</dd></div>
