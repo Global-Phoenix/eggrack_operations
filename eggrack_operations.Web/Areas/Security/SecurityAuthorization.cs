@@ -15,9 +15,15 @@ public sealed class InternalPermissionAttribute : TypeFilterAttribute
         Arguments = [permissionCode];
 }
 
+public interface ICurrentStaffAccessor
+{
+    string? GetStaffRef();
+    Task<StaffAuthorization?> LoadAsync(CancellationToken cancellationToken = default);
+}
+
 public sealed class CurrentStaffAccessor(
     IHttpContextAccessor httpContextAccessor,
-    StaffAuthorizationQuery authorizationQuery)
+    StaffAuthorizationQuery authorizationQuery) : ICurrentStaffAccessor
 {
     public string? GetStaffRef()
     {
@@ -36,7 +42,7 @@ public sealed class CurrentStaffAccessor(
 }
 
 public sealed class InternalPermissionFilter(
-    CurrentStaffAccessor currentStaff,
+    ICurrentStaffAccessor currentStaff,
     PermissionEvaluator evaluator,
     CurrentAuthorizationContext authorizationContext,
     string permissionCode) : IAsyncAuthorizationFilter

@@ -8,6 +8,7 @@ public static class SecurityWebServices
     {
         services.AddInternalPermissions();
         services.AddScoped<CurrentStaffAccessor>();
+        services.AddScoped<ICurrentStaffAccessor>(provider=>provider.GetRequiredService<CurrentStaffAccessor>());
         return services;
     }
 }
