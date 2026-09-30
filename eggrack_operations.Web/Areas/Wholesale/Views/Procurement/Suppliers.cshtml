@@ -1,7 +1,7 @@
 @model eggrack_operations.Areas.Wholesale.Models.SupplierDirectoryPageViewModel
 @{ ViewData["Title"] = "供应商"; }
 <section class="proc" data-supplier-directory>
-@await Component.InvokeAsync("PageHeader", new { title = "供应商", subtitle = "查询采购询价使用的公司级供应商档案；新增供应商请从具体采购计划发起", parentTitle = "批发管理", parentUrl = "/wholesale/procurement/sourcing" })
+@await Component.InvokeAsync("PageHeader", new { title = "供应商", subtitle = "公司级公共供应商档案，供有权限的内部人员统一查询并在不同采购计划中复用", parentTitle = "批发管理", parentUrl = "/wholesale/procurement/sourcing" })
 <div class="panel overflow-hidden">
  <form class="tools" method="get" action="/wholesale/procurement/suppliers">
   <input class="form-control" type="search" name="keyword" value="@Model.Keyword" placeholder="搜索供应商名称、编码或联系方式">

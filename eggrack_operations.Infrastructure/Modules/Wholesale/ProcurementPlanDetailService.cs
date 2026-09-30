@@ -30,6 +30,12 @@ public sealed partial class ProcurementDataService
               COALESCE(p.profit_rate,0) ProfitRate,COALESCE(p.approved_quote_amount_usd,0) ApprovedQuoteUsd,
               FROM_UNIXTIME(p.updated_at) UpdatedAtUtc,
               (SELECT COUNT(*) FROM procurement_inquiries q JOIN purchase_plan_items qi ON qi.id=q.plan_item_id WHERE qi.plan_id=p.id AND q.is_current=1) InquiryCount,
+              (SELECT COUNT(*) FROM procurement_suppliers s WHERE
+                EXISTS(SELECT 1 FROM procurement_inquiries q JOIN purchase_plan_items qi ON qi.id=q.plan_item_id WHERE qi.plan_id=p.id AND q.supplier_id=s.id AND q.is_current=1)
+                OR EXISTS(SELECT 1 FROM procurement_candidate_products c JOIN purchase_plan_items ci ON ci.id=c.plan_item_id WHERE ci.plan_id=p.id AND c.supplier_id=s.id)
+                OR EXISTS(SELECT 1 FROM procurement_samples x JOIN purchase_plan_items xi ON xi.id=x.plan_item_id WHERE xi.plan_id=p.id AND x.supplier_id=s.id)) SupplierCount,
+              (SELECT COUNT(DISTINCT q.plan_item_id) FROM procurement_inquiries q JOIN purchase_plan_items qi ON qi.id=q.plan_item_id WHERE qi.plan_id=p.id AND q.is_current=1 AND q.unit_price_cny IS NOT NULL) QuotedProductCount,
+              (SELECT COUNT(*) FROM procurement_selected_inquiries x JOIN purchase_plan_items xi ON xi.id=x.plan_item_id WHERE xi.plan_id=p.id) SelectedQuoteCount,
               (SELECT COUNT(*) FROM purchase_plan_files f WHERE f.plan_id=p.id AND f.status=1) FileCount,
               (SELECT COUNT(*) FROM procurement_workflow_events e WHERE e.plan_id=p.id) EventCount,
               (SELECT pi.status FROM proforma_invoices pi WHERE pi.purchase_plan_id=p.id ORDER BY pi.id DESC LIMIT 1) LatestInvoiceStatus
@@ -43,10 +49,18 @@ public sealed partial class ProcurementDataService
               i.quantity_unit Unit,i.sku Sku,i.brand Brand,i.specifications Specifications,i.color Color,i.size Size,
               i.packaging_requirements PackagingRequirements,i.customization_requirements CustomizationRequirements,
               COALESCE(r.customer_note,i.customer_note) CustomerNote,i.buyer_id BuyerId,b.staff_name BuyerName,
-              i.purchase_unit_price_cny PurchaseUnitPriceCny,i.internal_note InternalNote
+              i.purchase_unit_price_cny PurchaseUnitPriceCny,i.internal_note InternalNote,
+              COALESCE(qs.quote_count,0) QuoteCount,COALESCE(fs.file_count,0) FileCount,
+              ss.supplier_name SelectedSupplierName,sq.offered_product_name SelectedSupplierProductName,
+              sq.currency SelectedSupplierCurrency,sq.unit_price_cny SelectedSupplierUnitPrice
             FROM purchase_plan_items i
             LEFT JOIN purchase_request_version_items r ON r.id=i.request_item_id
             LEFT JOIN eggrack_auth_staff b ON b.id=i.buyer_id
+            LEFT JOIN (SELECT plan_item_id,COUNT(*) quote_count FROM procurement_inquiries WHERE is_current=1 GROUP BY plan_item_id) qs ON qs.plan_item_id=i.id
+            LEFT JOIN (SELECT plan_item_id,COUNT(*) file_count FROM purchase_plan_files WHERE status=1 GROUP BY plan_item_id) fs ON fs.plan_item_id=i.id
+            LEFT JOIN procurement_selected_inquiries sx ON sx.plan_item_id=i.id
+            LEFT JOIN procurement_inquiries sq ON sq.id=sx.inquiry_id
+            LEFT JOIN procurement_suppliers ss ON ss.id=sq.supplier_id
             WHERE i.plan_id=@PlanId ORDER BY i.sort_order,i.id
             """,async rows=>
         {
@@ -95,13 +109,12 @@ public sealed partial class ProcurementDataService
               contact_name ContactName,contact_phone ContactPhone,website Website,contact_json ContactJson,status Status,
               FROM_UNIXTIME(updated_at) UpdatedAtUtc
             FROM procurement_suppliers ORDER BY supplier_name;
-            SELECT s.id Id,s.supplier_name Name,s.supplier_code Code,s.address Address,
-              s.legal_representative LegalRepresentative,s.contact_name ContactName,
-              s.contact_phone ContactPhone,s.website Website,s.contact_json ContactJson,s.status Status,
-              FROM_UNIXTIME(s.updated_at) UpdatedAtUtc
-            FROM procurement_plan_suppliers ps
-            JOIN procurement_suppliers s ON s.id=ps.supplier_id
-            WHERE ps.plan_id=@PlanId ORDER BY ps.created_at DESC,s.supplier_name;
+            SELECT c.id Id,c.plan_item_id PlanItemId,c.supplier_id SupplierId,c.product_name ProductName,
+              s.supplier_name SupplierName,c.reference_url ReferenceUrl,c.specification_json SpecificationJson,c.status Status
+            FROM procurement_candidate_products c
+            JOIN purchase_plan_items i ON i.id=c.plan_item_id
+            LEFT JOIN procurement_suppliers s ON s.id=c.supplier_id
+            WHERE i.plan_id=@PlanId ORDER BY i.sort_order,c.updated_at DESC,c.id DESC;
             SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,
               s.supplier_name SupplierName,q.offered_product_name OfferedProductName,q.length_cm LengthCm,
               q.width_cm WidthCm,q.height_cm HeightCm,q.weight_kg WeightKg,q.color Color,q.size_details SizeDetails,
@@ -121,7 +134,7 @@ public sealed partial class ProcurementDataService
             WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC
             """,async rows=>new PurchasePlanSourcingData(
                 (await rows.ReadAsync<SupplierListItem>()).ToList(),
-                (await rows.ReadAsync<SupplierListItem>()).ToList(),
+                (await rows.ReadAsync<CandidateProductItem>()).ToList(),
                 (await rows.ReadAsync<InquiryItem>()).ToList(),
                 (await rows.ReadAsync<SampleItem>()).ToList()),
             new{PlanId=planId},cancellationToken:token);

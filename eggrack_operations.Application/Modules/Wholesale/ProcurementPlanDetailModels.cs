@@ -30,6 +30,9 @@ public sealed class PurchasePlanDetail
     public decimal ApprovedQuoteUsd { get; set; }
     public DateTime UpdatedAtUtc { get; set; }
     public int InquiryCount { get; set; }
+    public int SupplierCount { get; set; }
+    public int QuotedProductCount { get; set; }
+    public int SelectedQuoteCount { get; set; }
     public int FileCount { get; set; }
     public int EventCount { get; set; }
     public byte? LatestInvoiceStatus { get; set; }
@@ -41,7 +44,7 @@ public sealed class PurchasePlanDetail
 
 public sealed record PurchasePlanSourcingData(
     IReadOnlyList<SupplierListItem> Suppliers,
-    IReadOnlyList<SupplierListItem> RelatedSuppliers,
+    IReadOnlyList<CandidateProductItem> Candidates,
     IReadOnlyList<InquiryItem> Inquiries,
     IReadOnlyList<SampleItem> Samples);
 
@@ -71,6 +74,12 @@ public sealed class PurchasePlanItemDetail
     public string? BuyerName { get; set; }
     public decimal? PurchaseUnitPriceCny { get; set; }
     public string? InternalNote { get; set; }
+    public int QuoteCount { get; set; }
+    public int FileCount { get; set; }
+    public string? SelectedSupplierName { get; set; }
+    public string? SelectedSupplierProductName { get; set; }
+    public string? SelectedSupplierCurrency { get; set; }
+    public decimal? SelectedSupplierUnitPrice { get; set; }
     public decimal? LineCostCny => PurchaseUnitPriceCny.HasValue
         ? decimal.Round(Quantity*PurchaseUnitPriceCny.Value,2,MidpointRounding.AwayFromZero)
         : null;

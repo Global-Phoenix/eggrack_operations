@@ -17,7 +17,7 @@ public sealed partial class ProcurementController
         try
         {
             var supplierId=await procurement.CreatePlanSupplierAsync(planId,command,staffId,token);
-            const string message="供应商已保存并关联当前采购计划。";
+            const string message="供应商已加入公司公共供应商库，可继续绑定到计划产品或录入报价。";
             if(WantsJson())return Json(new{ok=true,supplierId,message});
             TempData["Success"]=message;
         }
@@ -26,6 +26,23 @@ public sealed partial class ProcurementController
             if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
             TempData["Error"]=error.Message;
         }
+        return RedirectToAction(nameof(Details),null,new{planId},"sourcing");
+    }
+
+    [HttpPost("plans/{planId:long}/candidates")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.procurement.execute")]
+    public async Task<IActionResult> SavePlanCandidate(uint planId,[FromForm]SaveCandidateProductCommand command,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try
+        {
+            var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
+            if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
+            await procurement.SaveCandidateAsync(command,staffId,token);
+            TempData["Success"]="已将公司供应商及本次候选产品绑定到计划产品。";
+        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
         return RedirectToAction(nameof(Details),null,new{planId},"sourcing");
     }
 

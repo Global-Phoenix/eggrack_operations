@@ -43,7 +43,6 @@ public sealed partial class ProcurementDataService
             var supplierValid=(await db.QueryAsync<long>("SELECT COUNT(*) FROM procurement_suppliers WHERE id=@SupplierId AND status='active'",new{command.SupplierId},cancellationToken:transactionToken)).Single();
             if(supplierValid!=1)throw new BusinessRuleException("供应商不存在或已停用。","procurement.supplier.inactive");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            await LinkPlanSupplierAsync(db,planId,command.SupplierId,staffId,"inquiry",now,transactionToken);
             await db.ExecuteAsync("""
             INSERT procurement_inquiries(revision_no,previous_inquiry_id,is_current,plan_item_id,supplier_id,offered_product_name,length_cm,width_cm,height_cm,weight_kg,color,size_details,parameter_details,currency,unit_price_cny,moq,lead_days,valid_until,terms,status,notes,created_at,updated_at)
             VALUES(@Revision,@PreviousId,1,@PlanItemId,@SupplierId,@OfferedProductName,@LengthCm,@WidthCm,@HeightCm,@WeightKg,@Color,@SizeDetails,@ParameterDetails,@Currency,@UnitPrice,@Moq,@LeadDays,@ValidUntil,@Terms,@Status,@Notes,@Now,@Now)

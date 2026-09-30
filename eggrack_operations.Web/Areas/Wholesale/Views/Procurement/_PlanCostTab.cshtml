@@ -9,7 +9,7 @@
 }
 <div class="cost-quote-layout">
  <section class="ui-panel p-4">
-  <div class="er-section-header"><div><h2>成本核算</h2><p>产品采购成本由数量 × 采购单价服务端汇总。</p></div></div>
+  <div class="er-section-header"><div><h2>计划级成本核算</h2><p>产品采购成本由数量 × 最终采购单价汇总；包装、样品、国内/国际运输和其他成本统一归集到当前计划。</p></div></div>
   <form asp-action="SavePlanCostQuote" asp-route-planId="@plan.Id" method="post" class="row g-3">
    <div class="col-md-6"><label class="form-label">产品采购成本 CNY</label><input class="form-control" value="@plan.Items.Sum(x=>x.LineCostCny??0).ToString("0.00")" readonly></div>
    <div class="col-md-6"><label class="form-label">包装 CNY</label><input class="form-control" name="PackagingCostCny" type="number" min="0" step="0.01" value="@plan.PackagingCostCny"></div>

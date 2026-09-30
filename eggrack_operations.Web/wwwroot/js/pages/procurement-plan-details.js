@@ -76,7 +76,7 @@
                 modal.hide();
                 await hidden;
             }
-            window.Eggrack.ui.notify(response.message || '供应商已保存并关联当前计划。', 'success');
+            window.Eggrack.ui.notify(response.message || '供应商已加入公司公共供应商库。', 'success');
             const pane = form.closest('[data-plan-lazy-pane]');
             await loadPane(pane, true);
         } catch (error) {
@@ -88,6 +88,59 @@
             window.Eggrack.ui.setBusy(button, false);
         }
     });
+
+    root.addEventListener('click', event => {
+        const openTab = event.target.closest('[data-open-plan-tab]');
+        if (openTab) {
+            const name = openTab.dataset.openPlanTab;
+            const tabButton = root.querySelector(`[data-plan-tab="${CSS.escape(name)}"]`);
+            if (tabButton) window.bootstrap?.Tab.getOrCreateInstance(tabButton).show();
+            return;
+        }
+        const bindTrigger = event.target.closest('[data-bind-plan-item]');
+        if (bindTrigger) {
+            const select = root.querySelector('[data-bind-plan-item-select]');
+            if (select) select.value = bindTrigger.dataset.bindPlanItem;
+        }
+        const inquiryTrigger = event.target.closest('[data-inquiry-plan-item]');
+        if (inquiryTrigger) {
+            const select = root.querySelector('[data-inquiry-plan-item-select]');
+            if (select) select.value = inquiryTrigger.dataset.inquiryPlanItem;
+        }
+        const filterButton = event.target.closest('[data-file-filter]');
+        if (filterButton) {
+            const toolbar = filterButton.closest('[data-plan-file-filters]');
+            toolbar.dataset.activeFilter = filterButton.dataset.fileFilter;
+            toolbar.querySelectorAll('[data-file-filter]').forEach(button => {
+                const active = button === filterButton;
+                button.classList.toggle('btn-primary', active);
+                button.classList.toggle('active', active);
+                button.classList.toggle('btn-outline-secondary', !active);
+            });
+            applyFileFilters(toolbar);
+        }
+    });
+
+    root.addEventListener('change', event => {
+        const productFilter = event.target.closest('[data-file-product-filter]');
+        if (productFilter) applyFileFilters(productFilter.closest('[data-plan-file-filters]'));
+    });
+
+    function applyFileFilters(toolbar) {
+        if (!toolbar) return;
+        const pane = toolbar.closest('[data-plan-lazy-pane]');
+        const mode = toolbar.dataset.activeFilter || 'all';
+        const product = toolbar.querySelector('[data-file-product-filter]')?.value || 'all';
+        let visible = 0;
+        pane.querySelectorAll('[data-plan-file-card]').forEach(card => {
+            const matchesMode = mode === 'all' || card.dataset.fileScope === mode || card.dataset.fileVisibility === mode;
+            const matchesProduct = product === 'all' || card.dataset.planItem === product;
+            const show = matchesMode && matchesProduct;
+            card.classList.toggle('d-none', !show);
+            if (show) visible += 1;
+        });
+        pane.querySelector('[data-plan-file-empty]')?.classList.toggle('d-none', visible !== 0);
+    }
 
     const requested = window.location.hash.slice(1);
     if (requested) {
