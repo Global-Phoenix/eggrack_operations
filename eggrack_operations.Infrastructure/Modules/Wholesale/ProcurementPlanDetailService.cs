@@ -62,11 +62,29 @@ public sealed partial class ProcurementDataService
             LEFT JOIN procurement_inquiries sq ON sq.id=sx.inquiry_id
             LEFT JOIN procurement_suppliers ss ON ss.id=sq.supplier_id
             WHERE i.plan_id=@PlanId ORDER BY i.sort_order,i.id
+            ;
+            SELECT id Id,revision_no RevisionNo,status Status,product_cost_cny ProductCostCny,
+              shared_cost_cny SharedCostCny,total_cost_cny TotalCostCny,total_cost_usd TotalCostUsd,
+              suggested_quote_usd SuggestedQuoteUsd,submitted_by SubmittedBy,
+              FROM_UNIXTIME(submitted_at) SubmittedAtUtc
+            FROM procurement_cost_snapshots WHERE plan_id=@PlanId ORDER BY revision_no DESC LIMIT 1
+            ;
+            SELECT id Id,stage Stage,decision Decision,proposed_quote_usd ProposedQuoteUsd,
+              actual_profit_rate ActualProfitRate,note Note,acted_by ActedBy,
+              FROM_UNIXTIME(acted_at) ActedAtUtc
+            FROM procurement_quote_reviews WHERE plan_id=@PlanId ORDER BY acted_at DESC,id DESC
+            ;
+            SELECT id Id,recipient Recipient,status Status,template_code TemplateCode,attempts Attempts,
+              last_error LastError,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(sent_at) SentAtUtc
+            FROM procurement_mail_tasks WHERE plan_id=@PlanId ORDER BY created_at DESC,id DESC
             """,async rows=>
         {
             var plan=(await rows.ReadAsync<PurchasePlanDetail>()).SingleOrDefault()
                 ??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
             plan.Items=(await rows.ReadAsync<PurchasePlanItemDetail>()).ToList();
+            plan.LatestCostSnapshot=(await rows.ReadAsync<ProcurementCostSnapshotSummary>()).SingleOrDefault();
+            plan.QuoteReviews=(await rows.ReadAsync<ProcurementQuoteReviewItem>()).ToList();
+            plan.MailTasks=(await rows.ReadAsync<MailTaskItem>()).ToList();
             return plan;
         },new{PlanId=planId},cancellationToken:token);
     }
@@ -299,15 +317,23 @@ public sealed partial class ProcurementDataService
                 "SELECT status Status,request_id RequestId FROM purchase_plans WHERE id=@PlanId FOR UPDATE",
                 new{PlanId=planId},cancellationToken:transactionToken);
             var plan=plans.SingleOrDefault();
-            if(plan is null||plan.RequestId==0||plan.Status!=4)
-                throw new BusinessRuleException("只有报价已确认且 PI 已签发的采购计划可以完成。","procurement.plan.complete-state");
+            if(plan is null||plan.RequestId==0||plan.Status is not(4 or 8))
+                throw new BusinessRuleException("只有 PI 已签发且邮件待处理的采购计划可以完成。","procurement.plan.complete-state");
             var issued=(await db.QueryAsync<long>(
                 "SELECT COUNT(*) FROM proforma_invoices WHERE purchase_plan_id=@PlanId AND status=3",
                 new{PlanId=planId},cancellationToken:transactionToken)).Single();
             if(issued==0)throw new BusinessRuleException("请先签发 PI，再完成采购计划。","procurement.plan.pi-not-issued");
+            var sent=(await db.QueryAsync<long>("""
+                SELECT COUNT(*) FROM procurement_mail_tasks m
+                JOIN (SELECT id FROM proforma_invoices WHERE purchase_plan_id=@PlanId AND status=3 ORDER BY id DESC LIMIT 1) i
+                  ON i.id=CAST(JSON_UNQUOTE(JSON_EXTRACT(m.payload_json,'$.proformaInvoiceId')) AS UNSIGNED)
+                WHERE m.plan_id=@PlanId AND m.status='sent'
+                """,
+                new{PlanId=planId},cancellationToken:transactionToken)).Single();
+            if(sent==0)throw new BusinessRuleException("请先将客户报价邮件发送成功，再完成采购计划。","procurement.plan.mail-not-sent");
             var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
             var changed=await db.ExecuteAsync(
-                "UPDATE purchase_plans SET status=5,completed_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=4",
+                "UPDATE purchase_plans SET status=5,completed_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status IN(4,8)",
                 new{PlanId=planId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             if(changed!=1)throw new BusinessRuleException("采购计划已被其他操作处理，请刷新。","procurement.plan.concurrent-change");
             await db.ExecuteAsync(
@@ -348,7 +374,7 @@ public sealed partial class ProcurementDataService
                 "SELECT status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",
                 new{PlanId=planId},cancellationToken:transactionToken)).SingleOrDefault()
                 ??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
-            if(status.Status is not(1 or 2 or 3 or 7))
+            if(status.Status!=ProcurementWorkflowStatus.Sourcing)
                 throw new BusinessRuleException("采购计划当前状态不能修改成本。","procurement.cost.state");
             var missing=(await db.QueryAsync<long>(
                 "SELECT COUNT(*) FROM purchase_plan_items WHERE plan_id=@PlanId AND purchase_unit_price_cny IS NULL",
@@ -380,49 +406,13 @@ public sealed partial class ProcurementDataService
 
     public async Task SubmitPurchasePlanQuoteAsync(uint planId,long staffId,CancellationToken token=default)
     {
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        await scopePolicy.EnsurePlanAsync(db,planId,token);
-        await db.ExecuteInTransactionAsync(async transactionToken=>
-        {
-            var rows=await db.QueryAsync<PurchasePlanDetail>(
-                "SELECT status Status,total_cost_cny TotalCostCny,cny_per_usd CnyPerUsd,approved_quote_amount_usd ApprovedQuoteUsd FROM purchase_plans WHERE id=@PlanId FOR UPDATE",
-                new{PlanId=planId},cancellationToken:transactionToken);
-            var plan=rows.SingleOrDefault()??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
-            if(plan.Status!=2||plan.TotalCostCny<=0||plan.CnyPerUsd<=0||plan.ApprovedQuoteUsd<=0)
-                throw new BusinessRuleException("请先完成产品采购单价和成本报价。","procurement.quote.not-ready");
-            var missingInquiry=(await db.QueryAsync<long>("""
-                SELECT COUNT(*) FROM purchase_plan_items i
-                LEFT JOIN procurement_selected_inquiries x ON x.plan_item_id=i.id
-                LEFT JOIN procurement_inquiries q ON q.id=x.inquiry_id AND q.is_current=1 AND q.status='quoted' AND q.unit_price_cny>0
-                WHERE i.plan_id=@PlanId AND q.id IS NULL
-                """,new{PlanId=planId},cancellationToken:transactionToken)).Single();
-            if(missingInquiry>0)
-                throw new BusinessRuleException("每个计划产品都必须选择一条有效的最新供应商报价后才能提交。","procurement.quote.inquiry-selection-incomplete");
-            var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var changed=await db.ExecuteAsync(
-                "UPDATE purchase_plans SET status=6,quoted_by=@StaffId,quoted_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=2",
-                new{PlanId=planId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
-            if(changed!=1)throw new BusinessRuleException("采购计划已被其他操作处理，请刷新。","procurement.quote.concurrent-change");
-            await AddWorkflowEventAsync(db,planId,"quote.submitted-to-boss",2,6,null,null,null,staffId,now,transactionToken);
-        },cancellationToken:token);
+        await SubmitCostReviewAsync(planId,staffId,token);
     }
 
     public async Task ApprovePurchasePlanQuoteAsync(uint planId,decimal quoteUsd,string? note,long staffId,CancellationToken token=default)
     {
-        if(quoteUsd<=0)throw new BusinessRuleException("最终报价必须大于零。","procurement.quote.invalid");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        await scopePolicy.EnsurePlanAsync(db,planId,token);
-        await db.ExecuteInTransactionAsync(async transactionToken=>
-        {
-            var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var changed=await db.ExecuteAsync("""
-                UPDATE purchase_plans SET status=4,approved_quote_amount_usd=@QuoteUsd,
-                  approved_by=@StaffId,approved_at=@Now,updated_by=@StaffId,updated_at=@Now
-                WHERE id=@PlanId AND status=6
-                """,new{PlanId=planId,QuoteUsd=quoteUsd,StaffId=staffId,Now=now},cancellationToken:transactionToken);
-            if(changed!=1)throw new BusinessRuleException("只有等待 Boss 确认的报价可以批准。","procurement.quote.approval-state");
-            await AddWorkflowEventAsync(db,planId,"quote.boss-approved",6,4,null,null,note,staffId,now,transactionToken);
-        },cancellationToken:token);
+        var plan=await GetPurchasePlanDetailAsync(planId,token);
+        await FinalApproveQuoteAsync(new(planId,quoteUsd,note,staffId),plan.CustomerEmail,token);
     }
 
     public async Task<ProcurementLifecycleResult> GenerateProformaInvoiceAsync(uint planId,long staffId,CancellationToken token=default)

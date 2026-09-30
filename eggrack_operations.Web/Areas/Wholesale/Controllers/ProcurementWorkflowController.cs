@@ -79,11 +79,12 @@ public sealed partial class ProcurementController
     [InternalPermission("wholesale.procurement.execute")]
     public async Task<IActionResult> SavePlanSample(uint planId,[FromForm]SaveSampleCommand command,CancellationToken token)
     {
+        if(!TryStaffId(out var staffId))return Forbid();
         try
         {
             var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
             if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
-            await procurement.SaveSampleAsync(command,token);
+            await procurement.SaveSampleAsync(command,staffId,token);
             TempData["Success"]=command.Id.HasValue?"样品记录已更新。":"样品记录已添加。";
         }
         catch(InvalidOperationException error){TempData["Error"]=error.Message;}
@@ -124,10 +125,37 @@ public sealed partial class ProcurementController
     public async Task<IActionResult> SubmitPlanQuote(uint planId,CancellationToken token)
     {
         if(!TryStaffId(out var staffId))return Forbid();
-        try{await procurement.SubmitPurchasePlanQuoteAsync(planId,staffId,token);TempData["Success"]="报价已提交 Boss 最终确认。";}
+        try{await procurement.SubmitPurchasePlanQuoteAsync(planId,staffId,token);TempData["Success"]="成本快照已提交部门审核。";}
         catch(InvalidOperationException error){TempData["Error"]=error.Message;}
         return PlanDetailsRedirect(planId);
     }
+
+    [HttpPost("plans/{planId:long}/quote/department-review")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.review")]
+    public async Task<IActionResult> ReviewPlanQuote(uint planId,[FromForm]decimal proposedQuoteUsd,[FromForm]string? note,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try
+        {
+            await procurement.ReviewQuoteAsync(new(planId,proposedQuoteUsd,note,staffId),token);
+            TempData["Success"]="部门审核已通过，报价已提交老板终审。";
+        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpPost("plans/{planId:long}/quote/department-reject")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.review")]
+    public Task<IActionResult> DepartmentRejectPlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token) =>
+        RejectPlanQuoteCore(planId,quoteUsd,note,token);
+
+    [HttpPost("plans/{planId:long}/quote/final-reject")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.final-approve")]
+    public Task<IActionResult> FinalRejectPlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token) =>
+        RejectPlanQuoteCore(planId,quoteUsd,note,token);
 
     [HttpPost("plans/{planId:long}/quote/boss-approve")]
     [ValidateAntiForgeryToken]
@@ -135,8 +163,42 @@ public sealed partial class ProcurementController
     public async Task<IActionResult> BossApprovePlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
     {
         if(!TryStaffId(out var staffId))return Forbid();
-        try{await procurement.ApprovePurchasePlanQuoteAsync(planId,quoteUsd,note,staffId,token);TempData["Success"]="Boss 已确认最终报价，可以生成 PI。";}
+        try
+        {
+            var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
+            var result=await procurement.FinalApproveQuoteAsync(new(planId,quoteUsd,note,staffId),plan.CustomerEmail,token);
+            TempData["Success"]=$"老板已确认最终报价，{result.ProformaInvoiceNumber} 已生成。";
+        }
         catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpGet("mail-tasks/{mailTaskId:long}/preview")]
+    [InternalPermission("wholesale.purchase-mail.send")]
+    public async Task<IActionResult> PreviewPlanMail(uint mailTaskId,CancellationToken token)
+    {
+        try{return Content(await mailDispatcher.PreviewHtmlAsync(mailTaskId,token),"text/html; charset=utf-8");}
+        catch(InvalidOperationException){return NotFound();}
+    }
+
+    [HttpPost("plans/{planId:long}/mail-tasks/{mailTaskId:long}/send")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-mail.send")]
+    public async Task<IActionResult> SendPlanMail(uint planId,uint mailTaskId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try
+        {
+            var sent=await mailDispatcher.DispatchAsync(mailTaskId,staffId,token);
+            var message=sent?"客户报价邮件发送成功。":"邮件发送失败，已记录失败原因，可稍后重试。";
+            if(WantsJson())return Json(new{ok=sent,message});
+            TempData[sent?"Success":"Error"]=message;
+        }
+        catch(InvalidOperationException error)
+        {
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+        }
         return PlanDetailsRedirect(planId);
     }
 
@@ -260,4 +322,16 @@ public sealed partial class ProcurementController
 
     private bool TryStaffId(out long staffId) =>
         HttpContext.TryGetInternalStaffId(out staffId);
+
+    private async Task<IActionResult> RejectPlanQuoteCore(uint planId,decimal quoteUsd,string? note,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try
+        {
+            await procurement.RejectPhaseOneQuoteAsync(new(planId,quoteUsd,note,staffId),token);
+            TempData["Success"]="报价已退回寻源阶段，可修订成本后重新提交。";
+        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
 }

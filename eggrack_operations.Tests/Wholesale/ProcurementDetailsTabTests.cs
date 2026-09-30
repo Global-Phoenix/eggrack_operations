@@ -25,4 +25,18 @@ public sealed class ProcurementDetailsTabTests
 
         Assert.Equal("plans/{planId:long}/tabs/{tab}",route.Template);
     }
+
+    [Theory]
+    [InlineData(nameof(ProcurementController.ReviewPlanQuote),"plans/{planId:long}/quote/department-review")]
+    [InlineData(nameof(ProcurementController.DepartmentRejectPlanQuote),"plans/{planId:long}/quote/department-reject")]
+    [InlineData(nameof(ProcurementController.FinalRejectPlanQuote),"plans/{planId:long}/quote/final-reject")]
+    [InlineData(nameof(ProcurementController.SendPlanMail),"plans/{planId:long}/mail-tasks/{mailTaskId:long}/send")]
+    public void ClosedLoopActionsUsePlanScopedRoutes(string methodName,string routeTemplate)
+    {
+        var method=typeof(ProcurementController).GetMethod(methodName)
+            ?? throw new InvalidOperationException(methodName);
+        var route=Assert.Single(method.GetCustomAttributes<HttpPostAttribute>());
+
+        Assert.Equal(routeTemplate,route.Template);
+    }
 }

@@ -14,7 +14,7 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 [Authorize]
 [Route("wholesale/procurement")]
 [InternalPermission("wholesale.purchase-plan.view")]
-public sealed partial class ProcurementController(ProcurementDataService procurement,FileCenterStorageService fileStorage,CurrentStaffAccessor currentStaff,PermissionEvaluator permissionEvaluator) : Controller
+public sealed partial class ProcurementController(ProcurementDataService procurement,ProcurementMailDispatcher mailDispatcher,FileCenterStorageService fileStorage,CurrentStaffAccessor currentStaff,PermissionEvaluator permissionEvaluator) : Controller
 {
     [HttpGet("")]
     public IActionResult Index() => RedirectToAction(nameof(WholesaleOverview));
@@ -109,8 +109,9 @@ public sealed partial class ProcurementController(ProcurementDataService procure
             return View("PlanDetails",new PurchasePlanDetailPageViewModel(
                 plan,await buyersTask,
                 Has("wholesale.procurement.execute"),Has("wholesale.purchase-cost.edit"),
-                Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.final-approve"),
+                Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.review"),Has("wholesale.purchase-quote.final-approve"),
                 Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue"),
+                Has("wholesale.purchase-mail.send"),
                 Has("wholesale.purchase-document.internal")));
         }
         catch(BusinessRuleException error) when(error.Code=="procurement.plan.missing"){return NotFound();}
@@ -148,8 +149,9 @@ public sealed partial class ProcurementController(ProcurementDataService procure
                 plan.Invoice=await invoiceTask;
                 return PartialView("_PlanCostTab",new PurchasePlanCostTabViewModel(plan,
                     Has("wholesale.procurement.execute"),Has("wholesale.purchase-cost.edit"),
-                    Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.final-approve"),
-                    Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue")));
+                    Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.review"),Has("wholesale.purchase-quote.final-approve"),
+                    Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue"),
+                    Has("wholesale.purchase-mail.send")));
             }
             if(string.Equals(tab,"activity",StringComparison.OrdinalIgnoreCase))
                 return PartialView("_PlanActivityTab",new PurchasePlanActivityTabViewModel(

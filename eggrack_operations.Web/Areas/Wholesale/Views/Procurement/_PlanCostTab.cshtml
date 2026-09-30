@@ -6,6 +6,7 @@
  if(plan.ApprovedQuoteUsd>0&&plan.ApprovedQuoteUsd<=4000)quoteWarnings.Add("最终报价未高于 USD 4,000");
  if(plan.ApprovedQuoteUsd>0&&(actualMargin<.10m||actualMargin>.20m))quoteWarnings.Add("实际利润率不在 10%–20%");
  string PiStatus(byte value)=>value switch{1=>"草稿",2=>"待签发",3=>"已签发",4=>"已取消",_=>"未知"};
+ string MailStatus(string value)=>value switch{"sent"=>"已发送","failed"=>"发送失败","processing"=>"发送中",_=>"待发送"};
 }
 <div class="cost-quote-layout">
  <section class="ui-panel p-4">
@@ -20,20 +21,22 @@
    <div class="col-md-4"><label class="form-label">1 USD = X CNY</label><input class="form-control" name="CnyPerUsd" type="number" min=".000001" step=".000001" value="@(plan.CnyPerUsd>0?plan.CnyPerUsd:7.12m)" required></div>
    <div class="col-md-4"><label class="form-label">利润方式</label><select class="form-select" name="ProfitMethod"><option value="1" selected="@(plan.ProfitMethod==1?"selected":null)">Markup</option><option value="2" selected="@(plan.ProfitMethod!=1?"selected":null)">Gross Margin</option></select></div>
    <div class="col-md-4"><label class="form-label">利润率</label><input class="form-control" name="ProfitRate" type="number" min="0" max=".99" step=".0001" value="@(plan.ProfitRate>0?plan.ProfitRate:.15m)" required><div class="form-text">0.15 表示 15%</div></div>
-   @if(Model.CanManageCosts&&plan.Status is 1 or 2 or 3 or 7){<div class="col-12"><button class="btn btn-primary" type="submit">保存成本与建议报价</button></div>}
+   @if(Model.CanManageCosts&&plan.Status==2){<div class="col-12"><button class="btn btn-primary" type="submit">保存成本与建议报价</button></div>}
   </form>
  </section>
  <aside class="ui-action-rail">
   <section><h3>报价结果</h3><dl class="prototype-facts"><div><dt>Total CNY</dt><dd>@(plan.TotalCostCny>0?plan.TotalCostCny.ToString("N2"):"—")</dd></div><div><dt>Total USD</dt><dd>@(plan.TotalCostUsd>0?plan.TotalCostUsd.ToString("N2"):"—")</dd></div><div><dt>Approved Quote USD</dt><dd>@(plan.ApprovedQuoteUsd>0?plan.ApprovedQuoteUsd.ToString("N2"):"—")</dd></div><div><dt>实际利润率</dt><dd>@(plan.ApprovedQuoteUsd>0?actualMargin.ToString("P2"):"—")</dd></div></dl>
   @if(quoteWarnings.Count>0){<div class="quote-warning"><i class="bi bi-exclamation-triangle"></i><span>@($"{string.Join("；",quoteWarnings)}。Boss 可特殊审批。")</span></div>}
   </section>
-  @if(Model.CanSubmitQuote&&plan.Status==2){<section><h3>提交报价</h3><p>提交后进入 Boss 最终确认。</p><form asp-action="SubmitPlanQuote" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary w-100" type="submit">提交 Boss 确认</button></form></section>}
-  @if(Model.CanFinalApprove&&plan.Status==6){<section><h3>Boss 最终确认</h3><form asp-action="BossApprovePlanQuote" asp-route-planId="@plan.Id" method="post"><label class="form-label">最终报价 USD</label><input class="form-control mb-2" name="quoteUsd" type="number" min=".01" step=".01" value="@plan.ApprovedQuoteUsd" required><label class="form-label">审批说明</label><textarea class="form-control mb-3" name="note" rows="2"></textarea><button class="btn btn-primary w-100" type="submit">确认最终报价</button></form></section>}
+   @if(Model.CanSubmitQuote&&plan.Status==2){<section><h3>提交成本审核</h3><p>提交后成本将生成不可变快照，由部门负责人审核。</p><form asp-action="SubmitPlanQuote" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary w-100" type="submit">提交部门审核</button></form></section>}
+   @if(Model.CanReviewQuote&&plan.Status==3){<section><h3>部门审核</h3><p>审核人与成本提交人必须不同。</p><form asp-action="ReviewPlanQuote" asp-route-planId="@plan.Id" method="post"><label class="form-label">建议最终报价 USD</label><input class="form-control mb-2" name="proposedQuoteUsd" type="number" min=".01" step=".01" value="@(plan.LatestCostSnapshot?.SuggestedQuoteUsd??plan.ApprovedQuoteUsd)" required><label class="form-label">审核说明</label><textarea class="form-control mb-3" name="note" rows="2"></textarea><div class="d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">通过并提交终审</button><button class="btn btn-outline-danger" type="submit" formaction="@Url.Action("DepartmentRejectPlanQuote",new{planId=plan.Id})" name="quoteUsd" value="@(plan.LatestCostSnapshot?.SuggestedQuoteUsd??plan.ApprovedQuoteUsd)">退回</button></div></form></section>}
+   @if(Model.CanFinalApprove&&plan.Status==6){<section><h3>老板最终确认</h3><p>可根据风险与利润情况调整最终报价；终审后自动生成 PI 草稿和邮件任务。</p><form asp-action="BossApprovePlanQuote" asp-route-planId="@plan.Id" method="post"><label class="form-label">最终报价 USD</label><input class="form-control mb-2" name="quoteUsd" type="number" min=".01" step=".01" value="@(plan.QuoteReviews.FirstOrDefault(x=>x.Stage=="department"&&x.Decision=="recommended")?.ProposedQuoteUsd??plan.ApprovedQuoteUsd)" required><label class="form-label">审批说明</label><textarea class="form-control mb-3" name="note" rows="2"></textarea><div class="d-flex gap-2"><button class="btn btn-primary flex-fill" type="submit">确认最终报价</button><button class="btn btn-outline-danger" type="submit" formaction="@Url.Action("FinalRejectPlanQuote",new{planId=plan.Id})">退回</button></div></form></section>}
+   @if(plan.Status is 3 or 6){<section><h3>当前审核状态</h3><p>@(plan.Status==3?"等待部门审核":"部门审核已通过，等待老板终审")</p>@if(plan.LatestCostSnapshot is not null){<small>成本快照 V@plan.LatestCostSnapshot.RevisionNo · USD @plan.LatestCostSnapshot.TotalCostUsd.ToString("N2") · 建议报价 USD @plan.LatestCostSnapshot.SuggestedQuoteUsd.ToString("N2")</small>}</section>}
  </aside>
 </div>
 <section class="ui-panel p-4 mt-3">
  <div class="er-section-header"><div><h2>Proforma Invoice</h2><p>PI 是客户销售价格快照，不展示内部采购单价。</p></div>@if((plan.Invoice is null||plan.Invoice.Status==4)&&plan.Status==4&&Model.CanManagePi){<form asp-action="GeneratePlanPi" asp-route-planId="@plan.Id" method="post"><button class="btn btn-primary" type="submit">生成 PI</button></form>}</div>
- @if(plan.Invoice is null){<div class="compact-empty"><i class="bi bi-receipt"></i><span>Boss 确认报价后可以生成 PI。</span></div>}
+  @if(plan.Invoice is null){<div class="compact-empty"><i class="bi bi-receipt"></i><span>老板确认最终报价后将自动生成 PI；历史计划可使用右上角按钮补建。</span></div>}
  else{
   var invoice=plan.Invoice;
   <div class="pi-editor-header"><div><strong>@invoice.Number</strong><span class="ui-status ui-status-@(invoice.Status==3?"success":invoice.Status==4?"danger":"warning")"><i></i>@PiStatus(invoice.Status)</span></div><span>@(string.IsNullOrWhiteSpace(invoice.CompanyName)?invoice.ContactName:invoice.CompanyName) · @invoice.Email · <a asp-action="ProformaInvoiceDetails" asp-route-invoiceId="@invoice.Id">独立详情</a></span></div>
@@ -48,6 +51,7 @@
     <div class="col-md-8 d-flex align-items-end justify-content-end gap-2"><strong class="me-auto">PI Total: USD @invoice.TotalAmount.ToString("N2")</strong>@if(Model.CanManagePi&&invoice.Status is 1 or 2){<button class="btn btn-primary" type="submit">保存 PI</button>}@if(Model.CanIssuePi&&invoice.Status==2){<button class="btn btn-success" type="submit" formaction="@Url.Action("IssuePlanPi",new{planId=plan.Id})">签发 PI</button>}</div>
    </div>
   </form>
-  @if(invoice.Status==3&&plan.Status==4&&Model.CanExecuteProcurement){<form asp-action="CompletePurchasePlan" asp-route-planId="@plan.Id" method="post" class="mt-3 text-end"><button class="btn btn-success" type="submit">完成采购计划</button></form>}
+   @if(plan.MailTasks.Count>0){<div class="mt-4"><h3 class="h6">客户邮件</h3>@foreach(var task in plan.MailTasks){<div class="d-flex align-items-center justify-content-between gap-3 border rounded p-3 mt-2"><div><strong>@task.Recipient</strong><div class="text-muted small">@MailStatus(task.Status) · 尝试 @task.Attempts 次@if(!string.IsNullOrWhiteSpace(task.LastError)){<span class="text-danger"> · @task.LastError</span>}</div></div><div class="d-flex gap-2">@if(invoice.Status==3&&Model.CanSendMail){<a class="btn btn-sm btn-outline-secondary" asp-action="PreviewPlanMail" asp-route-mailTaskId="@task.Id" target="_blank" rel="noopener">预览</a>}@if(invoice.Status==3&&Model.CanSendMail&&(task.Status is "pending" or "failed")){<form asp-action="SendPlanMail" asp-route-planId="@plan.Id" asp-route-mailTaskId="@task.Id" method="post"><button class="btn btn-sm btn-primary" type="submit">@(task.Status=="failed"?"重试":"发送")</button></form>}</div></div>}</div>}
+   @if(invoice.Status==3&&(plan.Status is 4 or 8)&&Model.CanExecuteProcurement){var mailSent=plan.MailTasks.FirstOrDefault()?.Status=="sent";<div class="mt-3 text-end">@if(mailSent){<form asp-action="CompletePurchasePlan" asp-route-planId="@plan.Id" method="post"><button class="btn btn-success" type="submit">完成采购计划</button></form>}else{<span class="text-muted small">当前 PI 的客户邮件发送成功后才能完成采购计划。</span>}</div>}
  }
 </section>
