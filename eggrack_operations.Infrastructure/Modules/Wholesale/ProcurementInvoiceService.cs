@@ -73,7 +73,7 @@ public sealed partial class ProcurementDataService
     private sealed record InvoiceValidation(byte Status,decimal ApprovedQuoteUsd,decimal ProductAmount,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,decimal TotalAmount,decimal ItemAmount);
 
     private sealed record InvoicePricingViewHeader(uint InvoiceId,decimal ProductAmount,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount,decimal TotalAmount);
-    private sealed record InvoiceIssuePlan(byte Status,decimal ApprovedQuoteUsd);
+    private sealed record InvoiceIssuePlan(byte Status,decimal ApprovedQuoteUsd,uint RequestId);
     public async Task<ProformaInvoicePricing> UpdateProformaInvoicePricingAsync(uint planId,UpdateProformaInvoicePricingCommand command,long staffId,CancellationToken token=default)
     {
         if(command.Items is null||command.Items.Count==0) throw new BusinessRuleException("PI 至少需要一个产品明细。","procurement.pi.items-empty");
@@ -123,7 +123,7 @@ public sealed partial class ProcurementDataService
         await scopePolicy.EnsurePlanAsync(db,planId,token);
         return await db.ExecuteInTransactionAsync<ProcurementLifecycleResult>(async transactionToken=>
         {
-            var plans=await db.QueryAsync<InvoiceIssuePlan>("SELECT status Status,approved_quote_amount_usd ApprovedQuoteUsd FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
+            var plans=await db.QueryAsync<InvoiceIssuePlan>("SELECT status Status,approved_quote_amount_usd ApprovedQuoteUsd,request_id RequestId FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
             if(plans.Count==0) throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
             if(plans.Single().Status!=4) throw new BusinessRuleException("只有已批准报价的采购计划才能签发 PI。","procurement.pi.issue-state");
             var invoices=await db.QueryAsync<ProformaInvoiceSummary>("SELECT id Id,pi_number Number,CASE status WHEN 2 THEN 'Approved' WHEN 3 THEN 'Issued' ELSE 'Invalid' END Status,total_amount TotalAmount,currency Currency,FROM_UNIXTIME(created_at) CreatedAtUtc,FROM_UNIXTIME(issued_at) IssuedAtUtc FROM proforma_invoices WHERE purchase_plan_id=@PlanId ORDER BY id DESC LIMIT 1 FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken);
@@ -137,6 +137,7 @@ public sealed partial class ProcurementDataService
             var changed=await db.ExecuteAsync("UPDATE proforma_invoices SET status=3,issued_by=@StaffId,issued_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@Id AND status=2",new{invoice.Id,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             if(changed!=1) throw new BusinessRuleException("PI 已被其他操作处理，请刷新后重试。","procurement.pi.concurrent-change");
             await db.ExecuteAsync("UPDATE purchase_plans SET quoted_by=@StaffId,quoted_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId",new{PlanId=planId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            await db.ExecuteAsync("UPDATE purchase_requests SET status=3,updated_at=@Now WHERE id=@RequestId AND status<3",new{RequestId=plans.Single().RequestId,Now=now},cancellationToken:transactionToken);
             return new(planId,"Approved",invoice.Id,invoice.Number,"Issued");
         },cancellationToken:token);
     }

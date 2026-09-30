@@ -13,15 +13,41 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 [Authorize]
 [Route("wholesale/procurement")]
 [InternalPermission("wholesale.purchase-plan.view")]
-public sealed partial class ProcurementController(ProcurementDataService procurement,ProcurementMailDispatcher mailDispatcher,FileCenterStorageService fileStorage,CurrentStaffAccessor currentStaff,PermissionEvaluator permissionEvaluator) : Controller
+public sealed partial class ProcurementController(ProcurementDataService procurement,FileCenterStorageService fileStorage,CurrentStaffAccessor currentStaff,PermissionEvaluator permissionEvaluator) : Controller
 {
     [HttpGet("")]
-    public IActionResult Index() => RedirectToAction(nameof(PurchaseRequests));
+    public IActionResult Index() => RedirectToAction(nameof(WholesaleOverview));
 
     [HttpGet("requests")]
     public async Task<IActionResult> PurchaseRequests(CancellationToken token) =>
         View("Requests",new PurchaseRequestsPageViewModel(
             await procurement.GetPurchaseRequestsAsync(null,token)));
+
+    [HttpGet("overview")]
+    public async Task<IActionResult> WholesaleOverview(CancellationToken token)
+    {
+        var requestsTask=procurement.GetPurchaseRequestsAsync(null,token);
+        var plansTask=procurement.GetPlansAsync(token);
+        await Task.WhenAll(requestsTask,plansTask);
+        TryStaffIdUnsigned(out var staffId);
+        return View("Overview",new WholesaleOverviewPageViewModel(
+            await requestsTask,await plansTask,staffId==0?null:staffId));
+    }
+
+    [HttpGet("requests/{requestId:long}/details")]
+    public async Task<IActionResult> RequestDetails(uint requestId,CancellationToken token)
+    {
+        var request=await procurement.GetPurchaseRequestAsync(requestId,token);
+        if(request is null)return NotFound();
+        var versions=await procurement.GetRequestVersionsAsync(requestId,token);
+        var authorization=await currentStaff.LoadAsync(token);
+        var canCreatePlan=authorization is not null&&
+            permissionEvaluator.Evaluate(authorization,"wholesale.purchase-plan.create").Allowed;
+        var canUpdatePlan=authorization is not null&&
+            permissionEvaluator.Evaluate(authorization,"wholesale.purchase-plan.update").Allowed;
+        ViewData["Title"]=$"{request.RequestNumber} 详情";
+        return View("RequestDetails",new PurchaseRequestDetailsPageViewModel(request,versions,canCreatePlan,canUpdatePlan));
+    }
 
     [HttpGet("requests/{requestId:long}/plan")]
     [InternalPermission("wholesale.purchase-plan.create")]
@@ -53,21 +79,63 @@ public sealed partial class ProcurementController(ProcurementDataService procure
 
     [HttpGet("sourcing")]
     public async Task<IActionResult> Sourcing(CancellationToken token) =>
-        View("Sourcing",await CreateSourcingViewModelAsync(await procurement.GetPlansAsync(token),token:token));
+        View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token)));
 
     [HttpGet("suppliers")]
     public async Task<IActionResult> SupplierDirectory([FromQuery]string? keyword,CancellationToken token) =>
-        View("Suppliers",new SupplierDirectoryPageViewModel(
-            await procurement.GetSuppliersAsync(keyword,token),keyword));
+        View("Suppliers",new SupplierDirectoryPageViewModel(await procurement.GetSuppliersAsync(keyword,token),keyword));
 
     [HttpGet("plans/{planId:long}/details")]
     public async Task<IActionResult> Details(uint planId,CancellationToken token)
     {
-        var plans=await procurement.GetPlansAsync(token);
-        var plan=plans.SingleOrDefault(item=>item.Id==planId);
-        if(plan is null)return NotFound();
-        ViewData["Title"]=$"{plan.PlanNumber} 详情";
-        return View("Sourcing",await CreateSourcingViewModelAsync(plans,plan.Id,plan.PlanNumber,token));
+        try
+        {
+            var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
+            var authorization=await currentStaff.LoadAsync(token);
+            bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
+            ViewData["Title"]=$"{plan.PlanNumber} 详情";
+            return View("PlanDetails",new PurchasePlanDetailPageViewModel(
+                plan,await procurement.GetPhaseOneWorkspaceAsync(planId,token),await procurement.GetBuyersAsync(token),
+                Has("wholesale.procurement.execute"),Has("wholesale.purchase-cost.edit"),
+                Has("wholesale.purchase-quote.submit"),Has("wholesale.purchase-quote.final-approve"),
+                Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue"),
+                Has("wholesale.purchase-document.internal")));
+        }
+        catch(InvalidOperationException){return NotFound();}
+    }
+
+    [HttpGet("proforma-invoices/{invoiceId:long}")]
+    public async Task<IActionResult> ProformaInvoiceDetails(uint invoiceId,CancellationToken token)
+    {
+        try
+        {
+            var invoice=await procurement.GetProformaInvoiceDetailAsync(invoiceId,token);
+            if(invoice is null)return NotFound();
+            var authorization=await currentStaff.LoadAsync(token);
+            bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
+            ViewData["Title"]=$"{invoice.Number} 详情";
+            return View("ProformaInvoiceDetails",new ProformaInvoiceDetailPageViewModel(
+                invoice,Has("wholesale.purchase-pi.manage"),Has("wholesale.purchase-pi.issue")));
+        }
+        catch(InvalidOperationException){return NotFound();}
+    }
+
+    [HttpGet("plans/{planId:long}/files/{fileId:long}/content")]
+    [InternalPermission("wholesale.purchase-document.internal")]
+    public async Task<IActionResult> PlanFileContent(uint planId,uint fileId,bool download=false,CancellationToken token=default)
+    {
+        var file=await procurement.GetPurchasePlanFileAsync(planId,fileId,token);
+        if(file is null)return NotFound();
+        try
+        {
+            var stream=await fileStorage.OpenReadAsync(file,token);
+            Response.Headers.XContentTypeOptions="nosniff";
+            return download
+                ?File(stream,file.MimeType,file.OriginalName,enableRangeProcessing:true)
+                :File(stream,file.MimeType,enableRangeProcessing:true);
+        }
+        catch(FileNotFoundException){return NotFound();}
+        catch(InvalidDataException){return UnprocessableEntity();}
     }
 
     [HttpGet("request-options")]
@@ -120,54 +188,6 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         }
     }
 
-    [HttpGet("plans/{planId:long}/costs")]
-    [InternalPermission("wholesale.purchase-cost.edit")]
-    public async Task<IActionResult> Costs(uint planId,CancellationToken token) => Json(await procurement.GetPhaseOneCostsAsync(planId,token));
-
-    [HttpPost("plans/{planId:long}/costs")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-cost.edit")]
-    public async Task<IActionResult> SaveCosts(uint planId,[FromForm]SaveProcurementCostsCommand command,CancellationToken token)
-    {
-        if(!TryStaffId(out var staffId)) return Forbid();
-        try
-        {
-            return Json(new{ok=true,data=await procurement.SaveDraftCostsAsync(planId,command,staffId,token)});
-        }
-        catch(Exception error) when(error is ArgumentOutOfRangeException or InvalidOperationException)
-        {
-            return UnprocessableEntity(new{ok=false,message=error.Message});
-        }
-    }
-
-    [HttpPost("plans/{planId:long}/costs/submit")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-quote.submit")]
-    public async Task<IActionResult> SubmitCosts(uint planId,CancellationToken token)
-    {
-        if(!TryStaffId(out var staffId))return Forbid();
-        try{return Json(new{ok=true,data=await procurement.SubmitCostReviewAsync(planId,staffId,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-    [HttpPost("pricing")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-cost.edit")]
-    public IActionResult Pricing([FromForm]ProcurementCostInput input)
-    {
-        try{return Json(new{ok=true,data=ProcurementPricing.Calculate(input)});}
-        catch(Exception error) when(error is ArgumentOutOfRangeException or InvalidOperationException)
-        {return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-
     private bool TryStaffIdUnsigned(out ulong staffId) =>
         ulong.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
-    private async Task<SourcingPageViewModel> CreateSourcingViewModelAsync(IReadOnlyList<ProcurementPlanListItem> plans,uint? planId=null,string? planNumber=null,CancellationToken token=default)
-    {
-        var authorization=await currentStaff.LoadAsync(token);
-        bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
-        return new(plans,planId,planNumber,
-            CanManageCosts:Has("wholesale.purchase-cost.edit"),CanSubmitQuote:Has("wholesale.purchase-quote.submit"),
-            CanReviewQuote:Has("wholesale.purchase-quote.review"),CanFinalApprove:Has("wholesale.purchase-quote.final-approve"),
-            CanManagePi:Has("wholesale.purchase-pi.manage"),CanIssuePi:Has("wholesale.purchase-pi.issue"),CanSendMail:Has("wholesale.purchase-mail.send"));
-    }
 }

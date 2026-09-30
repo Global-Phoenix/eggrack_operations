@@ -31,26 +31,22 @@ public sealed class ProcurementAuthorizationTests
     [Theory]
     [InlineData(nameof(ProcurementController.Create), "wholesale.purchase-plan.create")]
     [InlineData(nameof(ProcurementController.Update), "wholesale.purchase-plan.update")]
-    [InlineData(nameof(ProcurementController.SaveCosts), "wholesale.purchase-cost.edit")]
-    [InlineData(nameof(ProcurementController.Pricing), "wholesale.purchase-cost.edit")]
-    [InlineData(nameof(ProcurementController.CreateSupplier), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.RecordInquiry), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.RecordSample), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.SaveCandidate), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.SaveInquiry), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.SaveSample), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.SavePlanItem), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.DeletePlanItem), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.SelectInquiry), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.UploadSampleFile), "wholesale.purchase-document.internal")]
-    [InlineData(nameof(ProcurementController.SubmitCosts), "wholesale.purchase-quote.submit")]
-    [InlineData(nameof(ProcurementController.Review), "wholesale.purchase-quote.review")]
-    [InlineData(nameof(ProcurementController.Approve), "wholesale.purchase-quote.final-approve")]
-    [InlineData(nameof(ProcurementController.Reject), "wholesale.purchase-quote.review")]
-    [InlineData(nameof(ProcurementController.IssueProformaInvoice), "wholesale.purchase-pi.issue")]
-    [InlineData(nameof(ProcurementController.CompletePlan), "wholesale.procurement.execute")]
-    [InlineData(nameof(ProcurementController.UpdateProformaInvoicePricing), "wholesale.purchase-pi.manage")]
-    [InlineData(nameof(ProcurementController.SendMailTask), "wholesale.purchase-mail.send")]
+    [InlineData(nameof(ProcurementController.CreatePlanSupplier), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.SavePlanInquiry), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.SelectPlanInquiry), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.SavePlanSample), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.SavePlanItemProcurement), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.SavePlanCostQuote), "wholesale.purchase-cost.edit")]
+    [InlineData(nameof(ProcurementController.SubmitPlanQuote), "wholesale.purchase-quote.submit")]
+    [InlineData(nameof(ProcurementController.BossApprovePlanQuote), "wholesale.purchase-quote.final-approve")]
+    [InlineData(nameof(ProcurementController.GeneratePlanPi), "wholesale.purchase-pi.manage")]
+    [InlineData(nameof(ProcurementController.SavePlanPi), "wholesale.purchase-pi.manage")]
+    [InlineData(nameof(ProcurementController.IssuePlanPi), "wholesale.purchase-pi.issue")]
+    [InlineData(nameof(ProcurementController.CreatePlanPiRevision), "wholesale.purchase-pi.manage")]
+    [InlineData(nameof(ProcurementController.CancelPlanPi), "wholesale.purchase-pi.manage")]
+    [InlineData(nameof(ProcurementController.CompletePurchasePlan), "wholesale.procurement.execute")]
+    [InlineData(nameof(ProcurementController.UploadPlanFile), "wholesale.purchase-document.internal")]
+    [InlineData(nameof(ProcurementController.SetPlanFileVisibility), "wholesale.purchase-document.internal")]
     public void WriteActionsRequireSpecificPermission(string methodName,string expectedPermission)
     {
         var method=typeof(ProcurementController).GetMethod(methodName)
@@ -59,15 +55,19 @@ public sealed class ProcurementAuthorizationTests
         var permission=Assert.Single(method.GetCustomAttributes<InternalPermissionAttribute>());
         Assert.NotNull(permission.Arguments);
         Assert.Equal(expectedPermission,Assert.Single(permission.Arguments!));
+        Assert.NotEmpty(method.GetCustomAttributes<ValidateAntiForgeryTokenAttribute>());
     }
 
-    [Fact]
-    public void MailPreviewRequiresQuoteApprovalPermission()
+    [Theory]
+    [InlineData("Suppliers")]
+    [InlineData("CreateSupplier")]
+    [InlineData("SaveInquiry")]
+    [InlineData("SaveSample")]
+    [InlineData("UploadSampleFile")]
+    [InlineData("UpdateProformaInvoicePricing")]
+    [InlineData("IssueProformaInvoice")]
+    public void RetiredParallelWorkflowActionsAreNotExposed(string methodName)
     {
-        var method=typeof(ProcurementController).GetMethod(nameof(ProcurementController.PreviewMailTask))
-            ?? throw new InvalidOperationException(nameof(ProcurementController.PreviewMailTask));
-        Assert.NotEmpty(method.GetCustomAttributes<HttpGetAttribute>());
-        var permission=Assert.Single(method.GetCustomAttributes<InternalPermissionAttribute>());
-        Assert.Equal("wholesale.purchase-mail.send",Assert.Single(permission.Arguments!));
+        Assert.Null(typeof(ProcurementController).GetMethod(methodName));
     }
 }

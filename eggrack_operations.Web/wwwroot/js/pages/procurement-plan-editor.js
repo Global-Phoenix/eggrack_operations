@@ -110,7 +110,15 @@
             if (editor) fillPlan(editor);
             else {
                 form.elements.Priority.value = 'normal';
-                addItem();
+                const selectedVersion = versions.find(version => String(version.id) === versionSelect.value);
+                planItems = (selectedVersion?.items || []).map(sourceItem => ({
+                    ...sourceItem,
+                    id: '',
+                    requestItemId: sourceItem.id,
+                    internalNote: ''
+                }));
+                if (!planItems.length) planItems = [{ quantity: 1, unit: 'pcs' }];
+                renderItems();
             }
             renderVersionDetail();
         } catch (error) {

@@ -6,131 +6,200 @@ namespace eggrack_operations.Areas.Wholesale.Controllers;
 
 public sealed partial class ProcurementController
 {
-    [HttpGet("supplier-options")]
-    public async Task<IActionResult> Suppliers([FromQuery]string? keyword,CancellationToken token) =>
-        Json(await procurement.GetSuppliersAsync(keyword,token));
+    private IActionResult PlanDetailsRedirect(uint planId)=>RedirectToAction(nameof(Details),new{planId});
 
-    [HttpPost("suppliers")]
+    [HttpPost("plans/{planId:long}/suppliers")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> CreateSupplier([FromForm]CreateSupplierCommand command,CancellationToken token)
+    public async Task<IActionResult> CreatePlanSupplier(uint planId,[FromForm]CreateSupplierCommand command,CancellationToken token)
     {
         try
         {
-            var id=await procurement.CreateSupplierAsync(command,token);
-            return Json(new{ok=true,id,data=new{id,name=command.Name.Trim(),code=command.Code,status="active"}});
+            _=await procurement.GetPurchasePlanDetailAsync(planId,token);
+            await procurement.CreateSupplierAsync(command,token);
+            TempData["Success"]="供应商已加入档案，可用于当前计划询价。";
         }
-        catch(InvalidOperationException error)
-        {
-            return UnprocessableEntity(new{ok=false,message=error.Message});
-        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
-    [HttpPost("inquiries")]
+    [HttpPost("plans/{planId:long}/inquiries")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> RecordInquiry([FromForm]RecordInquiryCommand command,CancellationToken token) =>
-        Json(new{ok=true,id=await procurement.RecordInquiryAsync(command,token)});
-
-    [HttpPost("samples")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> RecordSample([FromForm]RecordSampleCommand command,CancellationToken token) =>
-        Json(new{ok=true,id=await procurement.RecordSampleAsync(command,token)});
-
-    [HttpPost("plans/{planId:long}/approve")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-quote.final-approve")]
-    public async Task<IActionResult> Approve(uint planId,[FromForm]decimal quoteUsd,[FromForm]string recipient,[FromForm]string? note,CancellationToken token)
-    {
-        if(!TryStaffId(out var staffId)) return Forbid();
-        try{return Json(new{ok=true,data=await procurement.FinalApproveQuoteAsync(new(planId,quoteUsd,note,staffId),recipient,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-
-    [HttpPost("plans/{planId:long}/reject")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-quote.review")]
-    public async Task<IActionResult> Reject(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
-    {
-        if(!TryStaffId(out var staffId)) return Forbid();
-        try{return Json(new{ok=true,data=await procurement.RejectPhaseOneQuoteAsync(new(planId,quoteUsd,note,staffId),token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-
-    [HttpGet("plans/{planId:long}/workspace")]
-    public async Task<IActionResult> Workspace(uint planId,CancellationToken token) =>
-        Json(await procurement.GetPhaseOneWorkspaceAsync(planId,token));
-
-    [HttpPost("candidates")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> SaveCandidate([FromForm]SaveCandidateProductCommand command,CancellationToken token)
-    { try{return Json(new{ok=true,id=await procurement.SaveCandidateAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
-
-    [HttpPost("inquiry-records")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> SaveInquiry([FromForm]SaveInquiryCommand command,CancellationToken token)
+    public async Task<IActionResult> SavePlanInquiry(uint planId,[FromForm]SaveInquiryCommand command,CancellationToken token)
     {
         if(!TryStaffId(out var staffId))return Forbid();
-        try{return Json(new{ok=true,id=await procurement.SaveInquiryRevisionAsync(command,staffId,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+        try
+        {
+            var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
+            if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
+            await procurement.SaveInquiryRevisionAsync(command,staffId,token);
+            TempData["Success"]=command.Id.HasValue?"供应商报价修订版本已保存。":"供应商报价已录入。";
+        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
     [HttpPost("plans/{planId:long}/inquiries/select")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> SelectInquiry(uint planId,[FromForm]SelectInquiryCommand command,CancellationToken token)
+    public async Task<IActionResult> SelectPlanInquiry(uint planId,[FromForm]SelectInquiryCommand command,CancellationToken token)
     {
         if(!TryStaffId(out var staffId))return Forbid();
-        try{await procurement.SelectInquiryAsync(planId,command,staffId,token);return Json(new{ok=true});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+        try{await procurement.SelectInquiryAsync(planId,command,staffId,token);TempData["Success"]="已选择该供应商报价作为产品成本依据。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
-    [HttpPost("plans/{planId:long}/review")]
+    [HttpPost("plans/{planId:long}/samples")]
     [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-quote.review")]
-    public async Task<IActionResult> Review(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
+    [InternalPermission("wholesale.procurement.execute")]
+    public async Task<IActionResult> SavePlanSample(uint planId,[FromForm]SaveSampleCommand command,CancellationToken token)
     {
-        if(!TryStaffId(out var staffId))return Forbid();
-        try{return Json(new{ok=true,data=await procurement.ReviewQuoteAsync(new(planId,quoteUsd,note,staffId),token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+        try
+        {
+            var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
+            if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
+            await procurement.SaveSampleAsync(command,token);
+            TempData["Success"]=command.Id.HasValue?"样品记录已更新。":"样品记录已添加。";
+        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
-    [HttpPost("sample-records")]
+    [HttpPost("plans/{planId:long}/items/procurement")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> SaveSample([FromForm]SaveSampleCommand command,CancellationToken token)
-    { try{return Json(new{ok=true,id=await procurement.SaveSampleAsync(command,token)});}catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});} }
-
-    [HttpPost("plans/{planId:long}/items")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> SavePlanItem(uint planId,[FromForm]SaveProcurementPlanItemCommand command,CancellationToken token)
+    public async Task<IActionResult> SavePlanItemProcurement(uint planId,[FromForm]SavePurchasePlanItemProcurementCommand command,CancellationToken token)
     {
         if(!TryStaffIdUnsigned(out var staffId))return Forbid();
-        try{return Json(new{ok=true,id=await procurement.SavePlanItemAsync(planId,command,staffId,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+        try{await procurement.SavePurchasePlanItemProcurementAsync(planId,command,staffId,token);TempData["Success"]="产品采购信息已保存。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
-    [HttpPost("plans/{planId:long}/items/{itemId:long}/delete")]
+    [HttpPost("plans/{planId:long}/cost-quote")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-cost.edit")]
+    public async Task<IActionResult> SavePlanCostQuote(uint planId,[FromForm]SavePurchasePlanCostQuoteCommand command,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try
+        {
+            var result=await procurement.SavePurchasePlanCostQuoteAsync(planId,command,staffId,token);
+            TempData["Success"]=$"成本与建议报价已保存：USD {result.QuoteUsd:N2}。";
+            if(!result.ProfitRateInRange||!result.QuoteAboveMinimum)
+                TempData["Warning"]="提示：当前报价未同时满足利润率 10%–20% 且报价高于 USD 4,000，Boss 仍可特殊审批。";
+        }
+        catch(Exception error) when(error is InvalidOperationException or ArgumentOutOfRangeException){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpPost("plans/{planId:long}/quote/submit")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.submit")]
+    public async Task<IActionResult> SubmitPlanQuote(uint planId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{await procurement.SubmitPurchasePlanQuoteAsync(planId,staffId,token);TempData["Success"]="报价已提交 Boss 最终确认。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpPost("plans/{planId:long}/quote/boss-approve")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-quote.final-approve")]
+    public async Task<IActionResult> BossApprovePlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{await procurement.ApprovePurchasePlanQuoteAsync(planId,quoteUsd,note,staffId,token);TempData["Success"]="Boss 已确认最终报价，可以生成 PI。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpPost("plans/{planId:long}/pi/generate")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-pi.manage")]
+    public async Task<IActionResult> GeneratePlanPi(uint planId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{var result=await procurement.GenerateProformaInvoiceAsync(planId,staffId,token);TempData["Success"]=$"{result.ProformaInvoiceNumber} 已生成，请填写客户销售单价和条款。";return RedirectToAction(nameof(ProformaInvoiceDetails),new{invoiceId=result.ProformaInvoiceId});}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpPost("plans/{planId:long}/pi/save")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-pi.manage")]
+    public async Task<IActionResult> SavePlanPi(uint planId,[FromForm]SaveProformaInvoiceCommand command,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{await procurement.SaveProformaInvoiceAsync(planId,command,staffId,token);TempData["Success"]="PI 定价和条款已保存并进入待签发状态。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return RedirectToAction(nameof(ProformaInvoiceDetails),new{invoiceId=command.InvoiceId});
+    }
+
+    [HttpPost("plans/{planId:long}/pi/issue-page")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-pi.issue")]
+    public async Task<IActionResult> IssuePlanPi(uint planId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{var result=await procurement.IssueProformaInvoiceAsync(planId,staffId,token);TempData["Success"]=$"{result.ProformaInvoiceNumber} 已签发，后续禁止直接修改。";return RedirectToAction(nameof(ProformaInvoiceDetails),new{invoiceId=result.ProformaInvoiceId});}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
+    }
+
+    [HttpPost("plans/{planId:long}/pi/{invoiceId:long}/revision")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-pi.manage")]
+    public async Task<IActionResult> CreatePlanPiRevision(uint planId,uint invoiceId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try
+        {
+            var replacementId=await procurement.CreateReplacementProformaInvoiceAsync(planId,invoiceId,staffId,token);
+            TempData["Success"]="已从签发快照创建新的 PI 修订草稿，原 PI 保持不变。";
+            return RedirectToAction(nameof(ProformaInvoiceDetails),new{invoiceId=replacementId});
+        }
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return RedirectToAction(nameof(ProformaInvoiceDetails),new{invoiceId});
+    }
+
+    [HttpPost("plans/{planId:long}/pi/{invoiceId:long}/cancel")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("wholesale.purchase-pi.manage")]
+    public async Task<IActionResult> CancelPlanPi(uint planId,uint invoiceId,CancellationToken token)
+    {
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{await procurement.CancelProformaInvoiceAsync(planId,invoiceId,staffId,token);TempData["Success"]="PI 已取消，可以从采购计划重新生成。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return RedirectToAction(nameof(ProformaInvoiceDetails),new{invoiceId});
+    }
+
+    [HttpPost("plans/{planId:long}/complete-workflow")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> DeletePlanItem(uint planId,uint itemId,CancellationToken token)
+    public async Task<IActionResult> CompletePurchasePlan(uint planId,CancellationToken token)
     {
-        try{await procurement.DeletePlanItemAsync(planId,itemId,token);return Json(new{ok=true});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+        if(!TryStaffId(out var staffId))return Forbid();
+        try{await procurement.CompletePurchasePlanAsync(planId,staffId,token);TempData["Success"]="采购计划已完成，采购申请状态已同步。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
-    [HttpPost("plans/{planId:long}/sample-files")]
+    [HttpPost("plans/{planId:long}/files/upload")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(52_428_800)]
     [InternalPermission("wholesale.purchase-document.internal")]
-    public async Task<IActionResult> UploadSampleFile(uint planId,[FromForm]IFormFile file,[FromForm]uint? planItemId,[FromForm]uint? supplierId,[FromForm]uint? inquiryId,[FromForm]uint? sampleId,[FromForm]uint fileTypeId,[FromForm]string visibility="internal",[FromForm]string? description=null,CancellationToken token=default)
+    public async Task<IActionResult> UploadPlanFile(
+        uint planId,[FromForm]IFormFile file,[FromForm]uint? planItemId,[FromForm]string fileType,
+        [FromForm]string? title,[FromForm]string? description,[FromForm]uint? supplierId,
+        [FromForm]uint? inquiryId,[FromForm]uint? sampleId,[FromForm]uint? fileTypeId,
+        [FromForm]string visibility="internal",CancellationToken token=default)
     {
         if(!TryStaffIdUnsigned(out var staffId))return Forbid();
-        if(file is null||file.Length==0)return UnprocessableEntity(new{ok=false,message="请选择需要上传的文件。"});
+        if(file is null||file.Length==0){TempData["Error"]="请选择需要上传的文件。";return PlanDetailsRedirect(planId);}
         Eggrack.Operations.Infrastructure.Modules.Files.StoredPlanUpload? stored=null;
         try
         {
@@ -138,69 +207,32 @@ public sealed partial class ProcurementController
             stored=await fileStorage.SavePlanFileAsync(planId,file.FileName,file.ContentType,stream,token);
             await using var checksumStream=System.IO.File.OpenRead(stored.PhysicalPath);
             var checksum=Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(checksumStream,token)).ToLowerInvariant();
-            var id=await procurement.AddProcurementDocumentAsync(planId,planItemId,supplierId,inquiryId,sampleId,fileTypeId,visibility,stored.OriginalName,stored.StoragePath,checksum,stored.MimeType,stored.FileSize,description,staffId,token);
-            return Json(new{ok=true,id});
+            if(fileTypeId.HasValue)
+                await procurement.AddProcurementDocumentAsync(planId,planItemId,supplierId,inquiryId,sampleId,
+                    fileTypeId.Value,visibility,stored.OriginalName,stored.StoragePath,checksum,stored.MimeType,
+                    stored.FileSize,description,staffId,token);
+            else
+                await procurement.AddPurchasePlanFileAsync(planId,planItemId,fileType,title,description,stored.OriginalName,
+                    stored.StoragePath,checksum,stored.MimeType,stored.FileSize,staffId,token);
+            TempData["Success"]="采购计划文件已上传，默认仅内部可见。";
         }
         catch(Exception error) when(error is InvalidDataException or InvalidOperationException)
         {
             if(stored is not null&&System.IO.File.Exists(stored.PhysicalPath))System.IO.File.Delete(stored.PhysicalPath);
-            return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
         }
-        catch
-        {
-            if(stored is not null&&System.IO.File.Exists(stored.PhysicalPath))System.IO.File.Delete(stored.PhysicalPath);
-            throw;
-        }
+        return PlanDetailsRedirect(planId);
     }
 
-    [HttpPost("plans/{planId:long}/pi/pricing")]
+    [HttpPost("plans/{planId:long}/files/{fileId:long}/visibility")]
     [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-pi.manage")]
-    public async Task<IActionResult> UpdateProformaInvoicePricing(uint planId,[FromForm]UpdateProformaInvoicePricingCommand command,CancellationToken token)
+    [InternalPermission("wholesale.purchase-document.internal")]
+    public async Task<IActionResult> SetPlanFileVisibility(uint planId,uint fileId,[FromForm]bool customerVisible,CancellationToken token)
     {
-        if(!TryStaffId(out var staffId)) return Forbid();
-        try{return Json(new{ok=true,data=await procurement.UpdateProformaInvoicePricingAsync(planId,command,staffId,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-
-    [HttpPost("plans/{planId:long}/pi/issue")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-pi.issue")]
-    public async Task<IActionResult> IssueProformaInvoice(uint planId,CancellationToken token)
-    {
-        if(!TryStaffId(out var staffId)) return Forbid();
-        try{return Json(new{ok=true,data=await procurement.IssueProformaInvoiceAsync(planId,staffId,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-
-    [HttpPost("plans/{planId:long}/complete")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.procurement.execute")]
-    public async Task<IActionResult> CompletePlan(uint planId,CancellationToken token)
-    {
-        if(!TryStaffId(out var staffId)) return Forbid();
-        try{return Json(new{ok=true,data=await procurement.CompletePlanAsync(planId,staffId,token)});}
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
-    }
-    [HttpGet("mail-tasks/{mailTaskId:long}/preview")]
-    [InternalPermission("wholesale.purchase-mail.send")]
-    public async Task<IActionResult> PreviewMailTask(uint mailTaskId,CancellationToken token)
-    {
-        try{return Content(await mailDispatcher.PreviewHtmlAsync(mailTaskId,token),"text/html; charset=utf-8");}
-        catch(InvalidOperationException error){return NotFound(error.Message);}
-    }
-
-    [HttpPost("mail-tasks/{mailTaskId:long}/send")]
-    [ValidateAntiForgeryToken]
-    [InternalPermission("wholesale.purchase-mail.send")]
-    public async Task<IActionResult> SendMailTask(uint mailTaskId,CancellationToken token)
-    {
-        try
-        {
-            var sent=await mailDispatcher.DispatchAsync(mailTaskId,token);
-            return sent?Json(new{ok=true,message="邮件发送成功。"}):UnprocessableEntity(new{ok=false,message="邮件发送失败，已记录失败原因，可稍后重试。"});
-        }
-        catch(InvalidOperationException error){return UnprocessableEntity(new{ok=false,message=error.Message});}
+        if(!TryStaffIdUnsigned(out var staffId))return Forbid();
+        try{await procurement.SetPurchasePlanFileVisibilityAsync(planId,fileId,customerVisible,staffId,token);TempData["Success"]=customerVisible?"文件已设置为客户可见。":"文件已恢复为仅内部可见。";}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        return PlanDetailsRedirect(planId);
     }
 
     private bool TryStaffId(out long staffId) =>

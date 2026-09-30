@@ -59,6 +59,22 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
             throw new DataScopeDeniedException("采购计划产品不存在或不在当前部门数据范围内。");
     }
 
+    public async Task EnsureRequestAsync(DatabaseSession db,uint requestId,CancellationToken token)
+    {
+        var scope=Current();
+        var rows=await db.QueryAsync<uint>(
+            """
+            SELECT r.id FROM purchase_requests r
+            LEFT JOIN purchase_plans p ON p.request_id=r.id
+            WHERE r.id=@RequestId AND
+              (@ScopeAll=1 OR (@ScopeSelf=1 AND p.assigned_buyer_id=@ScopeStaffId)
+               OR p.department_id IN @ScopeDepartmentIds)
+            """,
+            Params(scope,new{RequestId=requestId}),cancellationToken:token);
+        if(rows.Count!=1)
+            throw new DataScopeDeniedException("采购申请不存在或不在当前部门数据范围内。");
+    }
+
     public async Task EnsureMailTaskAsync(DatabaseSession db, uint mailTaskId, CancellationToken token)
     {
         var scope = Current();
@@ -87,7 +103,9 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
             SELECT sd.department_id
             FROM eggrack_auth_staff_department sd
             JOIN eggrack_auth_staff s ON s.id=sd.staff_id AND s.status=1 AND s.deleted_at IS NULL
-            JOIN eggrack_auth_department d ON d.id=sd.department_id AND d.department_code='development' AND d.status=1 AND d.deleted_at IS NULL
+            JOIN eggrack_auth_department d ON d.id=sd.department_id
+              AND (LOWER(d.department_code) IN('procurement','purchasing','purchase') OR d.department_name='采购部')
+              AND d.status=1 AND d.deleted_at IS NULL
             WHERE sd.staff_id=@BuyerStaffId AND
               (@ScopeAll=1 OR sd.department_id IN @ScopeDepartmentIds
                OR (@ScopeSelf=1 AND sd.staff_id=@ScopeStaffId))
@@ -99,7 +117,7 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
         var departmentId = rows.SingleOrDefault();
         return departmentId > 0
             ? departmentId
-            : throw new BusinessRuleException("采购人员必须属于开发部，并且在当前授权部门范围内。", "procurement.buyer.department-denied");
+            : throw new BusinessRuleException("采购人员必须属于采购部，并且在当前授权部门范围内。", "procurement.buyer.department-denied");
     }
 
     public static object Params(ProcurementAccessScope scope, object values)

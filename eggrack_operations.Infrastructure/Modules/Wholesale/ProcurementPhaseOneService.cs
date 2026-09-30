@@ -34,7 +34,10 @@ public sealed partial class ProcurementDataService
                 if(!old.IsCurrent)throw new BusinessRuleException("该报价已有新版本，请刷新后再操作。","procurement.inquiry.stale");
                 var changed=await db.ExecuteAsync("UPDATE procurement_inquiries SET is_current=0,status='superseded',updated_at=@Now WHERE id=@Id AND is_current=1",new{command.Id,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:transactionToken);
                 if(changed!=1)throw new BusinessRuleException("报价已被其他操作修改，请刷新后重试。","procurement.inquiry.concurrent-change");
-                await db.ExecuteAsync("DELETE FROM procurement_selected_inquiries WHERE inquiry_id=@Id",new{command.Id},cancellationToken:transactionToken);
+                var deselected=await db.ExecuteAsync("DELETE FROM procurement_selected_inquiries WHERE inquiry_id=@Id",new{command.Id},cancellationToken:transactionToken);
+                if(deselected>0)
+                    await db.ExecuteAsync("UPDATE purchase_plan_items SET purchase_unit_price_cny=NULL,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanItemId",
+                        new{command.PlanItemId,StaffId=staffId,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:transactionToken);
                 revision=old.RevisionNo+1;previousId=old.Id;
             }
             var supplierValid=(await db.QueryAsync<long>("SELECT COUNT(*) FROM procurement_suppliers WHERE id=@SupplierId AND status='active'",new{command.SupplierId},cancellationToken:transactionToken)).Single();
@@ -70,6 +73,16 @@ public sealed partial class ProcurementDataService
             VALUES(@PlanItemId,@InquiryId,@StaffId,@Now)
             ON DUPLICATE KEY UPDATE inquiry_id=VALUES(inquiry_id),selected_by=VALUES(selected_by),selected_at=VALUES(selected_at)
             """,new{command.PlanItemId,command.InquiryId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
+            await db.ExecuteAsync("""
+            UPDATE purchase_plan_items i
+            JOIN purchase_plans p ON p.id=i.plan_id
+            JOIN procurement_inquiries q ON q.id=@InquiryId AND q.plan_item_id=i.id
+            SET i.purchase_unit_price_cny=CASE WHEN q.currency='USD'
+                  THEN q.unit_price_cny*COALESCE(NULLIF(p.cny_per_usd,0),7.12)
+                  ELSE q.unit_price_cny END,
+                i.updated_by=@StaffId,i.updated_at=@Now
+            WHERE i.id=@PlanItemId AND i.plan_id=@PlanId
+            """,new{PlanId=planId,command.PlanItemId,command.InquiryId,StaffId=staffId,Now=now},cancellationToken:transactionToken);
             await AddWorkflowEventAsync(db,planId,"inquiry.selected",2,2,"inquiry",command.InquiryId,null,staffId,now,transactionToken);
         },cancellationToken:token);
     }

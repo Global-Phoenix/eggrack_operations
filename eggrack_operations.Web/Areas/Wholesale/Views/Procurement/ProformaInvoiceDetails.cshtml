@@ -1,0 +1,38 @@
+@model ProformaInvoiceDetailPageViewModel
+@{
+    var invoice=Model.Invoice;
+    var editable=Model.CanManagePi&&invoice.Status is 1 or 2;
+    var status=invoice.Status switch{1=>("草稿","neutral"),2=>("待签发","warning"),3=>("已签发","success"),4=>("已取消","danger"),_=>("未知","neutral")};
+    string Display(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
+}
+<section class="proc pi-detail-page">
+@await Component.InvokeAsync("PageHeader",new{title=invoice.Number,subtitle=$"{invoice.PlanNumber} · {invoice.RequestNumber}",parentTitle="采购计划",parentUrl=Url.Action("Details",new{planId=invoice.PurchasePlanId}),statusText=status.Item1,statusTone=status.Item2})
+@if(TempData["Success"] is string success){<div class="alert alert-success">@success</div>}
+@if(TempData["Error"] is string error){<div class="alert alert-danger">@error</div>}
+<form asp-action="SavePlanPi" asp-route-planId="@invoice.PurchasePlanId" method="post">
+ <input type="hidden" name="InvoiceId" value="@invoice.Id">
+ <div class="pi-party-grid">
+  <section class="ui-panel p-4"><div class="er-section-header"><div><h2>Seller</h2><p>销售方快照</p></div></div><dl class="ui-fact-grid"><div><dt>名称</dt><dd>@invoice.SellerName</dd></div><div><dt>邮箱</dt><dd>@Display(invoice.SellerEmail)</dd></div><div><dt>电话</dt><dd>@Display(invoice.SellerPhone)</dd></div><div><dt>地址</dt><dd>@Display(invoice.SellerAddress)</dd></div></dl></section>
+  <section class="ui-panel p-4"><div class="er-section-header"><div><h2>Customer</h2><p>来自采购申请版本的客户快照</p></div></div><dl class="ui-fact-grid"><div><dt>公司</dt><dd>@Display(invoice.CompanyName)</dd></div><div><dt>联系人</dt><dd>@invoice.ContactName</dd></div><div><dt>邮箱</dt><dd>@invoice.Email</dd></div><div><dt>电话</dt><dd>@Display(invoice.Phone)</dd></div><div><dt>国家</dt><dd>@Display(invoice.Country)</dd></div><div><dt>交付地址</dt><dd>@Display(invoice.DeliveryAddress)</dd></div></dl></section>
+ </div>
+ @if(invoice.SupersedesPiId.HasValue){<div class="alert alert-info mt-3 mb-0"><i class="bi bi-arrow-repeat me-2"></i>此 PI 是 PI #@invoice.SupersedesPiId 的修订版本，原签发快照保持不变。</div>}
+ <section class="ui-panel mt-3">
+  <div class="er-section-header px-4 pt-4"><div><h2>Products</h2><p>这里只展示客户销售价格，不展示采购成本。</p></div></div>
+  <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>产品</th><th>数量</th><th>Unit Price (@invoice.Currency)</th><th class="numeric">Amount</th></tr></thead><tbody>
+  @for(var index=0;index<invoice.Items.Count;index++){var item=invoice.Items[index];<tr><td><input type="hidden" name="Items[@index].Id" value="@item.Id"><strong>@item.ProductName</strong></td><td>@item.Quantity.ToString("0.###") @item.Unit</td><td><input class="form-control pi-price-input" name="Items[@index].UnitPrice" type="number" min="0" step=".0001" value="@item.UnitPrice" readonly="@(!editable?"readonly":null)"></td><td class="numeric">@invoice.Currency @item.LineAmount.ToString("N2")</td></tr>}
+  </tbody></table></div>
+ </section>
+ <div class="pi-detail-layout mt-3">
+  <section class="ui-panel p-4"><div class="er-section-header"><div><h2>费用与条款</h2><p>保存后总额必须与 Boss 最终确认报价一致。</p></div></div><div class="row g-3">
+   <div class="col-md-3"><label class="form-label">Packaging Fee</label><input class="form-control" name="PackagingFee" type="number" min="0" step=".01" value="@invoice.PackagingFee" readonly="@(!editable?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Shipping Fee</label><input class="form-control" name="ShippingFee" type="number" min="0" step=".01" value="@invoice.ShippingFee" readonly="@(!editable?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Other Fee</label><input class="form-control" name="OtherFee" type="number" min="0" step=".01" value="@invoice.OtherFee" readonly="@(!editable?"readonly":null)"></div><div class="col-md-3"><label class="form-label">Discount</label><input class="form-control" name="DiscountAmount" type="number" min="0" step=".01" value="@invoice.DiscountAmount" readonly="@(!editable?"readonly":null)"></div>
+   <div class="col-md-6"><label class="form-label">Payment Terms</label><textarea class="form-control" name="PaymentTerms" rows="3" readonly="@(!editable?"readonly":null)">@invoice.PaymentTerms</textarea></div><div class="col-md-6"><label class="form-label">Payment Instructions</label><textarea class="form-control" name="PaymentInstructions" rows="3" readonly="@(!editable?"readonly":null)">@invoice.PaymentInstructions</textarea></div>
+   <div class="col-md-4"><label class="form-label">Trade Terms</label><input class="form-control" name="TradeTerms" value="@invoice.TradeTerms" readonly="@(!editable?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Delivery Terms</label><input class="form-control" name="DeliveryTerms" value="@invoice.DeliveryTerms" readonly="@(!editable?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Lead Time</label><input class="form-control" name="LeadTime" value="@invoice.LeadTime" readonly="@(!editable?"readonly":null)"></div><div class="col-md-4"><label class="form-label">Valid Until</label><input class="form-control" name="ValidUntil" type="date" value="@invoice.ValidUntil?.ToString("yyyy-MM-dd")" readonly="@(!editable?"readonly":null)"></div>
+  </div></section>
+  <aside class="ui-action-rail"><section><h3>PI Total</h3><dl class="prototype-facts"><div><dt>Products</dt><dd>@invoice.Currency @invoice.ProductAmount.ToString("N2")</dd></div><div><dt>Packaging</dt><dd>@invoice.PackagingFee.ToString("N2")</dd></div><div><dt>Shipping</dt><dd>@invoice.ShippingFee.ToString("N2")</dd></div><div><dt>Other</dt><dd>@invoice.OtherFee.ToString("N2")</dd></div><div><dt>Discount</dt><dd>-@invoice.DiscountAmount.ToString("N2")</dd></div><div><dt>Total</dt><dd>@invoice.Currency @invoice.TotalAmount.ToString("N2")</dd></div></dl></section>
+   <section><h3>操作</h3><div class="d-grid gap-2">@if(editable){<button class="btn btn-primary" type="submit">保存 PI</button>}@if(Model.CanIssuePi&&invoice.Status==2){<button class="btn btn-success" type="submit" formaction="@Url.Action("IssuePlanPi",new{planId=invoice.PurchasePlanId})">签发 PI</button>}@if(Model.CanManagePi&&invoice.Status is 1 or 2){<button class="btn btn-outline-danger" type="submit" formaction="@Url.Action("CancelPlanPi",new{planId=invoice.PurchasePlanId,invoiceId=invoice.Id})" onclick="return confirm('确定取消此 PI？取消后需重新生成。')">取消 PI</button>}@if(Model.CanManagePi&&invoice.Status==3){<button class="btn btn-outline-primary" type="submit" formaction="@Url.Action("CreatePlanPiRevision",new{planId=invoice.PurchasePlanId,invoiceId=invoice.Id})">创建修订 PI</button>}<a class="btn btn-outline-secondary" asp-action="Details" asp-route-planId="@invoice.PurchasePlanId">返回采购计划</a></div></section>
+  </aside>
+ </div>
+</form>
+</section>
+
+@section Styles { <link rel="stylesheet" href="~/css/pages/procurement.css" asp-append-version="true" /> }

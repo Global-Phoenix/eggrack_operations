@@ -23,8 +23,12 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         const string sql = """
         SELECT r.id Id,v.id CurrentVersionId,r.request_number RequestNumber,r.current_version CurrentVersion,
           COALESCE(v.company_name,v.contact_name) CustomerName,r.email Email,
+          (SELECT COUNT(*) FROM purchase_request_version_items vi WHERE vi.version_id=v.id) ProductCount,
+          r.status RequestStatus,FROM_UNIXTIME(r.created_at) CreatedAtUtc,
           FROM_UNIXTIME(r.last_submitted_at) SubmittedAtUtc,
+          FROM_UNIXTIME(COALESCE(p.updated_at,r.last_submitted_at)) UpdatedAtUtc,
           p.id PlanId,p.plan_number PlanNumber,p.request_version_id PlannedVersionId,p.assigned_buyer_id BuyerId,s.staff_name BuyerName,
+          p.status PlanStatus,
           p.plan_title PlanTitle,p.priority_code Priority,p.planned_start_date PlannedStartDate,
           p.target_completion_date TargetCompletionDate,FROM_UNIXTIME(p.completed_at) CompletedAtUtc,p.internal_note InternalNote
         FROM purchase_requests r
@@ -49,8 +53,12 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         const string sql="""
         SELECT r.id Id,v.id CurrentVersionId,r.request_number RequestNumber,r.current_version CurrentVersion,
           COALESCE(v.company_name,v.contact_name) CustomerName,r.email Email,
+          (SELECT COUNT(*) FROM purchase_request_version_items vi WHERE vi.version_id=v.id) ProductCount,
+          r.status RequestStatus,FROM_UNIXTIME(r.created_at) CreatedAtUtc,
           FROM_UNIXTIME(r.last_submitted_at) SubmittedAtUtc,
+          FROM_UNIXTIME(COALESCE(p.updated_at,r.last_submitted_at)) UpdatedAtUtc,
           p.id PlanId,p.plan_number PlanNumber,p.request_version_id PlannedVersionId,p.assigned_buyer_id BuyerId,s.staff_name BuyerName,
+          p.status PlanStatus,
           p.plan_title PlanTitle,p.priority_code Priority,p.planned_start_date PlannedStartDate,
           p.target_completion_date TargetCompletionDate,FROM_UNIXTIME(p.completed_at) CompletedAtUtc,p.internal_note InternalNote
         FROM purchase_requests r
@@ -76,7 +84,8 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           COALESCE((SELECT i.product_name FROM purchase_plan_items i WHERE i.plan_id=p.id ORDER BY i.sort_order,i.id LIMIT 1),'—') ProductSummary,
           s.staff_name BuyerName,p.total_cost_cny TotalCostCny,p.approved_quote_amount_usd FinalQuoteUsd,
           CASE p.status WHEN 1 THEN 'Draft' WHEN 2 THEN 'Sourcing' WHEN 3 THEN 'PendingApproval'
-            WHEN 4 THEN 'Approved' WHEN 5 THEN 'Completed' WHEN 6 THEN 'PendingFinalApproval' ELSE 'Draft' END Status,
+            WHEN 4 THEN 'Approved' WHEN 5 THEN 'Completed' WHEN 6 THEN 'PendingFinalApproval'
+            WHEN 7 THEN 'Rejected' WHEN 8 THEN 'EmailPending' ELSE 'Draft' END Status,
           FROM_UNIXTIME(p.updated_at) UpdatedAtUtc
         FROM purchase_plans p
         JOIN purchase_requests r ON r.id=p.request_id
@@ -118,6 +127,9 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
             """,new{Number=number,Title=title,RequestId=requestId,VersionId=input.RequestVersionId,Status=2,Priority=input.Priority,StartDate=startDate,TargetDate=(DateTime?)null,BuyerId=input.AssignedBuyerStaffId,DepartmentId=departmentId,StaffId=staffId,AssignedAt=now,InternalNote=Clean(input.InternalNote),Now=now},cancellationToken:token);
             var planId=(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
             await SynchronizePlanItemsAsync(db,planId,requestId,input.RequestVersionId,input.Items,staffId,now,token);
+            await db.ExecuteAsync(
+                "UPDATE purchase_requests SET status=2,updated_at=@Now WHERE id=@RequestId AND status<2",
+                new{RequestId=requestId,Now=now},cancellationToken:token);
             await db.CommitAsync(token);
             return planId;
         }
@@ -190,7 +202,9 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         SELECT DISTINCT s.id Id,s.staff_name Name
         FROM eggrack_auth_staff s
         JOIN eggrack_auth_staff_department sd ON sd.staff_id=s.id
-        JOIN eggrack_auth_department d ON d.id=sd.department_id AND d.department_code='development' AND d.status=1 AND d.deleted_at IS NULL
+        JOIN eggrack_auth_department d ON d.id=sd.department_id
+          AND (LOWER(d.department_code) IN('procurement','purchasing','purchase') OR d.department_name='采购部')
+          AND d.status=1 AND d.deleted_at IS NULL
         WHERE s.status=1 AND s.deleted_at IS NULL
           AND (@ScopeAll=1 OR (@ScopeSelf=1 AND s.id=@ScopeStaffId)
             OR sd.department_id IN @ScopeDepartmentIds)
@@ -205,7 +219,9 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         var scope=scopePolicy.Current();
         const string sql="""
         SELECT v.id Id,v.request_id RequestId,v.version_number VersionNumber,
-          COALESCE(v.company_name,v.contact_name) CustomerName,v.email Email,
+          v.company_name CompanyName,v.contact_name ContactName,v.email Email,
+          v.phone Phone,v.whatsapp Whatsapp,v.country Country,v.delivery_address DeliveryAddress,
+          v.pickup_trade_info PickupTradeInfo,v.customer_message CustomerMessage,
           FROM_UNIXTIME(v.submitted_at) SubmittedAtUtc
         FROM purchase_request_versions v
         LEFT JOIN purchase_plans p ON p.request_id=v.request_id
@@ -219,8 +235,9 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           sql,ProcurementScopePolicy.Params(scope,new{RequestId=requestId}),cancellationToken:token);
         if(versions.Count==0)return [];
         const string itemSql="""
-        SELECT id Id,version_id VersionId,product_name ProductName,quantity Quantity,
-          quantity_unit Unit,sku Sku,brand Brand,description Description,specifications Specifications,
+        SELECT id Id,version_id VersionId,product_key ProductKey,product_name ProductName,quantity Quantity,
+          quantity_unit Unit,sku Sku,brand Brand,description Description,reference_url ReferenceUrl,
+          target_unit_price TargetUnitPrice,currency Currency,specifications Specifications,
           color Color,size Size,packaging_requirements PackagingRequirements,
           customization_requirements CustomizationRequirements,customer_note CustomerNote
         FROM purchase_request_version_items
@@ -230,16 +247,20 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
         var items=await db.QueryAsync<PurchaseRequestVersionItemDetail>(
           itemSql,new{RequestId=requestId,VersionIds=versions.Select(x=>x.Id).ToArray()},cancellationToken:token);
         const string attachmentSql="""
-        SELECT id Id,version_id VersionId,original_name OriginalName,mime_type MimeType,file_size FileSize
-        FROM purchase_request_files
-        WHERE request_id=@RequestId AND version_id IN @VersionIds
-        ORDER BY version_id,uploaded_at,id
+        SELECT f.id Id,f.version_id VersionId,f.version_item_id VersionItemId,f.file_type FileType,
+          f.original_name OriginalName,f.mime_type MimeType,f.file_size FileSize,
+          FROM_UNIXTIME(f.uploaded_at) UploadedAtUtc,i.product_name RelatedProductName
+        FROM purchase_request_files f
+        LEFT JOIN purchase_request_version_items i ON i.id=f.version_item_id AND i.version_id=f.version_id
+        WHERE f.request_id=@RequestId AND f.version_id IN @VersionIds
+        ORDER BY f.version_id,f.uploaded_at,f.id
         """;
         var attachments=await db.QueryAsync<PurchaseRequestAttachmentDetail>(
           attachmentSql,new{RequestId=requestId,VersionIds=versions.Select(x=>x.Id).ToArray()},cancellationToken:token);
         return versions.Select(version=>new PurchaseRequestVersionDetail(
-          version.Id,version.RequestId,version.VersionNumber,version.CustomerName,
-          version.Email,version.SubmittedAtUtc,
+          version.Id,version.RequestId,version.VersionNumber,version.CompanyName,version.ContactName,
+          version.Email,version.Phone,version.Whatsapp,version.Country,version.DeliveryAddress,
+          version.PickupTradeInfo,version.CustomerMessage,version.SubmittedAtUtc,
           items.Where(item=>item.VersionId==version.Id).ToArray(),
           attachments.Where(file=>file.VersionId==version.Id).ToArray())).ToArray();
     }
