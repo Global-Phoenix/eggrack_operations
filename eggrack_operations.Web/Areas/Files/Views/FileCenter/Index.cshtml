@@ -90,7 +90,10 @@
     @await Html.PartialAsync("_FilePreviewWorkspace")
 </section>
 
-@section Styles { <link rel="stylesheet" href="~/css/pages/file-center.css" asp-append-version="true" /> }
+@section Styles {
+<link rel="stylesheet" href="~/css/components/file-preview.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/pages/file-center.css" asp-append-version="true" />
+}
 
 @section Scripts {
 <script id="fileCenterData" type="application/json">@Html.Raw(JsonSerializer.Serialize(purchaseData))</script>

@@ -3,144 +3,188 @@
     var requestStatus=ProcurementUi.RequestStatus(Model.Request);
     var current=Model.Versions.FirstOrDefault(version=>version.Id==Model.Request.CurrentVersionId)??Model.Versions.FirstOrDefault();
     var versions=Model.Versions.OrderByDescending(version=>version.VersionNumber).ToArray();
-    var planBasedVersion=Model.Request.PlannedVersionId.HasValue?Model.Versions.FirstOrDefault(version=>version.Id==Model.Request.PlannedVersionId)?.VersionNumber:null;
-    var planOutdated=Model.Request.HasPlan&&Model.Request.PlannedVersionId!=Model.Request.CurrentVersionId;
-    var planStatus=ProcurementUi.PlanStatus(Model.Request.PlanStatus);
     var openPlanUrl=Model.Request.HasPlan?Url.Action("Details","Procurement",new{area="Wholesale",planId=Model.Request.PlanId}):null;
     var createPlanUrl=!Model.Request.HasPlan&&Model.CanCreatePlan?Url.Action("CreatePlanPage","Procurement",new{area="Wholesale",requestId=Model.Request.Id}):null;
-    var updatePlanUrl=Model.Request.HasPlan&&Model.CanUpdatePlan?Url.Action("EditPlanPage","Procurement",new{area="Wholesale",planId=Model.Request.PlanId}):null;
     var primaryText=Model.Request.HasPlan?"查看采购计划":Model.CanCreatePlan?"创建采购计划":null;
     var primaryUrl=Model.Request.HasPlan?openPlanUrl:createPlanUrl;
     string Display(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
 }
-<section class="proc request-detail-page">
-@await Component.InvokeAsync("PageHeader",new{
- title=Model.Request.RequestNumber,
- subtitle=$"{Model.Request.CustomerName} · 当前版本 V{Model.Request.CurrentVersion} · 提交于 {Model.Request.SubmittedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}",
- parentTitle="采购申请",parentUrl=Url.Action("PurchaseRequests","Procurement",new{area="Wholesale"}),
- statusText=requestStatus.Text,statusTone=requestStatus.Tone,primaryText,primaryUrl
-})
-<ul class="nav nav-tabs request-detail-tabs" role="tablist" aria-label="采购申请详情">
- <li class="nav-item" role="presentation"><button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#requestOverview" type="button" role="tab" aria-controls="requestOverview" aria-selected="true">概览</button></li>
- <li class="nav-item" role="presentation"><button class="nav-link" id="requirements-tab" data-bs-toggle="tab" data-bs-target="#requestRequirements" type="button" role="tab" aria-controls="requestRequirements" aria-selected="false">需求 <span>@(current?.Items.Count??0)</span></button></li>
- <li class="nav-item" role="presentation"><button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#requestFiles" type="button" role="tab" aria-controls="requestFiles" aria-selected="false">文件 <span>@(current?.Attachments.Count??0)</span></button></li>
- <li class="nav-item" role="presentation"><button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#requestHistory" type="button" role="tab" aria-controls="requestHistory" aria-selected="false">历史 <span>@versions.Length</span></button></li>
-</ul>
-<div class="tab-content request-detail-content">
- <div class="tab-pane fade show active" id="requestOverview" role="tabpanel" aria-labelledby="overview-tab" tabindex="0">
-  <div class="request-detail-layout">
-   <main class="request-detail-main">
-    <section class="er-section">
-     <div class="er-section-header"><div><h2>客户</h2><p>当前 V@(Model.Request.CurrentVersion) 的客户联系快照</p></div></div>
-     <div class="ui-fact-grid">
-      <div class="ui-fact"><small>公司</small><strong>@Display(current?.CompanyName)</strong></div>
-      <div class="ui-fact"><small>联系人</small><strong>@Display(current?.ContactName)</strong></div>
-      <div class="ui-fact"><small>邮箱</small><strong>@Display(current?.Email)</strong></div>
-      <div class="ui-fact"><small>电话</small><strong>@Display(current?.Phone)</strong></div>
-      <div class="ui-fact"><small>WhatsApp</small><strong>@Display(current?.Whatsapp)</strong></div>
-      <div class="ui-fact"><small>客户名称</small><strong>@Model.Request.CustomerName</strong></div>
-     </div>
-    </section>
-    <section class="er-section">
-     <div class="er-section-header"><div><h2>交付与贸易信息</h2><p>客户提交的目的地、地址与提货要求</p></div></div>
-     <div class="ui-fact-grid">
-      <div class="ui-fact"><small>国家 / 地区</small><strong>@Display(current?.Country)</strong></div>
-      <div class="ui-fact"><small>交付地址</small><strong>@Display(current?.DeliveryAddress)</strong></div>
-      <div class="ui-fact wide"><small>提货、运输或贸易要求</small><span>@Display(current?.PickupTradeInfo)</span></div>
-     </div>
-    </section>
-    <section class="er-section">
-     <div class="er-section-header"><div><h2>当前需求摘要</h2><p>默认只展示最新版本，历史版本在“历史”中查看</p></div><button class="btn btn-sm btn-outline-secondary" data-request-tab="#requestRequirements" type="button">查看完整需求</button></div>
-     <div class="request-summary-strip"><div><small>申请状态</small><span class="er-status er-status-@requestStatus.Tone"><i></i>@requestStatus.Text</span></div><div><small>当前版本</small><strong>V@(Model.Request.CurrentVersion)</strong></div><div><small>首次提交</small><strong>@Model.Request.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong></div><div><small>最近提交</small><strong>@Model.Request.SubmittedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong></div></div>
-     @if(!string.IsNullOrWhiteSpace(current?.CustomerMessage)){<div class="request-message"><small>客户采购说明</small><p>@current.CustomerMessage</p></div>}
-     <div class="ui-product-list">
-      @if(current is not null){@foreach(var item in current.Items.Take(4)){var image=current.Attachments.FirstOrDefault(file=>file.VersionItemId==item.Id&&file.MimeType.StartsWith("image/",StringComparison.OrdinalIgnoreCase));<article class="ui-product-summary"><span class="ui-product-media">@if(image is not null){<img src="/files/content/request/@image.Id" alt="@item.ProductName" loading="lazy">}else{<i class="bi bi-box-seam"></i>}</span><div class="ui-product-copy"><h3>@item.ProductName</h3><p>@string.Join(" · ",new[]{item.Color,item.Size,item.Specifications}.Where(value=>!string.IsNullOrWhiteSpace(value)))</p><div class="ui-product-meta">@if(!string.IsNullOrWhiteSpace(item.Brand)){<span>品牌：@item.Brand</span>}@if(!string.IsNullOrWhiteSpace(item.Sku)){<span>SKU：@item.Sku</span>}@if(!string.IsNullOrWhiteSpace(item.CustomizationRequirements)){<span>@item.CustomizationRequirements</span>}@if(!string.IsNullOrWhiteSpace(item.PackagingRequirements)){<span>@item.PackagingRequirements</span>}</div></div><div class="ui-product-quantity"><strong>@item.Quantity.ToString("0.###") @item.Unit</strong>@if(item.TargetUnitPrice.HasValue){<small>目标价 @item.Currency @item.TargetUnitPrice.Value.ToString("0.####") / @item.Unit</small>}</div></article>}}
-      @if(current is null||current.Items.Count==0){<div class="compact-empty">当前版本没有产品明细。</div>}
-     </div>
-    </section>
-   </main>
-   <aside class="ui-action-rail">
-    <section class="er-section">
-     <div class="er-section-header"><div><h2>下一步</h2><p>申请与采购计划的衔接状态</p></div></div>
-     <div class="ui-action-rail-body">
-      <div class="ui-action-item"><small>当前版本</small><strong>V@(Model.Request.CurrentVersion)</strong><span>最近提交 @ProcurementUi.RelativeTime(Model.Request.SubmittedAtUtc)</span></div>
-      <div class="ui-action-item"><small>采购计划</small><strong>@(Model.Request.PlanNumber??"尚未创建")</strong><span>@planStatus.Text</span></div>
-      @if(Model.Request.HasPlan){<div class="ui-action-item"><small>计划引用版本</small><strong>@(planBasedVersion.HasValue?$"V{planBasedVersion}":"—")</strong><span>客户当前为 V@(Model.Request.CurrentVersion)</span></div>}
-      @if(planOutdated){<div class="ui-callout"><i class="bi bi-exclamation-triangle"></i><span><strong>客户需求已更新</strong><br>采购计划仍基于 V@(planBasedVersion)，不会自动修改内部计划。</span></div>}
-      <div class="ui-action-buttons">
-       @if(!string.IsNullOrWhiteSpace(primaryText)){<a class="btn btn-primary" href="@primaryUrl">@primaryText</a>}
-       @if(planOutdated){<button class="btn btn-outline-secondary" data-request-tab="#requestHistory" type="button">比较版本变化</button>}
-       @if(planOutdated&&Model.CanUpdatePlan){<a class="btn btn-outline-primary" href="@updatePlanUrl">更新采购计划</a>}
-      </div>
-      @if(!Model.Request.HasPlan&&!Model.CanCreatePlan){<p class="ui-action-note"><i class="bi bi-shield-lock"></i> 当前账号无创建采购计划权限。</p>}
-     </div>
-    </section>
-   </aside>
-  </div>
- </div>
- <div class="tab-pane fade" id="requestRequirements" role="tabpanel" aria-labelledby="requirements-tab" tabindex="0">
-  <section class="er-section"><div class="er-section-header"><div><h2>V@(Model.Request.CurrentVersion) 当前产品需求</h2><p>客户需求仅供内部采购计划参考，计划数据保持独立</p></div><span class="ui-version">@(current?.Items.Count??0) 项产品</span></div>
-   <div class="ui-product-grid">
-    @if(current is not null){@foreach(var item in current.Items){var image=current.Attachments.FirstOrDefault(file=>file.VersionItemId==item.Id&&file.MimeType.StartsWith("image/",StringComparison.OrdinalIgnoreCase));var referenceUrl=ProcurementUi.SafeExternalUrl(item.ReferenceUrl);<article class="ui-product-card"><div class="ui-product-card-head"><span class="ui-product-media">@if(image is not null){<img src="/files/content/request/@image.Id" alt="@item.ProductName" loading="lazy">}else{<i class="bi bi-box-seam"></i>}</span><div><h3>@item.ProductName</h3><p>@string.Join(" · ",new[]{item.Color,item.Size}.Where(value=>!string.IsNullOrWhiteSpace(value)))</p></div><strong>@item.Quantity.ToString("0.###") @item.Unit</strong></div><dl class="ui-product-specs">@if(item.TargetUnitPrice.HasValue){<div><dt>客户目标价</dt><dd>@item.Currency @item.TargetUnitPrice.Value.ToString("0.####") / @item.Unit</dd></div>}@if(!string.IsNullOrWhiteSpace(item.Sku)){<div><dt>SKU</dt><dd>@item.Sku</dd></div>}@if(!string.IsNullOrWhiteSpace(item.Brand)){<div><dt>品牌</dt><dd>@item.Brand</dd></div>}@if(!string.IsNullOrWhiteSpace(item.Specifications)){<div><dt>规格</dt><dd>@item.Specifications</dd></div>}@if(!string.IsNullOrWhiteSpace(item.Description)){<div><dt>描述</dt><dd>@item.Description</dd></div>}@if(!string.IsNullOrWhiteSpace(item.PackagingRequirements)){<div><dt>包装要求</dt><dd>@item.PackagingRequirements</dd></div>}@if(!string.IsNullOrWhiteSpace(item.CustomizationRequirements)){<div><dt>定制要求</dt><dd>@item.CustomizationRequirements</dd></div>}@if(!string.IsNullOrWhiteSpace(item.CustomerNote)){<div><dt>客户备注</dt><dd>@item.CustomerNote</dd></div>}@if(referenceUrl is not null){<div><dt>参考链接</dt><dd><a href="@referenceUrl" target="_blank" rel="noopener">打开客户参考页面</a></dd></div>}</dl></article>}}
-    @if(current is null||current.Items.Count==0){<div class="compact-empty">当前版本没有产品明细。</div>}
-   </div>
-  </section>
- </div>
- <div class="tab-pane fade" id="requestFiles" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
-  <section class="er-section"><div class="er-section-header"><div><h2>V@(Model.Request.CurrentVersion) 客户原始附件</h2><p>文件来源于 purchase_request_files，不展示内部存储路径</p></div><span class="ui-version">@(current?.Attachments.Count??0) 个文件</span></div>
-   @if(current is not null&&current.Attachments.Count>0){
-    <div class="request-file-workspace" data-file-preview-workspace>
-     <aside class="request-file-browser" aria-label="申请附件列表">
-      <div class="request-file-browser-head"><strong>文件列表</strong><span>@current.Attachments.Count</span></div>
-      <div class="request-file-browser-list" role="tablist" aria-orientation="vertical">
-       @for(var fileIndex=0;fileIndex<current.Attachments.Count;fileIndex++){
-        var file=current.Attachments[fileIndex];
-        var mime=file.MimeType.ToLowerInvariant();
-        var fileType=ProcurementUi.FileTypeLabel(file.FileType,file.MimeType);
-        <button class="request-file-list-item @(fileIndex==0?"is-active":null)" type="button" role="tab" aria-selected="@(fileIndex==0?"true":"false")" tabindex="@(fileIndex==0?"0":"-1")" data-file-preview-target="request-file-preview-@file.Id">
-         <span class="ui-file-icon"><i class="bi @(mime.StartsWith("image/")?"bi-file-earmark-image":mime.StartsWith("video/")?"bi-file-earmark-play":mime=="application/pdf"?"bi-file-earmark-pdf":"bi-file-earmark")"></i></span>
-         <span class="request-file-list-copy"><strong>@file.OriginalName</strong><small>@fileType · @(Math.Max(1,Math.Round(file.FileSize/1024m))) KB</small><small>@(file.RelatedProductName??"申请级附件")</small></span>
-         <i class="bi bi-chevron-right"></i>
-        </button>
-       }
-      </div>
-     </aside>
-     <div class="request-file-viewer">
-      @for(var fileIndex=0;fileIndex<current.Attachments.Count;fileIndex++){
-       var file=current.Attachments[fileIndex];
-       var url=$"/files/content/request/{file.Id}";
-       var mime=file.MimeType.ToLowerInvariant();
-       var fileType=ProcurementUi.FileTypeLabel(file.FileType,file.MimeType);
-       <section class="request-file-preview-panel @(fileIndex==0?"is-active":null)" id="request-file-preview-@file.Id" role="tabpanel" aria-hidden="@(fileIndex==0?"false":"true")" data-file-preview-panel>
-        <header class="request-file-preview-head"><div><strong>@file.OriginalName</strong><small>@fileType · @(Math.Max(1,Math.Round(file.FileSize/1024m))) KB</small></div><a class="btn btn-sm btn-outline-secondary" href="@($"{url}?download=true")"><i class="bi bi-download"></i> 下载</a></header>
-        <div class="request-file-preview-stage">
-         @if(mime.StartsWith("image/")){
-          @if(fileIndex==0){<img data-file-preview-source src="@url" alt="@file.OriginalName">}else{<img data-file-preview-source data-src="@url" alt="@file.OriginalName">}
-         }else if(mime.StartsWith("video/")){
-          @if(fileIndex==0){<video data-file-preview-source src="@url" controls preload="metadata"></video>}else{<video data-file-preview-source data-src="@url" controls preload="metadata"></video>}
-         }else if(mime=="application/pdf"){
-          @if(fileIndex==0){<iframe data-file-preview-source src="@url" title="@file.OriginalName"></iframe>}else{<iframe data-file-preview-source data-src="@url" title="@file.OriginalName"></iframe>}
-         }else{
-          <div class="ui-file-no-preview"><i class="bi bi-file-earmark-arrow-down"></i><strong>此格式暂不支持在线预览</strong><span>请下载文件后查看</span></div>
-         }
+
+<section class="proc request-detail-page" data-request-detail data-request-number="@Model.Request.RequestNumber" data-customer-name="@Model.Request.CustomerName">
+    @await Component.InvokeAsync("PageHeader",new{
+        title=Model.Request.RequestNumber,
+        subtitle=$"{Model.Request.CustomerName} · 当前版本 V{Model.Request.CurrentVersion} · 提交于 {Model.Request.SubmittedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}",
+        parentTitle="采购申请",parentUrl=Url.Action("PurchaseRequests","Procurement",new{area="Wholesale"}),
+        statusText=requestStatus.Text,statusTone=requestStatus.Tone,primaryText,primaryUrl
+    })
+
+    <ul class="nav nav-tabs request-detail-tabs" role="tablist" aria-label="采购申请详情">
+        <li class="nav-item" role="presentation"><button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#requestOverview" type="button" role="tab" aria-controls="requestOverview" aria-selected="true">概览</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="requirements-tab" data-bs-toggle="tab" data-bs-target="#requestRequirements" type="button" role="tab" aria-controls="requestRequirements" aria-selected="false">需求 <span>@(current?.Items.Count??0)</span></button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="files-tab" data-bs-toggle="tab" data-bs-target="#requestFiles" type="button" role="tab" aria-controls="requestFiles" aria-selected="false">文件 <span>@(current?.Attachments.Count??0)</span></button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" id="history-tab" data-bs-toggle="tab" data-bs-target="#requestHistory" type="button" role="tab" aria-controls="requestHistory" aria-selected="false">历史 <span>@versions.Length</span></button></li>
+    </ul>
+
+    <div class="tab-content request-detail-content">
+        <div class="tab-pane fade show active" id="requestOverview" role="tabpanel" aria-labelledby="overview-tab" tabindex="0">
+            <div class="request-detail-layout">
+                <main class="request-detail-main">
+                    <section class="request-workspace-section">
+                        <header class="request-section-header"><div><h2>客户信息</h2><p>当前 V@(Model.Request.CurrentVersion) 的客户联系快照</p></div></header>
+                        <div class="request-customer-summary">
+                            <div class="request-customer-identity"><span class="request-avatar">@((current?.CustomerName??Model.Request.CustomerName).FirstOrDefault())</span><div><strong>@Display(current?.CompanyName??Model.Request.CustomerName)</strong><span>@Display(current?.ContactName)</span></div></div>
+                            <dl class="request-definition-list">
+                                <div><dt>邮箱</dt><dd>@Display(current?.Email)</dd></div>
+                                <div><dt>电话</dt><dd>@Display(current?.Phone)</dd></div>
+                                <div><dt>WhatsApp</dt><dd>@Display(current?.Whatsapp)</dd></div>
+                            </dl>
+                        </div>
+                    </section>
+
+                    <section class="request-workspace-section">
+                        <header class="request-section-header"><div><h2>交付与贸易</h2><p>客户提交的目的地、地址与运输要求</p></div></header>
+                        <dl class="request-definition-list request-trade-list">
+                            <div><dt>国家 / 地区</dt><dd>@Display(current?.Country)</dd></div>
+                            <div><dt>交付地址</dt><dd>@Display(current?.DeliveryAddress)</dd></div>
+                            <div><dt>提货 / 运输 / 贸易要求</dt><dd>@Display(current?.PickupTradeInfo)</dd></div>
+                        </dl>
+                    </section>
+
+                    <section class="request-workspace-section">
+                        <header class="request-section-header"><div><h2>当前需求</h2><p>客户需求仅作为内部采购计划参考</p></div><button class="btn btn-sm btn-outline-secondary" data-request-tab="#requestRequirements" type="button">查看完整需求</button></header>
+                        @if(!string.IsNullOrWhiteSpace(current?.CustomerMessage)){<div class="request-customer-message"><i class="bi bi-chat-left-text"></i><div><small>客户采购说明</small><p>@current.CustomerMessage</p></div></div>}
+                        <div class="request-product-summary-list">
+                            @if(current is not null){
+                                @foreach(var item in current.Items.Take(5)){
+                                    var image=current.Attachments.FirstOrDefault(file=>file.VersionItemId==item.Id&&file.MimeType.StartsWith("image/",StringComparison.OrdinalIgnoreCase));
+                                    <article class="request-product-summary-row">
+                                        @if(image is not null){
+                                            <button class="request-product-thumb" type="button" data-request-large-preview data-preview-name="@image.OriginalName" data-preview-type="@System.IO.Path.GetExtension(image.OriginalName).TrimStart('.').ToUpperInvariant()" data-preview-size="@(Math.Max(1,Math.Round(image.FileSize/1024m))) KB" data-preview-file-id="@image.Id" data-preview-kind="image" data-preview-uploaded="@image.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")" aria-label="预览 @image.OriginalName"><img src="/files/content/request/@image.Id" alt="@item.ProductName" loading="lazy"><i class="bi bi-arrows-fullscreen"></i></button>
+                                        }else{<span class="request-product-thumb is-empty"><i class="bi bi-box-seam"></i></span>}
+                                        <div class="request-product-summary-copy"><h3>@item.ProductName</h3><p>@Display(item.Specifications)</p><span>@string.Join(" · ",new[]{item.CustomizationRequirements,item.PackagingRequirements}.Where(value=>!string.IsNullOrWhiteSpace(value)))</span></div>
+                                        <div class="request-product-summary-price"><strong>@item.Quantity.ToString("0.###") @item.Unit</strong>@if(item.TargetUnitPrice.HasValue){<small>目标价 @item.Currency @item.TargetUnitPrice.Value.ToString("0.####") / @item.Unit</small>}</div>
+                                    </article>
+                                }
+                                @if(current.Items.Count>5){<button class="request-show-all" data-request-tab="#requestRequirements" type="button">查看全部 @current.Items.Count 个产品 <i class="bi bi-arrow-right"></i></button>}
+                            }
+                            @if(current is null||current.Items.Count==0){<div class="compact-empty">当前版本没有产品明细。</div>}
+                        </div>
+                    </section>
+                </main>
+                @await Html.PartialAsync("_RequestContextRail",Model)
+            </div>
         </div>
-        <div class="request-file-preview-meta"><span><small>关联产品</small><strong>@(file.RelatedProductName??"申请级附件")</strong></span><span><small>申请版本</small><strong>V@(Model.Request.CurrentVersion)</strong></span><span><small>上传时间</small><strong>@file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong></span></div>
-        <footer class="request-file-preview-actions"><a href="@url" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right"></i> 新窗口预览</a><a href="@($"{url}?download=true")"><i class="bi bi-download"></i> 下载文件</a></footer>
-       </section>
-      }
-     </div>
+
+        <div class="tab-pane fade" id="requestRequirements" role="tabpanel" aria-labelledby="requirements-tab" tabindex="0">
+            <div class="request-detail-layout">
+                <main class="request-detail-main">
+                    <section class="request-workspace-section">
+                        <header class="request-section-header"><div><h2>V@(Model.Request.CurrentVersion) 当前产品需求</h2><p>客户需求仅供内部采购计划参考，计划数据保持独立</p></div><span class="request-section-count">@(current?.Items.Count??0) 项产品</span></header>
+                        <div class="request-requirement-list">
+                            @if(current is not null){
+                                @foreach(var item in current.Items){
+                                    var images=current.Attachments.Where(file=>file.VersionItemId==item.Id&&file.MimeType.StartsWith("image/",StringComparison.OrdinalIgnoreCase)).ToArray();
+                                    var image=images.FirstOrDefault();
+                                    var referenceUrl=ProcurementUi.SafeExternalUrl(item.ReferenceUrl);
+                                    <article class="request-requirement-card">
+                                        <header>
+                                            @if(image is not null){<button class="request-requirement-media" type="button" data-request-large-preview data-preview-gallery="product-@item.Id" data-preview-index="0" data-preview-name="@image.OriginalName" data-preview-type="@System.IO.Path.GetExtension(image.OriginalName).TrimStart('.').ToUpperInvariant()" data-preview-size="@(Math.Max(1,Math.Round(image.FileSize/1024m))) KB" data-preview-file-id="@image.Id" data-preview-kind="image" data-preview-uploaded="@image.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")" aria-label="预览 @image.OriginalName"><img src="/files/content/request/@image.Id" alt="@item.ProductName" loading="lazy">@if(images.Length>1){<span>+@(images.Length-1)</span>}<i class="bi bi-arrows-fullscreen"></i></button>@for(var imageIndex=1;imageIndex<images.Length;imageIndex++){var galleryImage=images[imageIndex];<span hidden data-request-large-preview data-preview-gallery="product-@item.Id" data-preview-index="@imageIndex" data-preview-name="@galleryImage.OriginalName" data-preview-type="@System.IO.Path.GetExtension(galleryImage.OriginalName).TrimStart('.').ToUpperInvariant()" data-preview-size="@(Math.Max(1,Math.Round(galleryImage.FileSize/1024m))) KB" data-preview-file-id="@galleryImage.Id" data-preview-kind="image" data-preview-uploaded="@galleryImage.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"></span>}}else{<span class="request-requirement-media is-empty"><i class="bi bi-box-seam"></i></span>}
+                                            <div><h3>@item.ProductName</h3><p>SKU @Display(item.Sku) · 品牌 @Display(item.Brand)</p></div>
+                                            <strong>@item.Quantity.ToString("0.###") @item.Unit</strong>
+                                        </header>
+                                        <dl class="request-requirement-facts">
+                                            <div><dt>客户目标价</dt><dd>@(item.TargetUnitPrice.HasValue?$"{item.Currency} {item.TargetUnitPrice.Value:0.####} / {item.Unit}":"—")</dd></div>
+                                            <div><dt>规格</dt><dd>@Display(item.Specifications)</dd></div>
+                                            <div><dt>描述</dt><dd>@Display(item.Description)</dd></div>
+                                            <div><dt>颜色</dt><dd>@Display(item.Color)</dd></div>
+                                            <div><dt>尺寸</dt><dd>@Display(item.Size)</dd></div>
+                                            <div><dt>包装要求</dt><dd>@Display(item.PackagingRequirements)</dd></div>
+                                            <div><dt>Logo / 定制</dt><dd>@Display(item.CustomizationRequirements)</dd></div>
+                                            <div><dt>客户备注</dt><dd>@Display(item.CustomerNote)</dd></div>
+                                            @if(referenceUrl is not null){<div><dt>参考链接</dt><dd><a href="@referenceUrl" target="_blank" rel="noopener">打开客户参考页面 <i class="bi bi-box-arrow-up-right"></i></a></dd></div>}
+                                        </dl>
+                                    </article>
+                                }
+                            }
+                            @if(current is null||current.Items.Count==0){<div class="compact-empty">当前版本没有产品明细。</div>}
+                        </div>
+                    </section>
+                </main>
+                @await Html.PartialAsync("_RequestContextRail",Model)
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="requestFiles" role="tabpanel" aria-labelledby="files-tab" tabindex="0">
+            <section class="request-workspace-section request-files-section">
+                <header class="request-section-header"><div><h2>V@(Model.Request.CurrentVersion) 客户原始附件</h2><p>客户提交的原始附件，仅展示业务信息</p></div><span class="request-section-count">@(current?.Attachments.Count??0) 个文件</span></header>
+                @if(current is not null&&current.Attachments.Count>0){
+                    <div class="request-file-workspace" data-file-preview-workspace>
+                        <aside class="request-file-browser" aria-label="申请附件列表">
+                            <div class="request-file-browser-head"><strong>文件列表</strong><span>@current.Attachments.Count</span></div>
+                            <div class="request-file-browser-list" role="tablist" aria-orientation="vertical">
+                                @for(var fileIndex=0;fileIndex<current.Attachments.Count;fileIndex++){
+                                    var file=current.Attachments[fileIndex];var mime=file.MimeType.ToLowerInvariant();var fileType=ProcurementUi.FileTypeLabel(file.FileType,file.MimeType);
+                                    <button class="request-file-list-item @(fileIndex==0?"is-active":null)" type="button" role="tab" aria-selected="@(fileIndex==0?"true":"false")" tabindex="@(fileIndex==0?"0":"-1")" data-file-preview-target="request-file-preview-@file.Id"><span class="ui-file-icon"><i class="bi @(mime.StartsWith("image/")?"bi-file-earmark-image":mime.StartsWith("video/")?"bi-file-earmark-play":mime=="application/pdf"?"bi-file-earmark-pdf":"bi-file-earmark")"></i></span><span class="request-file-list-copy"><strong>@file.OriginalName</strong><small>@fileType · @(Math.Max(1,Math.Round(file.FileSize/1024m))) KB</small><small>@(file.RelatedProductName??"申请级附件")</small></span><i class="bi bi-chevron-right"></i></button>
+                                }
+                            </div>
+                        </aside>
+                        <div class="request-file-viewer">
+                            @for(var fileIndex=0;fileIndex<current.Attachments.Count;fileIndex++){
+                                var file=current.Attachments[fileIndex];var url=$"/files/content/request/{file.Id}";var mime=file.MimeType.ToLowerInvariant();var fileType=ProcurementUi.FileTypeLabel(file.FileType,file.MimeType);var previewKind=mime.StartsWith("image/")?"image":mime.StartsWith("video/")?"video":mime=="application/pdf"?"pdf":"other";var extension=System.IO.Path.GetExtension(file.OriginalName).TrimStart('.').ToUpperInvariant();var sizeText=$"{Math.Max(1,Math.Round(file.FileSize/1024m))} KB";
+                                <section class="request-file-preview-panel @(fileIndex==0?"is-active":null)" id="request-file-preview-@file.Id" role="tabpanel" aria-hidden="@(fileIndex==0?"false":"true")" data-file-preview-panel>
+                                    <header class="request-file-preview-head"><div><strong>@file.OriginalName</strong><small>@fileType · @sizeText</small></div><div><button class="btn btn-sm btn-outline-secondary" type="button" data-request-large-preview data-preview-name="@file.OriginalName" data-preview-type="@extension" data-preview-size="@sizeText" data-preview-file-id="@file.Id" data-preview-kind="@previewKind" data-preview-uploaded="@file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"><i class="bi bi-arrows-fullscreen"></i> 放大预览</button><a class="btn btn-sm btn-outline-secondary" href="@($"{url}?download=true")"><i class="bi bi-download"></i> 下载</a></div></header>
+                                    <div class="request-file-preview-stage">
+                                        @if(mime.StartsWith("image/")){if(fileIndex==0){<button class="request-file-preview-image" type="button" data-request-large-preview data-preview-name="@file.OriginalName" data-preview-type="@extension" data-preview-size="@sizeText" data-preview-file-id="@file.Id" data-preview-kind="image" data-preview-uploaded="@file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"><img data-file-preview-source src="@url" alt="@file.OriginalName"></button>}else{<button class="request-file-preview-image" type="button" data-request-large-preview data-preview-name="@file.OriginalName" data-preview-type="@extension" data-preview-size="@sizeText" data-preview-file-id="@file.Id" data-preview-kind="image" data-preview-uploaded="@file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")"><img data-file-preview-source data-src="@url" alt="@file.OriginalName"></button>}}
+                                        else if(mime.StartsWith("video/")){if(fileIndex==0){<video data-file-preview-source src="@url" controls preload="metadata"></video>}else{<video data-file-preview-source data-src="@url" controls preload="metadata"></video>}}
+                                        else if(mime=="application/pdf"){if(fileIndex==0){<iframe data-file-preview-source src="@url" title="@file.OriginalName"></iframe>}else{<iframe data-file-preview-source data-src="@url" title="@file.OriginalName"></iframe>}}
+                                        else{<div class="ui-file-no-preview"><i class="bi bi-file-earmark-arrow-down"></i><strong>此格式暂不支持在线预览</strong><span>请下载文件后查看</span></div>}
+                                    </div>
+                                    <div class="request-file-preview-meta"><span><small>关联产品</small><strong>@(file.RelatedProductName??"申请级附件")</strong></span><span><small>申请版本</small><strong>V@(Model.Request.CurrentVersion)</strong></span><span><small>上传时间</small><strong>@file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</strong></span></div>
+                                </section>
+                            }
+                        </div>
+                    </div>
+                }else{<div class="compact-empty">当前版本没有附件。</div>}
+            </section>
+        </div>
+
+        <div class="tab-pane fade" id="requestHistory" role="tabpanel" aria-labelledby="history-tab" tabindex="0">
+            <div class="request-detail-layout">
+                <main class="request-detail-main">
+                    <section class="request-workspace-section">
+                        <header class="request-section-header"><div><h2>申请版本历史</h2><p>比较相邻完整快照，快速了解客户修改内容</p></div><span class="request-section-count">@versions.Length 个版本</span></header>
+                        <div class="request-history-workspace" data-version-workspace>
+                            <nav class="request-version-timeline" aria-label="申请版本">
+                                @for(var index=0;index<versions.Length;index++){var version=versions[index];<button class="request-version-item @(index==0?"is-active":null)" type="button" data-version-target="request-version-@version.Id" aria-selected="@(index==0?"true":"false")"><i></i><span><strong>V@(version.VersionNumber) @(index==0?"当前版本":null)</strong><small>@version.SubmittedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</small><em>@version.Items.Count 项产品 · @version.Attachments.Count 个文件</em></span><i class="bi bi-chevron-right"></i></button>}
+                            </nav>
+                            <div class="request-version-details">
+                                @for(var index=0;index<versions.Length;index++){
+                                    var version=versions[index];var previous=Model.Versions.Where(item=>item.VersionNumber<version.VersionNumber).OrderByDescending(item=>item.VersionNumber).FirstOrDefault();var changes=ProcurementUi.VersionChanges(version,previous);
+                                    <article class="request-version-panel @(index==0?"is-active":null)" id="request-version-@version.Id" data-version-panel aria-hidden="@(index==0?"false":"true")">
+                                        <header><div><span>Version Snapshot</span><h3>V@(version.VersionNumber)</h3><p>@version.CustomerName · 客户提交于 @version.SubmittedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</p></div>@if(index==0){<span class="er-status er-status-info"><i></i>当前版本</span>}</header>
+                                        <dl class="request-version-metrics"><div><dt>产品</dt><dd>@version.Items.Count</dd></div><div><dt>文件</dt><dd>@version.Attachments.Count</dd></div><div><dt>联系方式</dt><dd>@Display(version.Email)</dd></div></dl>
+                                        <section class="request-version-change"><h4>@(previous is null?"Initial Request":$"Changes from V{previous.VersionNumber}")</h4><ul>@foreach(var change in changes){<li><i class="bi @(previous is null?"bi-check-circle":"bi-arrow-right-circle")"></i><span>@change</span></li>}</ul></section>
+                                        <section class="request-version-products"><h4>版本产品快照</h4>@foreach(var item in version.Items){<div><strong>@item.ProductName</strong><span>@item.Quantity.ToString("0.###") @item.Unit</span><small>@Display(item.Specifications)</small></div>}</section>
+                                    </article>
+                                }
+                            </div>
+                        </div>
+                    </section>
+                </main>
+                @await Html.PartialAsync("_RequestContextRail",Model)
+            </div>
+        </div>
     </div>
-   }else{<div class="compact-empty">当前版本没有附件。</div>}
-  </section>
- </div>
- <div class="tab-pane fade" id="requestHistory" role="tabpanel" aria-labelledby="history-tab" tabindex="0">
-  <section class="er-section"><div class="er-section-header"><div><h2>申请版本历史</h2><p>比较相邻完整快照，快速了解客户修改内容</p></div></div>
-   <div class="ui-timeline">
-    @for(var index=0;index<versions.Length;index++){var version=versions[index];var previous=Model.Versions.Where(item=>item.VersionNumber<version.VersionNumber).OrderByDescending(item=>item.VersionNumber).FirstOrDefault();var changes=ProcurementUi.VersionChanges(version,previous);<article class="ui-timeline-event @(index==0?"current":"")"><span class="ui-timeline-node"></span><div class="ui-timeline-head"><div><strong>V@(version.VersionNumber)</strong>@if(index==0){<span class="er-status er-status-info"><i></i>当前版本</span>}</div><time>@version.SubmittedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</time></div><p>@version.CustomerName · 客户提交</p><ul>@foreach(var change in changes){<li>@change</li>}</ul><small>@version.Items.Count 项产品 · @version.Attachments.Count 个附件</small></article>}
-   </div>
-  </section>
- </div>
-</div>
 </section>
-@section Styles { <link rel="stylesheet" href="~/css/pages/procurement.css" asp-append-version="true" /> }
-@section Scripts { <script src="~/js/pages/procurement-request-details.js" asp-append-version="true"></script> }
+
+@await Html.PartialAsync("_LargeFilePreview")
+
+@section Styles {
+<link rel="stylesheet" href="~/css/pages/procurement.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/components/file-preview.css" asp-append-version="true" />
+<link rel="stylesheet" href="~/css/pages/procurement-request-detail.css" asp-append-version="true" />
+}
+@section Scripts {
+<script src="~/js/components/file-preview.js" asp-append-version="true"></script>
+<script src="~/js/pages/procurement-request-details.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,29 @@
+@model PurchaseRequestDetailsPageViewModel
+@{
+    var planBasedVersion=Model.Request.PlannedVersionId.HasValue?Model.Versions.FirstOrDefault(version=>version.Id==Model.Request.PlannedVersionId)?.VersionNumber:null;
+    var planOutdated=Model.Request.HasPlan&&Model.Request.PlannedVersionId!=Model.Request.CurrentVersionId;
+    var planStatus=ProcurementUi.PlanStatus(Model.Request.PlanStatus);
+    var openPlanUrl=Model.Request.HasPlan?Url.Action("Details","Procurement",new{area="Wholesale",planId=Model.Request.PlanId}):null;
+    var createPlanUrl=!Model.Request.HasPlan&&Model.CanCreatePlan?Url.Action("CreatePlanPage","Procurement",new{area="Wholesale",requestId=Model.Request.Id}):null;
+    var updatePlanUrl=Model.Request.HasPlan&&Model.CanUpdatePlan?Url.Action("EditPlanPage","Procurement",new{area="Wholesale",planId=Model.Request.PlanId}):null;
+}
+<aside class="request-context-rail" aria-label="申请上下文与下一步">
+    <section class="request-context-card">
+        <header><span>Request Context</span><h2>下一步</h2><p>申请与采购计划的衔接状态</p></header>
+        <dl class="request-context-facts">
+            <div><dt>当前版本</dt><dd>V@(Model.Request.CurrentVersion)</dd><small>最近提交 @ProcurementUi.RelativeTime(Model.Request.SubmittedAtUtc)</small></div>
+            <div><dt>采购计划</dt><dd>@(Model.Request.PlanNumber??"尚未创建")</dd><small>@planStatus.Text</small></div>
+            @if(Model.Request.HasPlan){<div><dt>计划引用版本</dt><dd>@(planBasedVersion.HasValue?$"V{planBasedVersion}":"—")</dd><small>客户当前为 V@(Model.Request.CurrentVersion)</small></div>}
+        </dl>
+        @if(planOutdated){
+            <div class="request-version-alert"><i class="bi bi-exclamation-triangle"></i><div><strong>客户需求已更新</strong><span>客户 V@(Model.Request.CurrentVersion)，计划仍基于 V@(planBasedVersion)。</span></div></div>
+        }
+        <div class="request-context-actions">
+            @if(Model.Request.HasPlan){<a class="btn btn-primary" href="@openPlanUrl">查看采购计划</a>}
+            else if(Model.CanCreatePlan){<a class="btn btn-primary" href="@createPlanUrl">创建采购计划</a>}
+            @if(planOutdated){<button class="btn btn-outline-secondary" data-request-tab="#requestHistory" type="button">查看变化</button>}
+            @if(planOutdated&&Model.CanUpdatePlan){<a class="btn btn-outline-primary" href="@updatePlanUrl">更新采购计划</a>}
+        </div>
+        @if(!Model.Request.HasPlan&&!Model.CanCreatePlan){<p class="request-context-note"><i class="bi bi-shield-lock"></i>当前账号无创建采购计划权限。</p>}
+    </section>
+</aside>
