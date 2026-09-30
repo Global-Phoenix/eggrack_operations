@@ -28,11 +28,20 @@ public sealed class FileCenterStorageServiceTests
     }
 
     [Fact]
-    public void RejectsUnapprovedPublicHost()
+    public void RejectsInsecurePublicAddressPrefix()
     {
         Assert.Throws<InvalidOperationException>(() =>
             FileCenterStorageService.BuildPublicCandidates(
-                "https://example.com/", "u_file/example.jpg", "request"));
+                "http://example.com/", "u_file/example.jpg", "request"));
+    }
+
+    [Fact]
+    public void SupportsConfiguredCustomerFileHost()
+    {
+        var urls=FileCenterStorageService.BuildPublicCandidates(
+            "https://files.example.com/", "customer/example.jpg", "request");
+
+        Assert.Equal("https://files.example.com/u_file/customer/example.jpg",urls[0].AbsoluteUri);
     }
 
     [Fact]

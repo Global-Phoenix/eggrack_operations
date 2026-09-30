@@ -51,7 +51,10 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
 
     private async Task<Stream?> TryOpenPublicAsync(FileCenterStoredFile file, CancellationToken token)
     {
-        var candidates = BuildPublicCandidates(configuration["FileCenter:PublicBaseUrl"], file.StoragePath, file.SourceKind);
+        var baseUrl=file.SourceKind=="request"
+            ? configuration["FileCenter:CustomerFileAccessBaseUrl"]??configuration["FileCenter:PublicBaseUrl"]
+            : configuration["FileCenter:PublicBaseUrl"];
+        var candidates = BuildPublicCandidates(baseUrl, file.StoragePath, file.SourceKind);
         if (candidates.Count == 0) return null;
 
         var client = httpClientFactory.CreateClient("FileCenterPublicFiles");
@@ -78,8 +81,7 @@ public sealed class FileCenterStorageService(IConfiguration configuration, IHost
         var relative = NormalizeRelative(storagePath);
         if(sourceKind=="plan"&&relative.StartsWith("managed/",StringComparison.OrdinalIgnoreCase))return [];
         if (sourceKind == "request" && RequestPathPattern.IsMatch(relative)) return [];
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) || origin.Scheme != Uri.UriSchemeHttps ||
-            (origin.Host != "test.eggracks.com" && origin.Host != "www.eggracks.com"))
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var origin) || origin.Scheme != Uri.UriSchemeHttps)
             throw new InvalidOperationException("文件中心公开站点配置无效。");
 
         var paths = new List<string>();

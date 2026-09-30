@@ -22,7 +22,7 @@ public sealed class NavigationService
             new("wholesale.purchase-plans", "采购计划", "bi-bag-check", "Procurement", "Sourcing", "wholesale.purchase-plan.view", Area: "Wholesale"),
             new("wholesale.suppliers", "供应商", "bi-building", "Procurement", "SupplierDirectory", "wholesale.purchase-plan.view", Area: "Wholesale")
         ]),
-        new("files", "文件管理", "bi-folder2-open", "FileCenter", "Index", "files.view", Area: "Files"),
+        new("files", "文件中心", "bi-folder2-open", "FileCenter", "Index", "files.view", Area: "Files"),
         new("system", "系统管理", "bi-gear", Children:
         [
             new("system.staff", "人员", "bi-people", "Security", "Staff", "auth.staff.read", Area: "Security"),

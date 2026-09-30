@@ -4,7 +4,16 @@
 
 `Database:SqlServer:Connections` 和 `Database:MySql:Connections` 都是命名字典，可分别增加任意数量的数据源。业务代码必须显式传入名称，避免误用默认数据库。
 
-连接串放在 User Secrets、环境变量或被忽略的 `appsettings.Local.json` 中。禁止把密码提交到仓库。
+连接串键名已经在 `eggrack_operations.Web/appsettings.json` 中列出。实际地址、账号和密码放在 User Secrets、环境变量或被忽略的 `appsettings.Local.json` 中，禁止把密码提交到仓库。
+
+本地开发时复制 `eggrack_operations.Web/appsettings.Local.example.json` 为 `appsettings.Local.json`，然后修改：
+
+- `ConnectionStrings:OrdersConnection`：SQL Server 地址和数据库；
+- `ConnectionStrings:EggrackConnection`：MySQL 地址和数据库；
+- `FileCenter:CustomerFileAccessBaseUrl`：客户附件表中相对路径的访问地址前缀；
+- `FileCenter:PublicBaseUrl`：采购计划历史公开文件的访问地址前缀。
+
+`appsettings.Local.json` 在 `Program.cs` 中作为最后一层配置加载，会覆盖仓库中的默认配置且不会被 Git 提交。
 
 ## 查询与存储过程
 

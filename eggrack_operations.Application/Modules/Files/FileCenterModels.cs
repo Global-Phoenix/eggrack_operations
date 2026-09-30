@@ -44,4 +44,12 @@ public sealed record FileCenterFileItem(
         : $"/wholesale/procurement/requests/{SourceId}/details";
 }
 
-public sealed record FileCenterIndexViewModel(IReadOnlyList<FileCenterFileItem> PurchaseFiles);
+public sealed record FileCenterQuery(
+    string? Keyword = null,
+    string? SourceKind = null,
+    string? FileType = null,
+    string? DateRange = null);
+
+public sealed record FileCenterIndexViewModel(
+    IReadOnlyList<FileCenterFileItem> PurchaseFiles,
+    FileCenterQuery Query);

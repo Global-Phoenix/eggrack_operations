@@ -6,9 +6,14 @@ namespace Eggrack.Operations.Infrastructure.Modules.Files;
 
 public sealed class FileCenterDataService(DatabaseSessionFactory databases,ProcurementScopePolicy scopePolicy)
 {
-    public async Task<IReadOnlyList<FileCenterFileItem>> GetPurchaseFilesAsync(bool includeInternal,CancellationToken token = default)
+    public async Task<IReadOnlyList<FileCenterFileItem>> GetPurchaseFilesAsync(
+        bool includeInternal,
+        FileCenterQuery? query = null,
+        CancellationToken token = default)
     {
+        query ??= new FileCenterQuery();
         const string sql = """
+        SELECT * FROM (
         SELECT CONCAT('request:', f.id) ItemKey, 'request' SourceKind, r.id SourceId, f.id FileId,
           f.original_name OriginalName, f.mime_type MimeType, f.file_size FileSize,
           r.request_number SourceNumber,
@@ -63,13 +68,37 @@ public sealed class FileCenterDataService(DatabaseSessionFactory databases,Procu
           AND (@IncludeInternal=1 OR f.visibility_code='customer' OR f.is_customer_visible=1)
           AND (@ScopeAll=1 OR (@ScopeSelf=1 AND p.assigned_buyer_id=@ScopeStaffId)
           OR p.department_id IN @ScopeDepartmentIds)
+        ) purchase_files
+        WHERE (@Keyword IS NULL OR OriginalName LIKE CONCAT('%',@Keyword,'%')
+          OR SourceNumber LIKE CONCAT('%',@Keyword,'%')
+          OR CategoryName LIKE CONCAT('%',@Keyword,'%'))
+          AND (@SourceKind IS NULL OR SourceKind=@SourceKind)
+          AND (@FileType IS NULL OR UPPER(SUBSTRING_INDEX(OriginalName,'.',-1))=@FileType)
+          AND (@UploadedFromUtc IS NULL OR UploadedAtUtc>=@UploadedFromUtc)
         ORDER BY UploadedAtUtc DESC, FileId DESC
+        LIMIT 500
         """;
 
         await using var db = await databases.OpenMySqlAsync("Eggrack", token);
         var scope=scopePolicy.Current();
+        var keyword=string.IsNullOrWhiteSpace(query.Keyword)?null:query.Keyword.Trim();
+        var sourceKind=query.SourceKind is "request" or "plan"?query.SourceKind:null;
+        var fileType=string.IsNullOrWhiteSpace(query.FileType)?null:query.FileType.Trim().TrimStart('.').ToUpperInvariant();
+        var uploadedFromUtc=query.DateRange switch
+        {
+            "week"=>DateTime.UtcNow.AddDays(-7),
+            "month"=>DateTime.UtcNow.AddDays(-30),
+            _=>(DateTime?)null
+        };
         return await db.QueryAsync<FileCenterFileItem>(sql,
-            ProcurementScopePolicy.Params(scope,new{IncludeInternal=includeInternal}),cancellationToken:token);
+            ProcurementScopePolicy.Params(scope,new
+            {
+                IncludeInternal=includeInternal,
+                Keyword=keyword,
+                SourceKind=sourceKind,
+                FileType=fileType,
+                UploadedFromUtc=uploadedFromUtc
+            }),cancellationToken:token);
     }
 
     public async Task<FileCenterStoredFile?> GetStoredFileAsync(string sourceKind, uint fileId, CancellationToken token = default)

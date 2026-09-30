@@ -97,7 +97,6 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
         ulong buyerStaffId,
         CancellationToken token)
     {
-        var scope = Current();
         var rows = await db.QueryAsync<long>(
             """
             SELECT sd.department_id
@@ -106,18 +105,16 @@ public sealed class ProcurementScopePolicy(CurrentAuthorizationContext authoriza
             JOIN eggrack_auth_department d ON d.id=sd.department_id
               AND (LOWER(d.department_code) IN('procurement','purchasing','purchase') OR d.department_name='采购部')
               AND d.status=1 AND d.deleted_at IS NULL
-            WHERE sd.staff_id=@BuyerStaffId AND
-              (@ScopeAll=1 OR sd.department_id IN @ScopeDepartmentIds
-               OR (@ScopeSelf=1 AND sd.staff_id=@ScopeStaffId))
+            WHERE sd.staff_id=@BuyerStaffId
             ORDER BY sd.is_primary DESC,sd.id
             LIMIT 1
             """,
-            Params(scope, new { BuyerStaffId = buyerStaffId }),
+            new { BuyerStaffId = buyerStaffId },
             cancellationToken: token);
         var departmentId = rows.SingleOrDefault();
         return departmentId > 0
             ? departmentId
-            : throw new BusinessRuleException("采购人员必须属于采购部，并且在当前授权部门范围内。", "procurement.buyer.department-denied");
+            : throw new BusinessRuleException("采购人员必须是启用状态并且属于采购部。", "procurement.buyer.department-denied");
     }
 
     public static object Params(ProcurementAccessScope scope, object values)

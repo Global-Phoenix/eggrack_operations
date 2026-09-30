@@ -21,10 +21,17 @@ public sealed class FileCenterController(
 {
     [HttpGet("")]
     [HttpGet("index")]
-    public async Task<IActionResult> Index(CancellationToken token)
+    public async Task<IActionResult> Index(
+        string? keyword,
+        string? sourceKind,
+        string? fileType,
+        string? dateRange,
+        CancellationToken token)
     {
-        var purchaseFiles = await files.GetPurchaseFilesAsync(await CanViewInternalDocumentsAsync(token),token);
-        return View(new FileCenterIndexViewModel(purchaseFiles));
+        var query=new FileCenterQuery(keyword,sourceKind,fileType,dateRange);
+        var purchaseFiles = await files.GetPurchaseFilesAsync(
+            await CanViewInternalDocumentsAsync(token),query,token);
+        return View(new FileCenterIndexViewModel(purchaseFiles,query));
     }
 
     [HttpGet("content/{sourceKind}/{id:long}")]

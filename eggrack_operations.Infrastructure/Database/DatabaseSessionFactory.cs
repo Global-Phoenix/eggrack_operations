@@ -34,8 +34,11 @@ public sealed class DatabaseSessionFactory(
         if (!options.Enabled)
             throw new InvalidOperationException($"数据库尚未启用: {provider}/{name}");
 
-        var connectionString = configuration.GetConnectionString(options.ConnectionStringName)
-            ?? throw new InvalidOperationException($"缺少连接字符串: {options.ConnectionStringName}");
+        var connectionString = configuration.GetConnectionString(options.ConnectionStringName);
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                $"连接字符串未配置: ConnectionStrings:{options.ConnectionStringName}。" +
+                "请复制 appsettings.Local.example.json 为 appsettings.Local.json 后填写连接地址和账号。");
         DbConnection connection = provider == DatabaseProvider.SqlServer
             ? new SqlConnection(connectionString)
             : new MySqlConnection(connectionString);

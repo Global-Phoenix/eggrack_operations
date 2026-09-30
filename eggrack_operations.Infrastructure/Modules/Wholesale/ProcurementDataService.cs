@@ -197,7 +197,6 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
     private sealed record FlexibleCostPlan(decimal CnyPerUsd,decimal ProfitRate,decimal TotalCostCny,decimal TotalCostUsd,decimal SuggestedQuoteUsd);
     public async Task<IReadOnlyList<ProcurementBuyerOption>> GetBuyersAsync(CancellationToken token=default)
     {
-        var scope=scopePolicy.Current();
         const string sql="""
         SELECT DISTINCT s.id Id,s.staff_name Name
         FROM eggrack_auth_staff s
@@ -206,13 +205,10 @@ public sealed partial class ProcurementDataService(DatabaseSessionFactory databa
           AND (LOWER(d.department_code) IN('procurement','purchasing','purchase') OR d.department_name='采购部')
           AND d.status=1 AND d.deleted_at IS NULL
         WHERE s.status=1 AND s.deleted_at IS NULL
-          AND (@ScopeAll=1 OR (@ScopeSelf=1 AND s.id=@ScopeStaffId)
-            OR sd.department_id IN @ScopeDepartmentIds)
         ORDER BY s.staff_name,s.id
         """;
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
-        return await db.QueryAsync<ProcurementBuyerOption>(
-          sql,ProcurementScopePolicy.Params(scope,new{}),cancellationToken:token);
+        return await db.QueryAsync<ProcurementBuyerOption>(sql,cancellationToken:token);
     }
     public async Task<IReadOnlyList<PurchaseRequestVersionDetail>> GetRequestVersionsAsync(uint requestId,CancellationToken token=default)
     {

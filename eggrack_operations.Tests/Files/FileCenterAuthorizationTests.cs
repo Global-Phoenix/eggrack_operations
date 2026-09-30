@@ -74,4 +74,15 @@ public sealed class FileCenterAuthorizationTests
 
         Assert.Equal(expected,file.IsInternal);
     }
+
+    [Fact]
+    public void FileCenterQueryDefaultsToAllFiles()
+    {
+        var query=new FileCenterQuery();
+
+        Assert.Null(query.Keyword);
+        Assert.Null(query.SourceKind);
+        Assert.Null(query.FileType);
+        Assert.Null(query.DateRange);
+    }
 }

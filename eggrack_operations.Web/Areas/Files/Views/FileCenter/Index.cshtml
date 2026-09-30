@@ -21,7 +21,7 @@
 }
 
 @await Component.InvokeAsync("PageHeader", new {
-    title = "文件管理",
+    title = "文件中心",
     subtitle = "统一查询采购申请和采购计划附件；上传、分类及可见性在对应采购计划中管理",
     parentTitle = "业务管理",
     parentUrl = "/",
@@ -45,18 +45,31 @@
             <small>共 @Model.PurchaseFiles.Count 个有效文件</small>
         </div>
 
-        <div class="ui-toolbar">
+        <form class="ui-toolbar" method="get" action="/files" data-server-query>
             <label class="ui-search">
                 <i class="bi bi-search"></i>
-                <input class="form-control" type="search" data-search placeholder="搜索文件名或申请编号" />
+                <input class="form-control" type="search" name="keyword" value="@Model.Query.Keyword" data-search placeholder="搜索文件名、业务编号或客户" />
             </label>
-            <select class="form-select ui-filter" data-type aria-label="文件类型">
-                <option value="">全部类型</option><option>PDF</option><option>JPG</option><option>JPEG</option><option>PNG</option><option>WEBP</option><option>MP4</option><option>TXT</option><option>CSV</option><option>XLS</option><option>XLSX</option><option>DOCX</option><option>ZIP</option>
+            <select class="form-select ui-filter" name="sourceKind" aria-label="业务来源">
+                <option value="">全部来源</option>
+                <option value="request" selected="@(Model.Query.SourceKind == "request")">采购申请</option>
+                <option value="plan" selected="@(Model.Query.SourceKind == "plan")">采购计划</option>
             </select>
-            <select class="form-select ui-filter" data-range aria-label="文件日期">
-                <option value="">全部日期</option><option value="week">近 7 天</option><option value="month">近 30 天</option>
+            <select class="form-select ui-filter" name="fileType" data-type aria-label="文件类型">
+                <option value="">全部类型</option>
+                @foreach (var type in new[] { "PDF", "JPG", "JPEG", "PNG", "WEBP", "MP4", "TXT", "CSV", "XLS", "XLSX", "DOCX", "ZIP" })
+                {
+                    <option value="@type" selected="@(Model.Query.FileType?.Equals(type, StringComparison.OrdinalIgnoreCase) == true)">@type</option>
+                }
             </select>
-        </div>
+            <select class="form-select ui-filter" name="dateRange" data-range aria-label="文件日期">
+                <option value="">全部日期</option>
+                <option value="week" selected="@(Model.Query.DateRange == "week")">近 7 天</option>
+                <option value="month" selected="@(Model.Query.DateRange == "month")">近 30 天</option>
+            </select>
+            <button class="btn btn-primary" type="submit"><i class="bi bi-search"></i> 查询</button>
+            <a class="btn btn-outline-secondary" href="/files">重置</a>
+        </form>
 
         <div class="ui-data-table">
             <table class="table table-hover align-middle">
