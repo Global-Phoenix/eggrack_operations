@@ -1,10 +1,12 @@
 @model eggrack_operations.ViewComponents.NavigationViewModel
+@{ var avatarText = string.IsNullOrWhiteSpace(Model.DisplayName) ? "用" : Model.DisplayName[..1]; }
 <aside class="sidebar" id="sidebar">
-    <a class="brand" asp-controller="Home" asp-action="Index" title="Eggracks 运营管理中心">
-        <span class="brand-logo"><img src="~/favicon.ico" asp-append-version="true" alt="Eggracks" /></span>
-        <span class="brand-copy"><strong>eggracks</strong><small>运营管理中心</small></span>
+    <a class="brand" asp-controller="Home" asp-action="Index" title="EggRack Operations">
+        <span class="brand-mark" aria-hidden="true">ER</span>
+        <span class="brand-copy"><strong>EggRack</strong><small>Operations</small></span>
     </a>
     <nav class="sidebar-nav" aria-label="主导航">
+        <span class="nav-section-label">Workspace</span>
         @foreach (var item in Model.Items)
         {
             if (item.Children is { Count: > 0 })
@@ -14,9 +16,8 @@
                     <button class="nav-entry" type="button" data-nav-group aria-label="@item.Title" aria-expanded="@(groupActive ? "true" : "false")">
                         <i class="bi @item.Icon" aria-hidden="true"></i><span>@item.Title</span><i class="bi bi-chevron-down nav-chevron" aria-hidden="true"></i>
                     </button>
-                    <div class="nav-flyout">
-                        <div class="nav-flyout-inner">
-                            <div class="nav-flyout-title">@item.Title</div>
+                    <div class="nav-flyout"><div class="nav-flyout-inner">
+                        <div class="nav-flyout-title">@item.Title</div>
                         @foreach (var child in item.Children)
                         {
                             <a class="nav-flyout-link @(Model.IsActive(child) ? "active" : string.Empty)"
@@ -24,8 +25,7 @@
                                 <i class="bi @child.Icon" aria-hidden="true"></i><span>@child.Title</span>
                             </a>
                         }
-                        </div>
-                    </div>
+                    </div></div>
                 </div>
             }
             else
@@ -37,7 +37,14 @@
             }
         }
     </nav>
-    <button class="sidebar-control" id="sidebarToggle" type="button" aria-label="切换导航">
-        <i class="bi bi-layout-sidebar-inset" data-sidebar-icon></i><span>收起导航</span>
-    </button>
+    <div class="sidebar-footer">
+        <a class="sidebar-user" href="/account" title="@Model.DisplayName">
+            <span class="avatar">@avatarText</span>
+            <span class="sidebar-user-copy"><strong>@Model.DisplayName</strong><small>Operations user</small></span>
+            <i class="bi bi-chevron-right" aria-hidden="true"></i>
+        </a>
+        <button class="sidebar-control" id="sidebarToggle" type="button" aria-label="切换导航">
+            <i class="bi bi-layout-sidebar-inset" data-sidebar-icon></i><span>收起导航</span>
+        </button>
+    </div>
 </aside>

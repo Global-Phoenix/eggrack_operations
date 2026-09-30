@@ -15,7 +15,8 @@
         sidebarControl?.setAttribute('aria-expanded', String(expanded));
     };
 
-    applySidebar(localStorage.getItem(sidebarStorageKey) === 'true');
+    const storedSidebarState = localStorage.getItem(sidebarStorageKey);
+    applySidebar(storedSidebarState === null ? window.innerWidth >= 1024 : storedSidebarState === 'true');
     mobile?.addEventListener('click', toggleMobile);
     sidebarControl?.addEventListener('click', () => {
         if (window.innerWidth < 768) return toggleMobile();

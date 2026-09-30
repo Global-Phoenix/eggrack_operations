@@ -1,0 +1,33 @@
+@model eggrack_operations.ViewComponents.WorkspaceTabsViewModel
+<nav class="workspace-tabs"
+     aria-label="已打开页面"
+     data-workspace-tabs
+     data-current-key="@Model.CurrentTab.Key"
+     data-current-title="@Model.CurrentTab.Title"
+     data-current-url="@Model.CurrentTab.Url"
+     data-current-closable="@Model.CurrentTab.IsClosable.ToString().ToLowerInvariant()"
+     data-current-icon="@Model.CurrentTab.Icon">
+    <button class="workspace-scroll workspace-scroll-left" type="button" data-workspace-scroll="left" aria-label="向左滚动页面标签" hidden><i class="bi bi-chevron-left"></i></button>
+    <div class="workspace-tabs-viewport" data-workspace-viewport>
+        <div class="workspace-tabs-list" role="tablist" data-workspace-list></div>
+    </div>
+    <button class="workspace-scroll workspace-scroll-right" type="button" data-workspace-scroll="right" aria-label="向右滚动页面标签" hidden><i class="bi bi-chevron-right"></i></button>
+    <div class="dropdown workspace-tabs-menu">
+        <button class="workspace-tabs-menu-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="页面标签操作"><i class="bi bi-chevron-down"></i></button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><button class="dropdown-item" type="button" data-workspace-command="close-current">关闭当前</button></li>
+            <li><button class="dropdown-item" type="button" data-workspace-command="close-others">关闭其他</button></li>
+            <li><button class="dropdown-item" type="button" data-workspace-command="close-left">关闭左侧</button></li>
+            <li><button class="dropdown-item" type="button" data-workspace-command="close-right">关闭右侧</button></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item" type="button" data-workspace-command="close-all">关闭全部</button></li>
+        </ul>
+    </div>
+    <div class="workspace-context-menu" data-workspace-context-menu hidden>
+        <button type="button" data-workspace-context-command="refresh">刷新</button>
+        <button type="button" data-workspace-context-command="close">关闭</button>
+        <button type="button" data-workspace-context-command="close-others">关闭其他</button>
+        <button type="button" data-workspace-context-command="close-left">关闭左侧</button>
+        <button type="button" data-workspace-context-command="close-right">关闭右侧</button>
+    </div>
+</nav>

@@ -1,17 +1,93 @@
+@model eggrack_operations.Models.OperationsOverviewPageViewModel
+@using eggrack_operations.Areas.Wholesale.Models
+@using Eggrack.Operations.Application.Modules.Wholesale
 @{
-    ViewData["Title"] = "工作台";
+    ViewData["Title"] = "概览";
+    var hour = DateTime.Now.Hour;
+    var greeting = hour < 12 ? "早上好" : hour < 18 ? "下午好" : "晚上好";
+    var newRequests = Model.Requests.Count(item => item.RequestStatus == 1);
+    var purchasing = Model.Requests.Count(item => item.RequestStatus == 2);
+    var quoted = Model.Requests.Count(item => item.RequestStatus == 3);
+    var completed = Model.Requests.Count(item => item.RequestStatus == 4);
+    var versionUpdates = Model.Requests.Count(item => item.HasPlan && item.PlannedVersionId != item.CurrentVersionId);
+    var reviewCount = Model.Plans.Count(item => item.Status == ProcurementPlanStatus.PendingApproval);
+    var finalReviewCount = Model.Plans.Count(item => item.Status == ProcurementPlanStatus.PendingFinalApproval);
+    var workQueue = new List<(string Work,string Hint,string Number,string Customer,string Status,string Tone,string Url,DateTime Updated)>();
+    foreach (var item in Model.Requests.OrderByDescending(item => item.UpdatedAtUtc))
+    {
+        var planUrl = item.PlanId.HasValue ? $"/wholesale/procurement/plans/{item.PlanId}/details" : string.Empty;
+        if (!item.HasPlan && Model.CanCreatePlan)
+            workQueue.Add(("创建采购计划","客户申请尚未进入内部采购",item.RequestNumber,item.CustomerName,"待处理","info",$"/wholesale/procurement/requests/{item.Id}/plan",item.UpdatedAtUtc));
+        else if (item.HasPlan && item.PlannedVersionId != item.CurrentVersionId && Model.CanUpdatePlan)
+            workQueue.Add(("确认客户版本更新",$"计划基于旧版本，当前为 V{item.CurrentVersion}",item.PlanNumber??item.RequestNumber,item.CustomerName,"需求有更新","warning",$"/wholesale/procurement/requests/{item.Id}/details",item.UpdatedAtUtc));
+        else if (item.PlanStatus == (byte)ProcurementPlanStatus.PendingApproval && Model.CanReviewQuote)
+            workQueue.Add(("审核采购成本与报价","采购计划等待部门审核",item.PlanNumber??item.RequestNumber,item.CustomerName,"待审核","warning",planUrl,item.UpdatedAtUtc));
+        else if (item.PlanStatus == (byte)ProcurementPlanStatus.PendingFinalApproval && Model.CanFinalApprove)
+            workQueue.Add(("最终报价审核","报价等待最终确认",item.PlanNumber??item.RequestNumber,item.CustomerName,"等待确认","purple",planUrl,item.UpdatedAtUtc));
+        else if (item.HasPlan && item.BuyerId == Model.CurrentStaffId && item.PlanStatus is 1 or 2)
+            workQueue.Add(("继续处理采购计划","补充寻源、询价或成本资料",item.PlanNumber??item.RequestNumber,item.CustomerName,"采购中","warning",planUrl,item.UpdatedAtUtc));
+    }
+    var queue = workQueue.Take(6).ToArray();
+    var recentRequests = Model.Requests.OrderByDescending(item => item.UpdatedAtUtc).Take(6).ToArray();
 }
 <div class="dashboard-page">
-@await Component.InvokeAsync("PageHeader", new { title = "运营工作台", subtitle = "批发业务与系统运营的统一入口", statusText = "系统运行正常", statusTone = "success" })
-<div class="row g-3 mb-4 dashboard-metrics">
-    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card dashboard-metric"><span class="metric-icon blue"><i class="bi bi-check2-square"></i></span><div><span>待处理任务</span><strong>0</strong><small>任务中心</small></div></div></div>
-    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card dashboard-metric"><span class="metric-icon purple"><i class="bi bi-cart3"></i></span><div><span>采购计划</span><strong>—</strong><small>由采购申请创建</small></div></div></div>
-    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card dashboard-metric"><span class="metric-icon green"><i class="bi bi-folder2-open"></i></span><div><span>文件数量</span><strong>0</strong><small>文件中心</small></div></div></div>
-    <div class="col-12 col-sm-6 col-xl-3"><div class="metric-card dashboard-metric"><span class="metric-icon slate"><i class="bi bi-activity"></i></span><div><span>今日操作</span><strong>0</strong><small>日志中心</small></div></div></div>
-</div>
-<section class="dashboard-modules">
-    <div class="dashboard-section-header"><div><h2>功能模块</h2><p>选择模块进入对应业务工作区</p></div><span><i class="bi bi-grid"></i> 快捷入口</span></div>
-    <div class="dashboard-section-body">@await Component.InvokeAsync("ModuleGrid")</div>
-</section>
+ <header class="dashboard-welcome">
+  <div><h1>@greeting，@Model.DisplayName</h1><p>查看当前权限范围内需要处理的批发业务。</p></div>
+  <time datetime="@DateTime.Now.ToString("yyyy-MM-dd")">@DateTime.Now.ToString("yyyy年M月d日 dddd")</time>
+ </header>
+
+ @if(!Model.CanViewWholesale)
+ {
+  <section class="er-section"><div class="ui-empty-state"><span class="ui-empty-icon"><i class="bi bi-shield-lock"></i></span><strong>暂无批发业务访问权限</strong><p>当前账号仍可从左侧导航进入已授权的文件或系统管理模块。</p></div></section>
+ }
+ else
+ {
+  <div class="ui-stat-grid">
+   <a href="/wholesale/procurement/requests?status=submitted" class="ui-stat-card tone-info"><span class="ui-stat-icon"><i class="bi bi-file-earmark-text"></i></span><span class="ui-stat-copy"><strong>@newRequests</strong><b>新申请</b><small>@newRequests 个等待进入采购流程</small></span><i class="bi bi-chevron-right"></i></a>
+   <a href="/wholesale/procurement/requests?status=purchasing" class="ui-stat-card tone-warning"><span class="ui-stat-icon"><i class="bi bi-cart3"></i></span><span class="ui-stat-copy"><strong>@purchasing</strong><b>采购中</b><small>正在执行的客户申请</small></span><i class="bi bi-chevron-right"></i></a>
+   <a href="/wholesale/procurement/requests?status=quoted" class="ui-stat-card tone-purple"><span class="ui-stat-icon"><i class="bi bi-tag"></i></span><span class="ui-stat-copy"><strong>@quoted</strong><b>已报价</b><small>已完成客户报价</small></span><i class="bi bi-chevron-right"></i></a>
+   <a href="/wholesale/procurement/requests?status=completed" class="ui-stat-card tone-success"><span class="ui-stat-icon"><i class="bi bi-check-circle"></i></span><span class="ui-stat-copy"><strong>@completed</strong><b>已完成</b><small>采购流程已经闭环</small></span><i class="bi bi-chevron-right"></i></a>
+  </div>
+
+  <div class="dashboard-grid">
+   <main class="dashboard-main">
+    <section class="er-section dashboard-workspace">
+     <div class="er-section-header"><div><h2><i class="bi bi-list-check"></i> 我的工作队列</h2><p>根据真实业务状态与当前账号权限生成</p></div><a href="/wholesale/procurement/requests">查看全部</a></div>
+     <div class="ui-work-list">
+      <div class="ui-work-head" aria-hidden="true"><span>工作内容</span><span>关联业务</span><span>客户</span><span>状态</span><span class="text-end">更新</span></div>
+      @foreach(var item in queue)
+      {
+       <a class="ui-work-row" href="@item.Url"><span class="ui-work-primary"><strong>@item.Work</strong><small>@item.Hint</small></span><span class="ui-work-business"><strong>@item.Number</strong><small>采购业务</small></span><span class="ui-work-customer">@item.Customer</span><span class="er-status er-status-@item.Tone"><i></i>@item.Status</span><time class="ui-work-time" title="@item.Updated.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">@ProcurementUi.RelativeTime(item.Updated)</time></a>
+      }
+      @if(queue.Length==0){<div class="compact-empty"><i class="bi bi-check2-circle"></i><span>当前没有需要你处理的采购工作。</span></div>}
+     </div>
+    </section>
+
+    <section class="er-section">
+     <div class="er-section-header"><div><h2><i class="bi bi-file-earmark-text"></i> 最近采购申请</h2><p>按业务更新时间排序</p></div><a href="/wholesale/procurement/requests">查看全部</a></div>
+     <div class="table-responsive dashboard-table"><table class="table mb-0"><thead><tr><th>申请</th><th>客户</th><th class="text-end">产品</th><th>版本</th><th>状态</th><th>负责人</th><th>更新</th><th aria-label="进入详情"></th></tr></thead><tbody>
+      @foreach(var item in recentRequests){var status=ProcurementUi.RequestStatus(item);var detailUrl=$"/wholesale/procurement/requests/{item.Id}/details";<tr data-href="@detailUrl" tabindex="0"><td><a class="row-title" href="@detailUrl">@item.RequestNumber</a></td><td><span class="ui-customer-name">@item.CustomerName</span><small class="ui-cell-secondary">@item.Email</small></td><td class="text-end">@item.ProductCount</td><td><span class="ui-version">V@item.CurrentVersion</span></td><td><span class="er-status er-status-@status.Tone"><i></i>@status.Text</span></td><td>@(item.BuyerName??"—")</td><td><time title="@item.UpdatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">@ProcurementUi.RelativeTime(item.UpdatedAtUtc)</time></td><td><i class="bi bi-chevron-right row-chevron"></i></td></tr>}
+     </tbody></table></div>
+    </section>
+   </main>
+
+   <aside class="dashboard-side">
+    <section class="er-section">
+     <div class="er-section-header"><div><h2><i class="bi bi-exclamation-circle"></i> 需要处理</h2><p>按真实状态汇总的待办入口</p></div></div>
+     <div class="ui-attention-list">
+      @if(Model.CanCreatePlan&&newRequests>0){<a class="ui-attention-item" href="/wholesale/procurement/requests?status=submitted"><span class="ui-attention-count">@newRequests</span><span class="ui-attention-copy"><strong>新申请等待创建采购计划</strong><small>从客户需求进入内部采购</small></span><i class="bi bi-chevron-right"></i></a>}
+      @if(Model.CanUpdatePlan&&versionUpdates>0){<a class="ui-attention-item" href="/wholesale/procurement/requests?attention=version-update"><span class="ui-attention-count">@versionUpdates</span><span class="ui-attention-copy"><strong>客户需求版本已更新</strong><small>采购计划不会自动同步</small></span><i class="bi bi-chevron-right"></i></a>}
+      @if(Model.CanReviewQuote&&reviewCount>0){<a class="ui-attention-item" href="/wholesale/procurement/sourcing"><span class="ui-attention-count">@reviewCount</span><span class="ui-attention-copy"><strong>采购计划等待成本审核</strong><small>核对成本和报价建议</small></span><i class="bi bi-chevron-right"></i></a>}
+      @if(Model.CanFinalApprove&&finalReviewCount>0){<a class="ui-attention-item" href="/wholesale/procurement/sourcing"><span class="ui-attention-count">@finalReviewCount</span><span class="ui-attention-copy"><strong>报价等待最终确认</strong><small>完成最终报价决策</small></span><i class="bi bi-chevron-right"></i></a>}
+      @if((!Model.CanCreatePlan||newRequests==0)&&(!Model.CanUpdatePlan||versionUpdates==0)&&(!Model.CanReviewQuote||reviewCount==0)&&(!Model.CanFinalApprove||finalReviewCount==0)){<div class="compact-empty"><i class="bi bi-check2-circle"></i><span>当前没有需要关注的异常或待办。</span></div>}
+     </div>
+    </section>
+    <section class="er-section">
+     <div class="er-section-header"><div><h2><i class="bi bi-lightning-charge"></i> 快捷操作</h2><p>常用业务入口</p></div></div>
+     <div class="quick-actions"><a class="quick-primary" href="/wholesale/procurement/requests?status=submitted"><i class="bi bi-plus-lg"></i><span>从申请创建采购计划</span></a><a href="/wholesale/procurement/sourcing"><i class="bi bi-bag-check"></i><span>查看采购计划</span></a><a href="/files"><i class="bi bi-cloud-arrow-up"></i><span>进入文件中心</span></a></div>
+    </section>
+   </aside>
+  </div>
+ }
 </div>
 @section Styles { <link rel="stylesheet" href="~/css/pages/dashboard.css" asp-append-version="true" /> }

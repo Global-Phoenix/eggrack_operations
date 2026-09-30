@@ -1,49 +1,32 @@
 @model eggrack_operations.ViewComponents.TopbarViewModel
+@{ var avatarText = string.IsNullOrWhiteSpace(Model.DisplayName) ? "用" : Model.DisplayName[..1]; }
 <header class="topbar">
-    <div class="workspace-tabs" id="workspaceTabs" data-current-path="@Model.CurrentPath" data-current-title="@Model.Title">
+    <div class="topbar-main">
         <button class="mobile-menu top-tool" id="mobileMenu" type="button" aria-label="打开导航"><i class="bi bi-list"></i></button>
-        <a class="workspace-tab home-tab" data-home-tab href="/" title="工作台"><i class="bi bi-house-door"></i><span>首页</span></a>
-        <div class="dynamic-tabs" id="dynamicTabs"></div>
-        <button class="new-tab-button" type="button" aria-label="打开首页" title="打开首页"><i class="bi bi-plus-lg"></i></button>
-        <div class="dropdown tab-actions-dropdown">
-            <button class="tab-actions-button" type="button" data-bs-toggle="dropdown" aria-label="标签页操作" title="标签页操作"><i class="bi bi-chevron-down"></i></button>
-            <ul class="dropdown-menu shadow-sm">
-                <li><button class="dropdown-item" type="button" data-tab-command="refresh"><i class="bi bi-arrow-clockwise"></i><span>刷新当前页</span></button></li>
-                <li><button class="dropdown-item" type="button" data-tab-command="right"><i class="bi bi-layout-sidebar-reverse"></i><span>关闭右侧标签</span></button></li>
-                <li><button class="dropdown-item" type="button" data-tab-command="other"><i class="bi bi-subtract"></i><span>关闭其他标签</span></button></li>
-                <li><hr class="dropdown-divider" /></li>
-                <li><button class="dropdown-item" type="button" data-tab-command="all"><i class="bi bi-x-square"></i><span>关闭全部标签</span></button></li>
-            </ul>
-        </div>
-    </div>
-    <div class="topbar-actions">
-        <span class="workspace-label"><i></i>运营工作台</span>
-        <button class="top-tool" id="fullscreenToggle" type="button" title="全屏" aria-label="切换全屏"><i class="bi bi-arrows-fullscreen"></i></button>
-        <div class="dropdown notification-dropdown">
-            <button class="top-tool" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="通知中心" aria-label="通知中心"><i class="bi bi-bell"></i>@if (Model.MessageCount > 0) { <span class="notification-dot">@Model.MessageCount</span> }</button>
-            <div class="dropdown-menu dropdown-menu-end notification-menu">
-                <div class="notification-title"><strong>通知中心</strong><small>暂无未读通知</small></div>
-                <div class="notification-empty"><i class="bi bi-bell-slash"></i><span>当前没有新的系统通知</span></div>
+        <div class="topbar-section"><i class="bi bi-list-ul" aria-hidden="true"></i><span>@Model.Title</span></div>
+        <label class="global-search" title="全局搜索将在后续阶段接入真实数据">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" placeholder="搜索申请、采购计划或文件" disabled aria-label="全局搜索，尚未开放">
+        </label>
+        <div class="topbar-actions">
+            <div class="dropdown notification-dropdown">
+                <button class="top-tool" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="通知中心" aria-label="通知中心"><i class="bi bi-bell"></i>@if (Model.MessageCount > 0) { <span class="notification-dot">@Model.MessageCount</span> }</button>
+                <div class="dropdown-menu dropdown-menu-end notification-menu">
+                    <div class="notification-title"><strong>通知中心</strong><small>暂无未读通知</small></div>
+                    <div class="notification-empty"><i class="bi bi-bell-slash"></i><span>当前没有新的系统通知</span></div>
+                </div>
             </div>
-        </div>
-        <span class="toolbar-divider"></span>
-        <div class="dropdown">
-            <button class="user-button dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">
-                <span class="avatar">@Model.DisplayName[..1]</span><span class="user-name">@Model.DisplayName</span>
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                @if (User.Identity?.IsAuthenticated == true)
-                {
+            <div class="dropdown">
+                <button class="user-button dropdown-toggle" data-bs-toggle="dropdown" type="button" aria-expanded="false">
+                    <span class="avatar">@avatarText</span><span class="user-name">@Model.DisplayName</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                     <li><h6 class="dropdown-header">@Model.DisplayName</h6></li>
                     <li><a class="dropdown-item" href="/account"><i class="bi bi-person"></i><span>账号中心</span></a></li>
                     <li><hr class="dropdown-divider" /></li>
-                    <li><form method="post" action="/account/logout"><button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i><span>退出登录</span></button></form></li>
-                }
-                else
-                {
-                    <li><a class="dropdown-item" href="/account/login"><i class="bi bi-box-arrow-in-right"></i><span>登录</span></a></li>
-                }
-            </ul>
+                    <li><form method="post" action="/account/logout" data-workspace-reset><button class="dropdown-item" type="submit"><i class="bi bi-box-arrow-right"></i><span>退出登录</span></button></form></li>
+                </ul>
+            </div>
         </div>
     </div>
 </header>
