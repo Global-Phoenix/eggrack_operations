@@ -145,31 +145,23 @@
         planItems.splice(Number(button.dataset.removePlanItem), 1);
         renderItems();
     });
-    form.addEventListener('submit', async event => {
-        event.preventDefault();
+    form.addEventListener('submit', event => {
         planItems = readItems();
-        if (!versionSelect.value || !buyerSelect.value) return showError('请选择参考申请版本和采购人员。');
-        if (!planItems.length) return showError('请至少录入一个内部计划产品。');
-        if (planItems.some(item => !item.productName?.trim() || Number(item.quantity) <= 0 || !item.unit?.trim())) return showError('计划产品必须填写名称、有效数量和单位。');
+        if (!versionSelect.value || !buyerSelect.value) {
+            event.preventDefault();
+            return showError('请选择参考申请版本和采购人员。');
+        }
+        if (!planItems.length) {
+            event.preventDefault();
+            return showError('请至少录入一个内部计划产品。');
+        }
+        if (planItems.some(item => !item.productName?.trim() || Number(item.quantity) <= 0 || !item.unit?.trim())) {
+            event.preventDefault();
+            return showError('计划产品必须填写名称、有效数量和单位。');
+        }
         renderItems();
         setBusy(submit, true);
         showError('');
-        const url = planId ? `/wholesale/procurement/plans/${planId}` : '/wholesale/procurement/plans';
-        try {
-            const result = await request(url, { method: 'POST', body: new FormData(form) });
-            const responsePlanId = typeof result === 'number' || typeof result === 'string'
-                ? result
-                : result?.planId ?? result?.PlanId ?? result?.id ?? result?.Id;
-            const savedPlanId = planId || responsePlanId;
-            if (!savedPlanId || !/^\d+$/.test(String(savedPlanId))) {
-                throw new Error('采购计划已保存，但服务器未返回有效的计划编号，请返回申请列表后进入计划。');
-            }
-            notify(planId ? '采购计划已更新。' : '采购计划已创建。', 'success');
-            window.location.href = `/wholesale/procurement/plans/${savedPlanId}/details`;
-        } catch (error) {
-            showError(error.message || '采购计划保存失败。');
-            setBusy(submit, false);
-        }
     });
 
     load();

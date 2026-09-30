@@ -3,6 +3,9 @@
     var isUpdate = Model.Plan is not null;
     var pageTitle = isUpdate ? "更新采购计划" : "创建采购计划";
     var planTitle = Model.Request.RequestNumber;
+    var saveUrl = isUpdate
+        ? Url.Action("Update", "Procurement", new { area = "Wholesale", planId = Model.Plan!.Id })
+        : Url.Action("Create", "Procurement", new { area = "Wholesale" });
 }
 <section class="proc proc-plan-editor-page"
          data-plan-editor-page
@@ -18,7 +21,9 @@
     secondaryUrl = Url.Action("PurchaseRequests", "Procurement", new { area = "Wholesale" })
 })
 
-<form data-plan-form>
+@if(TempData["Error"] is string serverError){<div class="alert alert-danger">@serverError</div>}
+
+<form data-plan-form action="@saveUrl" method="post">
  @Html.AntiForgeryToken()
  <input type="hidden" name="requestId" value="@Model.Request.Id">
  <div class="request-overview mb-3">

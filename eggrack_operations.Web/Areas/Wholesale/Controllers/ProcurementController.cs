@@ -218,11 +218,16 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         try
         {
             var id=await procurement.CreatePlanAsync(requestId,input,staffId,token);
-            return Json(new{ok=true,planId=id});
+            var redirectUrl=Url.Action(nameof(Details),new{planId=id});
+            if(WantsJson())return Json(new{ok=true,planId=id,redirectUrl});
+            TempData["Success"]="采购计划已创建。";
+            return RedirectToAction(nameof(Details),new{planId=id});
         }
         catch(InvalidOperationException error)
         {
-            return UnprocessableEntity(new{ok=false,message=error.Message});
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+            return RedirectToAction(nameof(CreatePlanPage),new{requestId});
         }
     }
 
@@ -235,13 +240,21 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         try
         {
             await procurement.UpdatePlanAsync(planId,input,staffId,token);
-            return Json(new{ok=true});
+            var redirectUrl=Url.Action(nameof(Details),new{planId});
+            if(WantsJson())return Json(new{ok=true,planId,redirectUrl});
+            TempData["Success"]="采购计划已更新。";
+            return RedirectToAction(nameof(Details),new{planId});
         }
         catch(InvalidOperationException error)
         {
-            return UnprocessableEntity(new{ok=false,message=error.Message});
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+            return RedirectToAction(nameof(EditPlanPage),new{planId});
         }
     }
+
+    private bool WantsJson() =>
+        Request.Headers.Accept.ToString().Contains("application/json",StringComparison.OrdinalIgnoreCase);
 
     private bool TryStaffIdUnsigned(out ulong staffId) =>
         ulong.TryParse(User.FindFirst("eggrack_staff_id")?.Value,out staffId);
