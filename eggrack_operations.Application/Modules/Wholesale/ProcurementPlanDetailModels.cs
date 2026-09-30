@@ -49,14 +49,14 @@ public sealed record PurchasePlanSourcingData(
     IReadOnlyList<SupplierListItem> Suppliers,
     IReadOnlyList<CandidateProductItem> Candidates,
     IReadOnlyList<InquiryItem> Inquiries,
-    IReadOnlyList<SampleItem> Samples);
+    IReadOnlyList<SampleItem> Samples,
+    IReadOnlyList<uint> BoundSupplierIds);
 
 public sealed record PurchasePlanFilesData(
     IReadOnlyList<PurchasePlanFileDetail> Files,
     IReadOnlyList<SupplierListItem> Suppliers,
     IReadOnlyList<InquiryItem> Inquiries,
-    IReadOnlyList<SampleItem> Samples,
-    IReadOnlyList<ProcurementManagedOption> FileTypes);
+    IReadOnlyList<SampleItem> Samples);
 
 public sealed class PurchasePlanItemDetail
 {

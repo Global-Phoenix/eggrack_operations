@@ -6,11 +6,41 @@ namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
 public sealed partial class ProcurementDataService
 {
-    private sealed record PhaseOnePlan(byte Status,decimal CnyPerUsd,decimal ProfitRate,decimal TotalCostCny,decimal TotalCostUsd,decimal SuggestedQuoteUsd);
-    private sealed record ProductCostRow(uint PlanItemId,string ProductName,decimal Quantity,string Unit,uint? InquiryId,string? SupplierName,string? Currency,decimal? UnitPrice,bool IsCurrent,string? InquiryStatus);
+    // MySQL expressions such as COALESCE and numeric literals can widen provider
+    // types. Property mapping lets Dapper convert them without an exact constructor match.
+    private sealed class PhaseOnePlan
+    {
+        public byte Status { get; set; }
+        public decimal CnyPerUsd { get; set; }
+        public decimal ProfitRate { get; set; }
+        public decimal TotalCostCny { get; set; }
+        public decimal TotalCostUsd { get; set; }
+        public decimal SuggestedQuoteUsd { get; set; }
+    }
+
+    private sealed class ProductCostRow
+    {
+        public uint PlanItemId { get; set; }
+        public string ProductName { get; set; } = string.Empty;
+        public decimal Quantity { get; set; }
+        public string Unit { get; set; } = string.Empty;
+        public uint? InquiryId { get; set; }
+        public string? SupplierName { get; set; }
+        public string? Currency { get; set; }
+        public decimal? UnitPrice { get; set; }
+        public bool IsCurrent { get; set; }
+        public string? InquiryStatus { get; set; }
+    }
     private sealed record SnapshotIdentity(uint Id,uint RevisionNo,ulong SubmittedBy,decimal TotalCostUsd,decimal SuggestedQuoteUsd);
     private sealed record ReviewIdentity(ulong ActedBy,decimal ProposedQuoteUsd);
-    private sealed record InquiryRevision(uint Id,uint PlanItemId,uint SupplierId,uint RevisionNo,bool IsCurrent);
+    private sealed class InquiryRevision
+    {
+        public uint Id { get; set; }
+        public uint PlanItemId { get; set; }
+        public uint SupplierId { get; set; }
+        public uint RevisionNo { get; set; }
+        public bool IsCurrent { get; set; }
+    }
     private sealed record CostSubmissionPlan(
         byte Status,decimal CnyPerUsd,decimal ProfitRate,decimal PackagingCostCny,decimal SampleCostCny,
         decimal DomesticShippingCny,decimal InternationalShippingCny,decimal OtherCostCny,decimal SuggestedQuoteUsd);
@@ -105,7 +135,7 @@ public sealed partial class ProcurementDataService
         WHERE i.plan_id=@PlanId AND q.is_current=1 ORDER BY i.sort_order,q.updated_at DESC,q.id DESC
         """,new{PlanId=planId},cancellationToken:token);
         var documents=await db.QueryAsync<SampleFileItem>("""
-        SELECT f.id Id,f.sample_id SampleId,f.file_type_id FileTypeId,COALESCE(t.type_name,'其他附件') FileTypeName,
+        SELECT f.id Id,f.sample_id SampleId,f.file_type_id FileTypeId,CASE WHEN f.file_type IN('product','product_spec','specification','design','promotion','marketing','inspection','customer_source','customer_original','image','video','pdf','document') THEN '产品资料' WHEN f.file_type IN('quote','supplier_quote','internal_quote','internal_comparison','quotation') THEN '报价资料' WHEN f.file_type IN('sample','sample_photo','sample_image','sample_video','sample_file') THEN '样品资料' WHEN f.file_type IN('logistics','shipping','tracking','warehouse_logistics') THEN '物流资料' ELSE '其他' END FileTypeName,
           f.original_name OriginalName,f.description Description,f.mime_type MimeType,f.file_size FileSize,
           FROM_UNIXTIME(f.uploaded_at) UploadedAtUtc,f.plan_item_id PlanItemId,f.supplier_id SupplierId,
           f.inquiry_id InquiryId,f.visibility_code Visibility
@@ -185,7 +215,7 @@ public sealed partial class ProcurementDataService
         {
             var status=(await db.QueryAsync<byte>("SELECT status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:transactionToken)).Single();if(status!=ProcurementWorkflowStatus.PendingDepartmentReview)throw new BusinessRuleException("当前状态不能进行部门报价审核。","procurement.quote.review-state");
             var snapshot=(await db.QueryAsync<SnapshotIdentity>("SELECT id Id,revision_no RevisionNo,submitted_by SubmittedBy,total_cost_usd TotalCostUsd,suggested_quote_usd SuggestedQuoteUsd FROM procurement_cost_snapshots WHERE plan_id=@PlanId AND status='submitted' ORDER BY revision_no DESC LIMIT 1 FOR UPDATE",new{command.PlanId},cancellationToken:transactionToken)).SingleOrDefault()??throw new BusinessRuleException("未找到待审核成本快照。","procurement.cost.snapshot-missing");
-            if(snapshot.SubmittedBy==(ulong)command.StaffId)throw new BusinessRuleException("成本提交人不能审核自己的报价。","procurement.review.separation-of-duties");ProcurementPricing.ValidateFinalQuote(command.ProposedQuoteUsd,snapshot.TotalCostUsd);
+            ProcurementPricing.ValidateFinalQuote(command.ProposedQuoteUsd,snapshot.TotalCostUsd);
             var margin=(command.ProposedQuoteUsd-snapshot.TotalCostUsd)/command.ProposedQuoteUsd;var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();await db.ExecuteAsync("INSERT procurement_quote_reviews(plan_id,cost_snapshot_id,stage,decision,proposed_quote_usd,actual_profit_rate,note,acted_by,acted_at) VALUES(@PlanId,@SnapshotId,'department','recommended',@Quote,@Margin,@Note,@StaffId,@Now)",new{command.PlanId,SnapshotId=snapshot.Id,Quote=command.ProposedQuoteUsd,Margin=margin,command.Note,command.StaffId,Now=now},cancellationToken:transactionToken);var reviewId=(await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
             var changed=await db.ExecuteAsync("UPDATE purchase_plans SET status=6,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=3",new{command.PlanId,command.StaffId,Now=now},cancellationToken:transactionToken);if(changed!=1)throw new BusinessRuleException("计划已被其他操作处理，请刷新后重试。","procurement.quote.concurrent-change");await AddWorkflowEventAsync(db,command.PlanId,"quote.department-recommended",3,6,"quote_review",(ulong)reviewId,command.Note,command.StaffId,now,transactionToken);return new(reviewId,null,null,null,"PendingFinalApproval");
         },cancellationToken:token);
@@ -208,7 +238,7 @@ public sealed partial class ProcurementDataService
         return await db.ExecuteInTransactionAsync<QuoteDecisionResult>(async transactionToken=>
         {
             var plan=(await db.QueryAsync<PlanForApproval>("SELECT id Id,request_id RequestId,request_version_id RequestVersionId,total_cost_usd TotalCostUsd,profit_rate ProfitRate,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{command.PlanId},cancellationToken:transactionToken)).SingleOrDefault()??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");if(plan.Status!=ProcurementWorkflowStatus.PendingFinalApproval)throw new BusinessRuleException("只有部门审核通过的报价才能最终批准。","procurement.quote.final-state");
-            var snapshot=(await db.QueryAsync<SnapshotIdentity>("SELECT id Id,revision_no RevisionNo,submitted_by SubmittedBy,total_cost_usd TotalCostUsd,suggested_quote_usd SuggestedQuoteUsd FROM procurement_cost_snapshots WHERE plan_id=@PlanId AND status='submitted' ORDER BY revision_no DESC LIMIT 1 FOR UPDATE",new{command.PlanId},cancellationToken:transactionToken)).Single();var review=(await db.QueryAsync<ReviewIdentity>("SELECT acted_by ActedBy,proposed_quote_usd ProposedQuoteUsd FROM procurement_quote_reviews WHERE plan_id=@PlanId AND cost_snapshot_id=@SnapshotId AND stage='department' AND decision='recommended' ORDER BY id DESC LIMIT 1",new{command.PlanId,SnapshotId=snapshot.Id},cancellationToken:transactionToken)).SingleOrDefault()??throw new BusinessRuleException("缺少部门审核意见。","procurement.quote.department-review-missing");if(snapshot.SubmittedBy==(ulong)command.StaffId||review.ActedBy==(ulong)command.StaffId)throw new BusinessRuleException("成本提交人或部门审核人不能执行最终批准。","procurement.final.separation-of-duties");
+            var snapshot=(await db.QueryAsync<SnapshotIdentity>("SELECT id Id,revision_no RevisionNo,submitted_by SubmittedBy,total_cost_usd TotalCostUsd,suggested_quote_usd SuggestedQuoteUsd FROM procurement_cost_snapshots WHERE plan_id=@PlanId AND status='submitted' ORDER BY revision_no DESC LIMIT 1 FOR UPDATE",new{command.PlanId},cancellationToken:transactionToken)).Single();_=(await db.QueryAsync<ReviewIdentity>("SELECT acted_by ActedBy,proposed_quote_usd ProposedQuoteUsd FROM procurement_quote_reviews WHERE plan_id=@PlanId AND cost_snapshot_id=@SnapshotId AND stage='department' AND decision='recommended' ORDER BY id DESC LIMIT 1",new{command.PlanId,SnapshotId=snapshot.Id},cancellationToken:transactionToken)).SingleOrDefault()??throw new BusinessRuleException("缺少部门审核意见。","procurement.quote.department-review-missing");
             if(command.QuoteUsd<=0)throw new BusinessRuleException("最终报价必须大于零。","procurement.quote.invalid");var margin=(command.QuoteUsd-snapshot.TotalCostUsd)/command.QuoteUsd;var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();await db.ExecuteAsync("INSERT procurement_quote_reviews(plan_id,cost_snapshot_id,stage,decision,proposed_quote_usd,actual_profit_rate,note,acted_by,acted_at) VALUES(@PlanId,@SnapshotId,'final','approved',@Quote,@Margin,@Note,@StaffId,@Now)",new{command.PlanId,SnapshotId=snapshot.Id,Quote=command.QuoteUsd,Margin=margin,command.Note,command.StaffId,Now=now},cancellationToken:transactionToken);await db.ExecuteAsync("INSERT procurement_quote_approvals(plan_id,status,quote_usd,profit_rate,submitted_by,decided_by,decision_note,submitted_at,decided_at) VALUES(@PlanId,'approved',@Quote,@Margin,@SubmittedBy,@StaffId,@Note,@Now,@Now)",new{command.PlanId,Quote=command.QuoteUsd,Margin=margin,SubmittedBy=snapshot.SubmittedBy,command.StaffId,command.Note,Now=now},cancellationToken:transactionToken);var approvalId=(await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();
             await db.ExecuteAsync("UPDATE purchase_plans SET status=4,approved_quote_amount_usd=@Quote,approved_by=@StaffId,approved_at=@Now,updated_by=@StaffId,updated_at=@Now WHERE id=@PlanId AND status=6",new{command.PlanId,Quote=command.QuoteUsd,command.StaffId,Now=now},cancellationToken:transactionToken);await db.ExecuteAsync("UPDATE procurement_cost_snapshots SET status='approved' WHERE id=@SnapshotId",new{SnapshotId=snapshot.Id},cancellationToken:transactionToken);var invoice=await CreateApprovedInvoiceAsync(db,plan,command.QuoteUsd,command.Note,command.StaffId,now,transactionToken);await db.ExecuteAsync("INSERT procurement_mail_tasks(plan_id,approval_id,template_code,recipient,status,payload_json,created_at,updated_at) VALUES(@PlanId,@ApprovalId,'wholesale.final-quote',@Recipient,'pending',@Payload,@Now,@Now)",new{command.PlanId,ApprovalId=approvalId,Recipient=recipient.Trim(),Payload=System.Text.Json.JsonSerializer.Serialize(new{command.PlanId,approvalId,command.QuoteUsd,proformaInvoiceId=invoice.Id,proformaInvoiceNumber=invoice.Number,costSnapshotId=snapshot.Id}),Now=now},cancellationToken:transactionToken);var taskId=(await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:transactionToken)).Single();await AddWorkflowEventAsync(db,command.PlanId,"quote.final-approved",6,4,"approval",(ulong)approvalId,command.Note,command.StaffId,now,transactionToken);return new(approvalId,taskId,invoice.Id,invoice.Number,"Approved");
         },cancellationToken:token);

@@ -1,6 +1,8 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Common.Models;
 using Eggrack.Operations.Infrastructure.Database;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
@@ -8,7 +10,28 @@ public sealed partial class ProcurementDataService
 {
     private sealed record InvoiceIdentity(uint Id,string Number);
     private sealed record CustomerSnapshot(int? UserId,string? CompanyName,string ContactName,string Email,string? Phone,string? Whatsapp,string? Country,string? DeliveryAddress,string? TradeTerms,string? CustomerNote);
-    private sealed record InvoiceItemSource(uint Id,uint? RequestItemId,string ProductKey,uint SortOrder,string ProductName,string? Sku,string? Brand,string? Description,decimal Quantity,string QuantityUnit,string? Specifications,string? Color,string? Size,string? PackagingRequirements,string? CustomizationRequirements,string? CustomerNote);
+    // Keep query rows property-mapped. MySQL providers can expose nullable unsigned
+    // integers with a different CLR representation, which makes Dapper's positional
+    // constructor matching fail before it has a chance to perform normal conversions.
+    private sealed class InvoiceItemSource
+    {
+        public uint Id { get; init; }
+        public uint? RequestItemId { get; init; }
+        public string ProductKey { get; init; } = string.Empty;
+        public uint SortOrder { get; init; }
+        public string ProductName { get; init; } = string.Empty;
+        public string? Sku { get; init; }
+        public string? Brand { get; init; }
+        public string? Description { get; init; }
+        public decimal Quantity { get; init; }
+        public string QuantityUnit { get; init; } = string.Empty;
+        public string? Specifications { get; init; }
+        public string? Color { get; init; }
+        public string? Size { get; init; }
+        public string? PackagingRequirements { get; init; }
+        public string? CustomizationRequirements { get; init; }
+        public string? CustomerNote { get; init; }
+    }
 
     private async Task<InvoiceIdentity> CreateApprovedInvoiceAsync(DatabaseSession db,PlanForApproval plan,decimal totalAmount,string? internalNote,long staffId,long now,CancellationToken token)
     {
@@ -23,7 +46,7 @@ public sealed partial class ProcurementDataService
         """,new{RequestId=plan.RequestId,VersionId=plan.RequestVersionId},cancellationToken:token);
         var customer=customers.SingleOrDefault()??throw new BusinessRuleException("采购申请客户快照不存在。","procurement.customer-snapshot.missing");
         var items=await db.QueryAsync<InvoiceItemSource>("""
-        SELECT p.id Id,p.request_item_id RequestItemId,p.product_key ProductKey,p.sort_order SortOrder,
+        SELECT p.id Id,p.request_item_id RequestItemId,CAST(p.product_key AS CHAR(64)) ProductKey,p.sort_order SortOrder,
           p.product_name ProductName,r.sku Sku,r.brand Brand,r.description Description,p.quantity Quantity,
           p.quantity_unit QuantityUnit,r.specifications Specifications,r.color Color,r.size Size,
           r.packaging_requirements PackagingRequirements,r.customization_requirements CustomizationRequirements,r.customer_note CustomerNote
@@ -50,6 +73,7 @@ public sealed partial class ProcurementDataService
         for(var index=0;index<items.Count;index++)
         {
             var item=items[index];
+            var productKey=NormalizeInvoiceProductKey(item.ProductKey);
             var lineAmount=index==items.Count-1?remaining:Math.Round(totalAmount/items.Count,2,MidpointRounding.AwayFromZero);
             remaining-=lineAmount;
             var unitPrice=Math.Round(lineAmount/item.Quantity,4,MidpointRounding.AwayFromZero);
@@ -61,12 +85,19 @@ public sealed partial class ProcurementDataService
             VALUES(@InvoiceId,@Id,@RequestItemId,@ProductKey,@SortOrder,@ProductName,@Sku,@Brand,@Description,
               @Quantity,@QuantityUnit,@Specifications,@Color,@Size,@PackagingRequirements,@CustomizationRequirements,
               @CustomerNote,@UnitPrice,@LineAmount,@StaffId,@StaffId,@Now,@Now)
-            """,new{InvoiceId=invoiceId,item.Id,item.RequestItemId,item.ProductKey,item.SortOrder,item.ProductName,
+            """,new{InvoiceId=invoiceId,item.Id,item.RequestItemId,ProductKey=productKey,item.SortOrder,item.ProductName,
                 item.Sku,item.Brand,item.Description,item.Quantity,item.QuantityUnit,item.Specifications,item.Color,item.Size,
                 item.PackagingRequirements,item.CustomizationRequirements,item.CustomerNote,UnitPrice=unitPrice,LineAmount=lineAmount,
                 StaffId=staffId,Now=now},cancellationToken:token);
         }
         return new(invoiceId,number);
+    }
+
+    private static string NormalizeInvoiceProductKey(string productKey)
+    {
+        if(Guid.TryParse(productKey,out var parsed))return parsed.ToString();
+        var hash=SHA256.HashData(Encoding.UTF8.GetBytes(productKey));
+        return new Guid(hash.AsSpan(0,16)).ToString();
     }
 
     private sealed record InvoicePricingHeader(uint Id,byte Status,decimal ApprovedQuoteUsd,decimal PackagingFee,decimal ShippingFee,decimal OtherFee,decimal DiscountAmount);

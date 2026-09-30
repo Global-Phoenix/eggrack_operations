@@ -42,7 +42,7 @@ public sealed class ProcurementAuthorizationTests
     [InlineData(nameof(ProcurementController.ReviewPlanQuote), "wholesale.purchase-quote.review")]
     [InlineData(nameof(ProcurementController.DepartmentRejectPlanQuote), "wholesale.purchase-quote.review")]
     [InlineData(nameof(ProcurementController.FinalRejectPlanQuote), "wholesale.purchase-quote.final-approve")]
-    [InlineData(nameof(ProcurementController.BossApprovePlanQuote), "wholesale.purchase-quote.final-approve")]
+    [InlineData(nameof(ProcurementController.FinalApprovePlanQuote), "wholesale.purchase-quote.final-approve")]
     [InlineData(nameof(ProcurementController.GeneratePlanPi), "wholesale.purchase-pi.manage")]
     [InlineData(nameof(ProcurementController.SavePlanPi), "wholesale.purchase-pi.manage")]
     [InlineData(nameof(ProcurementController.IssuePlanPi), "wholesale.purchase-pi.issue")]

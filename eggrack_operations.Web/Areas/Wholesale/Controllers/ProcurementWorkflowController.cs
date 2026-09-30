@@ -17,8 +17,8 @@ public sealed partial class ProcurementController
         try
         {
             var supplierId=await procurement.CreatePlanSupplierAsync(planId,command,staffId,token);
-            const string message="供应商已加入公司公共供应商库，可继续绑定到计划产品或录入报价。";
-            if(WantsJson())return Json(new{ok=true,supplierId,message});
+            const string message="供应商已保存并关联当前采购计划。";
+            if(WantsJson())return Json(new{ok=true,supplierId,boundToPlan=true,message});
             TempData["Success"]=message;
         }
         catch(InvalidOperationException error)
@@ -39,10 +39,16 @@ public sealed partial class ProcurementController
         {
             var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
             if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
-            await procurement.SaveCandidateAsync(command,staffId,token);
-            TempData["Success"]="已将公司供应商及本次候选产品绑定到计划产品。";
+            var candidateId=await procurement.SaveCandidateAsync(command,staffId,token);
+            const string message="供应商已绑定到计划产品。";
+            if(WantsJson())return Json(new{ok=true,candidateId,message});
+            TempData["Success"]=message;
         }
-        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        catch(InvalidOperationException error)
+        {
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+        }
         return RedirectToAction(nameof(Details),null,new{planId},"sourcing");
     }
 
@@ -56,10 +62,16 @@ public sealed partial class ProcurementController
         {
             var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
             if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
-            await procurement.SaveInquiryRevisionAsync(command,staffId,token);
-            TempData["Success"]=command.Id.HasValue?"供应商报价修订版本已保存。":"供应商报价已录入。";
+            var inquiryId=await procurement.SaveInquiryRevisionAsync(command,staffId,token);
+            var message=command.Id.HasValue?"供应商报价修订版本已保存。":"供应商报价已录入。";
+            if(WantsJson())return Json(new{ok=true,inquiryId,message});
+            TempData["Success"]=message;
         }
-        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        catch(InvalidOperationException error)
+        {
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+        }
         return PlanDetailsRedirect(planId);
     }
 
@@ -69,8 +81,27 @@ public sealed partial class ProcurementController
     public async Task<IActionResult> SelectPlanInquiry(uint planId,[FromForm]SelectInquiryCommand command,CancellationToken token)
     {
         if(!TryStaffId(out var staffId))return Forbid();
-        try{await procurement.SelectInquiryAsync(planId,command,staffId,token);TempData["Success"]="已选择该供应商报价作为产品成本依据。";}
-        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        try
+        {
+            await procurement.SelectInquiryAsync(planId,command,staffId,token);
+            const string message="已选择该供应商报价作为产品成本依据。";
+            if(WantsJson())
+            {
+                var detail=await procurement.GetPurchasePlanDetailAsync(planId,token);
+                var item=detail.Items.Single(x=>x.Id==command.PlanItemId);
+                return Json(new
+                {
+                    ok=true,message,planItemId=item.Id,item.SelectedSupplierName,item.SelectedSupplierProductName,
+                    item.SelectedSupplierCurrency,item.SelectedSupplierUnitPrice,item.PurchaseUnitPriceCny,item.LineCostCny
+                });
+            }
+            TempData["Success"]=message;
+        }
+        catch(InvalidOperationException error)
+        {
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+        }
         return PlanDetailsRedirect(planId);
     }
 
@@ -84,10 +115,16 @@ public sealed partial class ProcurementController
         {
             var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
             if(plan.Items.All(item=>item.Id!=command.PlanItemId))throw new InvalidOperationException("计划产品不属于当前采购计划。");
-            await procurement.SaveSampleAsync(command,staffId,token);
-            TempData["Success"]=command.Id.HasValue?"样品记录已更新。":"样品记录已添加。";
+            var sampleId=await procurement.SaveSampleAsync(command,staffId,token);
+            var message=command.Id.HasValue?"样品记录已更新。":"样品记录已添加。";
+            if(WantsJson())return Json(new{ok=true,sampleId,message});
+            TempData["Success"]=message;
         }
-        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
+        catch(InvalidOperationException error)
+        {
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+        }
         return PlanDetailsRedirect(planId);
     }
 
@@ -113,7 +150,7 @@ public sealed partial class ProcurementController
             var result=await procurement.SavePurchasePlanCostQuoteAsync(planId,command,staffId,token);
             TempData["Success"]=$"成本与建议报价已保存：USD {result.QuoteUsd:N2}。";
             if(!result.ProfitRateInRange||!result.QuoteAboveMinimum)
-                TempData["Warning"]="提示：当前报价未同时满足利润率 10%–20% 且报价高于 USD 4,000，Boss 仍可特殊审批。";
+                TempData["Warning"]="提示：当前报价未同时满足利润率 10%–20% 且报价高于 USD 4,000，具备最终审核权限的人员仍可特殊审批。";
         }
         catch(Exception error) when(error is InvalidOperationException or ArgumentOutOfRangeException){TempData["Error"]=error.Message;}
         return PlanDetailsRedirect(planId);
@@ -139,7 +176,7 @@ public sealed partial class ProcurementController
         try
         {
             await procurement.ReviewQuoteAsync(new(planId,proposedQuoteUsd,note,staffId),token);
-            TempData["Success"]="部门审核已通过，报价已提交老板终审。";
+            TempData["Success"]="部门审核已通过，报价已提交最终审核。";
         }
         catch(InvalidOperationException error){TempData["Error"]=error.Message;}
         return PlanDetailsRedirect(planId);
@@ -157,17 +194,17 @@ public sealed partial class ProcurementController
     public Task<IActionResult> FinalRejectPlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token) =>
         RejectPlanQuoteCore(planId,quoteUsd,note,token);
 
-    [HttpPost("plans/{planId:long}/quote/boss-approve")]
+    [HttpPost("plans/{planId:long}/quote/final-approve")]
     [ValidateAntiForgeryToken]
     [InternalPermission("wholesale.purchase-quote.final-approve")]
-    public async Task<IActionResult> BossApprovePlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
+    public async Task<IActionResult> FinalApprovePlanQuote(uint planId,[FromForm]decimal quoteUsd,[FromForm]string? note,CancellationToken token)
     {
         if(!TryStaffId(out var staffId))return Forbid();
         try
         {
             var plan=await procurement.GetPurchasePlanDetailAsync(planId,token);
             var result=await procurement.FinalApproveQuoteAsync(new(planId,quoteUsd,note,staffId),plan.CustomerEmail,token);
-            TempData["Success"]=$"老板已确认最终报价，{result.ProformaInvoiceNumber} 已生成。";
+            TempData["Success"]=$"最终报价已确认，{result.ProformaInvoiceNumber} 已生成。";
         }
         catch(InvalidOperationException error){TempData["Error"]=error.Message;}
         return PlanDetailsRedirect(planId);
@@ -278,9 +315,9 @@ public sealed partial class ProcurementController
     [RequestSizeLimit(52_428_800)]
     [InternalPermission("wholesale.purchase-document.internal")]
     public async Task<IActionResult> UploadPlanFile(
-        uint planId,[FromForm]IFormFile file,[FromForm]uint? planItemId,[FromForm]string fileType,
+        uint planId,[FromForm]IFormFile file,[FromForm]uint? planItemId,[FromForm]string fileCategory,
         [FromForm]string? title,[FromForm]string? description,[FromForm]uint? supplierId,
-        [FromForm]uint? inquiryId,[FromForm]uint? sampleId,[FromForm]uint? fileTypeId,
+        [FromForm]uint? inquiryId,[FromForm]uint? sampleId,
         [FromForm]string visibility="internal",CancellationToken token=default)
     {
         if(!TryStaffIdUnsigned(out var staffId))return Forbid();
@@ -292,21 +329,17 @@ public sealed partial class ProcurementController
             stored=await fileStorage.SavePlanFileAsync(planId,file.FileName,file.ContentType,stream,token);
             await using var checksumStream=System.IO.File.OpenRead(stored.PhysicalPath);
             var checksum=Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(checksumStream,token)).ToLowerInvariant();
-            if(fileTypeId.HasValue)
-                await procurement.AddProcurementDocumentAsync(planId,planItemId,supplierId,inquiryId,sampleId,
-                    fileTypeId.Value,visibility,stored.OriginalName,stored.StoragePath,checksum,stored.MimeType,
-                    stored.FileSize,description,staffId,token);
-            else
-                await procurement.AddPurchasePlanFileAsync(planId,planItemId,fileType,title,description,stored.OriginalName,
-                    stored.StoragePath,checksum,stored.MimeType,stored.FileSize,staffId,token);
-            TempData["Success"]="采购计划文件已上传，默认仅内部可见。";
+            await procurement.AddProcurementDocumentAsync(planId,planItemId,supplierId,inquiryId,sampleId,
+                fileCategory,visibility,title,stored.OriginalName,stored.StoragePath,checksum,stored.MimeType,
+                stored.FileSize,description,staffId,token);
+            TempData["Success"]=visibility=="customer"?"采购计划文件已上传并设置为客户可见。":"采购计划文件已上传，仅内部可见。";
         }
         catch(Exception error) when(error is InvalidDataException or InvalidOperationException)
         {
             if(stored is not null&&System.IO.File.Exists(stored.PhysicalPath))System.IO.File.Delete(stored.PhysicalPath);
             TempData["Error"]=error.Message;
         }
-        return PlanDetailsRedirect(planId);
+        return RedirectToAction(nameof(Details),null,new{planId},"files");
     }
 
     [HttpPost("plans/{planId:long}/files/{fileId:long}/visibility")]
@@ -317,7 +350,7 @@ public sealed partial class ProcurementController
         if(!TryStaffIdUnsigned(out var staffId))return Forbid();
         try{await procurement.SetPurchasePlanFileVisibilityAsync(planId,fileId,customerVisible,staffId,token);TempData["Success"]=customerVisible?"文件已设置为客户可见。":"文件已恢复为仅内部可见。";}
         catch(InvalidOperationException error){TempData["Error"]=error.Message;}
-        return PlanDetailsRedirect(planId);
+        return RedirectToAction(nameof(Details),null,new{planId},"files");
     }
 
     private bool TryStaffId(out long staffId) =>

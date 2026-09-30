@@ -9,7 +9,7 @@
 }
 <aside class="request-context-rail" aria-label="申请上下文与下一步">
     <section class="request-context-card">
-        <header><span>Request Context</span><h2>下一步</h2><p>申请与采购计划的衔接状态</p></header>
+        <header><h2>下一步</h2><p>申请与采购计划的衔接状态</p></header>
         <dl class="request-context-facts">
             <div><dt>当前版本</dt><dd>V@(Model.Request.CurrentVersion)</dd><small>最近提交 @ProcurementUi.RelativeTime(Model.Request.SubmittedAtUtc)</small></div>
             <div><dt>采购计划</dt><dd>@(Model.Request.PlanNumber??"尚未创建")</dd><small>@planStatus.Text</small></div>

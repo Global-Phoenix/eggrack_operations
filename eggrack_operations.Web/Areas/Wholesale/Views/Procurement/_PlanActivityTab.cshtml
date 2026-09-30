@@ -3,11 +3,12 @@
  private static string Display(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
  private static string EventName(string code)=>code switch{
   "cost.quote-saved"=>"保存成本与报价","cost.draft-saved"=>"保存成本草稿",
-  "quote.submitted-to-boss"=>"提交 Boss 确认","quote.boss-approved"=>"Boss 确认报价",
+  "quote.submitted-to-boss"=>"提交最终审核","quote.boss-approved"=>"最终报价已确认",
+  "quote.department-recommended"=>"部门审核通过","quote.final-approved"=>"最终报价已确认",
   "pi.generated"=>"生成 PI","pi.approved"=>"保存 PI","plan.completed"=>"完成采购计划",
   "pi.cancelled"=>"取消 PI","pi.revision-created"=>"创建 PI 修订版本",
   "inquiry.created"=>"创建供应商报价","inquiry.revised"=>"修订供应商报价","inquiry.selected"=>"选用供应商报价",
-  "supplier.created-from-plan"=>"从计划新增公司供应商","candidate.bound"=>"绑定候选供应商","candidate.updated"=>"更新候选供应商",
+  "supplier.created-from-plan"=>"从计划新增供应商","candidate.bound"=>"绑定候选供应商","candidate.updated"=>"更新候选供应商",
   _=>code};
 }
 <div class="ui-timeline">

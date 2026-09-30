@@ -145,7 +145,7 @@ else
           @if(Model.CanAssignRole){<label class="form-label">角色</label>
           <select class="form-select mb-3" name="RoleId" required><option value="">请选择角色</option>@foreach (var role in Model.Roles) { <option value="@role.Id">@role.Name（@role.DefaultScope）</option> }</select>
           <label class="form-label">生效部门</label>
-          <select class="form-select" name="DepartmentId"><option value="">全局（仅超级管理员、老板）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select>
+          <select class="form-select" name="DepartmentId"><option value="">全局（需具备全局管理权限）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select>
           <div class="form-text">部门管理员、部门主管、部门员工必须选择部门。</div>}
         </div>
         <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">关闭</button>@if(Model.CanAssignRole){<button class="btn btn-dark" type="submit">确认授权</button>}</div>
@@ -174,7 +174,7 @@ else
           <div class="col-12"><label class="form-label">邮箱</label><input class="form-control" name="Email" type="email" required /></div>
           <div class="col-12"><label class="form-label">初始密码</label><input class="form-control" name="Password" type="password" required autocomplete="new-password" /><div class="form-text">至少 12 位，包含大小写字母、数字和特殊字符。</div></div>
           <div class="col-12"><label class="form-label">初始角色</label><select class="form-select" name="RoleId" required><option value="">请选择角色</option>@foreach (var role in Model.Roles) { <option value="@role.Id">@role.Name（@role.DefaultScope）</option> }</select></div>
-          <div class="col-12"><label class="form-label">所属部门</label><select class="form-select" name="DepartmentId"><option value="">全局（仅超级管理员、老板）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select></div>
+          <div class="col-12"><label class="form-label">所属部门</label><select class="form-select" name="DepartmentId"><option value="">全局（需具备全局管理权限）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select></div>
         </div>
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">创建账号</button></div>

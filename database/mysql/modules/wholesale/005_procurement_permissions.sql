@@ -20,7 +20,7 @@ JOIN eggrack_auth_permission p ON p.permission_code IN (
  'wholesale.purchase-plan.view','wholesale.purchase-plan.create',
  'wholesale.purchase-plan.update','wholesale.procurement.manage',
  'wholesale.purchase-cost.manage','wholesale.purchase-quote.approve')
-WHERE r.role_code IN ('super_admin','boss')
+WHERE r.role_code IN ('super_admin','executive')
 ON DUPLICATE KEY UPDATE effect=VALUES(effect);
 
 INSERT INTO eggrack_auth_role_scope(role_id,permission_id,data_scope)
@@ -30,5 +30,5 @@ JOIN eggrack_auth_permission p ON p.permission_code IN (
  'wholesale.purchase-plan.view','wholesale.purchase-plan.create',
  'wholesale.purchase-plan.update','wholesale.procurement.manage',
  'wholesale.purchase-cost.manage','wholesale.purchase-quote.approve')
-WHERE r.role_code IN ('super_admin','boss')
+WHERE r.role_code IN ('super_admin','executive')
 ON DUPLICATE KEY UPDATE data_scope=VALUES(data_scope);

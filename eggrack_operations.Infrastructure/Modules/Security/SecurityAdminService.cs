@@ -343,7 +343,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases,Curren
         var role = roles.SingleOrDefault() ?? throw new InvalidOperationException("角色不存在或已停用");
         await EnsureStaffInScopeAsync(session,staffId,cancellationToken);
         await EnsureRoleAssignableAsync(session,role,operatorRef,cancellationToken);
-        var globalRole = role.Code is "super_admin" or "boss";
+        var globalRole = role.Code is "super_admin" or "executive" or "boss";
         if (globalRole && departmentId.HasValue) throw new InvalidOperationException("全局角色不能指定部门");
         if (!globalRole && !departmentId.HasValue) throw new InvalidOperationException("部门角色必须指定部门");
 
@@ -415,7 +415,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases,Curren
             new { RoleId = roleId }, cancellationToken: cancellationToken);
         var role = roles.SingleOrDefault() ?? throw new InvalidOperationException("角色不存在或已停用");
         await EnsureRoleAssignableAsync(session,role,operatorRef,cancellationToken);
-        var globalRole = role.Code is "super_admin" or "boss";
+        var globalRole = role.Code is "super_admin" or "executive" or "boss";
         if (globalRole && departmentId.HasValue) throw new InvalidOperationException("全局角色不能指定部门");
         if (!globalRole && !departmentId.HasValue) throw new InvalidOperationException("部门角色必须指定部门");
         if(departmentId.HasValue)await EnsureDepartmentInScopeAsync(session,departmentId.Value,cancellationToken);
@@ -536,7 +536,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases,Curren
                 var scopedRoles=(await session.QueryAsync<CountRow>("""
                     SELECT COUNT(*) Value FROM eggrack_auth_staff_role sr
                     JOIN eggrack_auth_role r ON r.id=sr.role_id
-                    WHERE sr.staff_id=@StaffId AND r.role_code NOT IN('super_admin','boss')
+                    WHERE sr.staff_id=@StaffId AND r.role_code NOT IN('super_admin','executive','boss')
                       AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
                     """,new{StaffId=staffId},cancellationToken:cancellationToken)).Single().Value;
                 if(scopedRoles>0)throw new InvalidOperationException("人员拥有部门角色，必须指定主部门");

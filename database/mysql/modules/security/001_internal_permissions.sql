@@ -137,7 +137,7 @@ INSERT INTO eggrack_auth_role
  (role_code,role_name,role_level,default_scope,is_system,status,description)
 VALUES
  ('super_admin','超级管理员',10,'ALL',1,1,'全部系统和业务权限'),
- ('boss','老板',20,'ALL',1,1,'全部业务数据'),
+ ('executive','最高决策人',20,'ALL',1,1,'公司最高业务决策权限及全部业务数据'),
  ('department_admin','部门管理员',30,'DEPARTMENT',1,1,'指定部门人员和配置'),
  ('department_manager','部门主管',40,'DEPARTMENT',1,1,'所负责部门'),
  ('department_staff','部门员工',50,'SELF_OR_DEPARTMENT',1,1,'自己或本部门，按权限决定')
@@ -165,13 +165,13 @@ SELECT r.id,p.id,'ALLOW' FROM eggrack_auth_role r
 CROSS JOIN eggrack_auth_permission p WHERE r.role_code='super_admin'
 ON DUPLICATE KEY UPDATE effect=VALUES(effect);
 
--- Boss: permission configuration is read-only by default.
+-- Executive: permission configuration is read-only by default.
 INSERT INTO eggrack_auth_role_permission(role_id,permission_id,effect)
 SELECT r.id,p.id,'ALLOW' FROM eggrack_auth_role r
 JOIN eggrack_auth_permission p ON p.permission_code IN
  ('auth.staff.read','auth.role.read','auth.department.read',
   'auth.permission.read','auth.audit.read')
-WHERE r.role_code='boss'
+WHERE r.role_code='executive'
 ON DUPLICATE KEY UPDATE effect=VALUES(effect);
 
 -- Department admin: staff and role operations limited to granted department.

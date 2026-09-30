@@ -65,7 +65,9 @@ public sealed record ProformaInvoiceDetailPageViewModel(
     bool CanIssuePi);
 
 public sealed record SourcingPageViewModel(
-    IReadOnlyList<ProcurementPlanListItem> Plans);
+    IReadOnlyList<ProcurementPlanListItem> Plans,
+    bool CanReviewQuote,
+    bool CanFinalApprove);
 
 public sealed record SupplierDirectoryPageViewModel(
     IReadOnlyList<SupplierListItem> Suppliers,

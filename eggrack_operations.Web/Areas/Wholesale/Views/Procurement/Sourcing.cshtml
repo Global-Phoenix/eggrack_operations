@@ -7,7 +7,7 @@
     var completed=Model.Plans.Count(item=>item.Status==ProcurementPlanStatus.Completed);
 }
 <section class="proc procurement-plan-list-page" data-procurement-plan-list>
-@await Component.InvokeAsync("PageHeader",new{title="采购计划",subtitle="从计划详情完成产品采购、成本报价、Boss 确认、PI 与文件闭环。",parentTitle="批发管理",parentUrl="/wholesale/procurement/overview"})
+@await Component.InvokeAsync("PageHeader",new{title="采购计划",subtitle="从计划详情完成产品采购、成本报价、最终确认、PI 与文件闭环。",parentTitle="批发管理",parentUrl="/wholesale/procurement/overview"})
 
 <div class="summary mb-3">
  <div class="tile">全部计划<b>@Model.Plans.Count</b></div>
@@ -49,7 +49,20 @@
         <td class="numeric">@(item.TotalCostCny?.ToString("N2")??"—")</td>
         <td class="numeric">@(item.FinalQuoteUsd?.ToString("N2")??"—")</td>
         <td><span class="ui-status ui-status-@displayStatus.Tone"><i></i>@displayStatus.Text</span></td>
-        <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-planId="@item.Id">进入计划</a></td>
+        <td class="text-end">
+         @if(item.Status==ProcurementPlanStatus.PendingFinalApproval&&Model.CanFinalApprove)
+         {
+          <a class="btn btn-sm btn-primary" asp-action="Details" asp-route-planId="@item.Id" asp-fragment="cost">审核最终价格</a>
+         }
+         else if(item.Status==ProcurementPlanStatus.PendingApproval&&Model.CanReviewQuote)
+         {
+          <a class="btn btn-sm btn-primary" asp-action="Details" asp-route-planId="@item.Id" asp-fragment="cost">部门审核</a>
+         }
+         else
+         {
+          <a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-planId="@item.Id">进入计划</a>
+         }
+        </td>
        </tr>
    }
    @if(Model.Plans.Count>0)

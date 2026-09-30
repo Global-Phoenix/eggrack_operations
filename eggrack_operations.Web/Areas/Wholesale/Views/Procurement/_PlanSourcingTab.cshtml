@@ -1,73 +1,186 @@
 @model PurchasePlanSourcingTabViewModel
 @{
- var plan=Model.Plan;
- var data=Model.Data;
- var relatedSupplierIds=data.Candidates.Where(x=>x.SupplierId.HasValue).Select(x=>x.SupplierId!.Value)
-  .Concat(data.Inquiries.Select(x=>x.SupplierId))
-  .Concat(data.Samples.Where(x=>x.SupplierId.HasValue).Select(x=>x.SupplierId!.Value))
-  .Distinct().ToHashSet();
- string Display(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
- string InquiryStatus(string value)=>value switch{"quoted"=>"已报价","sent"=>"已询价","closed"=>"已关闭",_=>"草稿"};
+    var plan = Model.Plan;
+    var data = Model.Data;
+    var editable = Model.CanExecuteProcurement && plan.Status is 1 or 2 or 7;
+    var selectable = Model.CanExecuteProcurement && plan.Status == 2;
+    string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value;
 }
-<div class="plan-tab-intro">
- <div><span class="ui-eyebrow">Supplier &amp; Quote</span><h2>供应商与询价</h2><p>供应商来自公司公共供应商库。本页只管理当前采购计划与供应商、本次候选产品及询价结果。</p></div>
- @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){
-  <div class="d-flex gap-2 flex-wrap">
-   <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#bindSupplierModal"><i class="bi bi-link-45deg"></i> 绑定供应商</button>
-   <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#inquiryModal"><i class="bi bi-receipt"></i> 录入供应商报价</button>
-   <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#supplierModal"><i class="bi bi-building-add"></i> 新增公司供应商</button>
-  </div>
- }
+
+<div class="sourcing-workspace" data-sourcing-workspace>
+    <header class="sourcing-workspace-header">
+        <div>
+            <h2>寻源与询价</h2>
+            <p>围绕每个计划产品添加候选、收集报价、横向比较并选择采购方案。</p>
+        </div>
+        @if (editable)
+        {
+            <div class="sourcing-primary-actions">
+                <button class="btn btn-primary" type="button" data-open-candidate-drawer><i class="bi bi-plus-lg"></i> 添加候选</button>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-label="更多操作"><i class="bi bi-three-dots"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><button class="dropdown-item" type="button" data-open-supplier-modal><i class="bi bi-building-add me-2"></i>新增供应商</button></li>
+                        <li><a class="dropdown-item" asp-action="Suppliers"><i class="bi bi-buildings me-2"></i>打开供应商目录</a></li>
+                    </ul>
+                </div>
+            </div>
+        }
+    </header>
+
+    <div class="sourcing-product-switcher">
+        <label for="sourcingProductSelect">计划产品</label>
+        <select class="form-select" id="sourcingProductSelect" data-sourcing-product-select>
+            @foreach (var item in plan.Items)
+            {
+                <option value="@item.Id">@item.ProductName · @item.Quantity.ToString("0.###") @item.Unit</option>
+            }
+        </select>
+        <span>@plan.Items.Count 个产品</span>
+    </div>
+
+    @if (plan.Items.Count == 0)
+    {
+        <div class="sourcing-empty-state"><i class="bi bi-box-seam"></i><strong>当前计划没有产品</strong><span>请先返回采购申请创建计划产品。</span></div>
+    }
+
+    @for (var productIndex = 0; productIndex < plan.Items.Count; productIndex++)
+    {
+        var item = plan.Items[productIndex];
+        var candidates = data.Candidates.Where(x => x.PlanItemId == item.Id).ToList();
+        var inquiries = data.Inquiries.Where(x => x.PlanItemId == item.Id).ToList();
+        var rows = candidates.Select(candidate => new
+        {
+            Candidate = candidate,
+            Inquiry = inquiries.FirstOrDefault(inquiry =>
+                inquiry.SupplierId == candidate.SupplierId &&
+                string.Equals(inquiry.OfferedProductName?.Trim(), candidate.ProductName.Trim(), StringComparison.OrdinalIgnoreCase))
+        }).ToList();
+        var matchedInquiryIds = rows.Where(x => x.Inquiry is not null).Select(x => x.Inquiry!.Id).ToHashSet();
+        var standaloneInquiries = inquiries.Where(x => !matchedInquiryIds.Contains(x.Id)).ToList();
+        var quoteCount = inquiries.Count(x => x.Status == "quoted" && x.UnitPrice > 0);
+        var selected = inquiries.FirstOrDefault(x => x.IsSelected);
+        var samples = data.Samples.Where(x => x.PlanItemId == item.Id).ToList();
+
+        <section class="sourcing-product-panel @(productIndex == 0 ? "is-active" : null)" data-sourcing-product-panel="@item.Id">
+            <div class="sourcing-requirement-strip">
+                <div class="sourcing-requirement-title"><span>客户需求</span><strong>@item.ProductName</strong><b>@item.Quantity.ToString("0.###") @item.Unit</b></div>
+                <dl>
+                    <div><dt>规格</dt><dd>@Display(item.Specifications)</dd></div>
+                    <div><dt>包装</dt><dd>@Display(item.PackagingRequirements)</dd></div>
+                    <div><dt>定制</dt><dd>@Display(item.CustomizationRequirements)</dd></div>
+                </dl>
+                <a href="/wholesale/procurement/requests/@plan.RequestId/details">查看完整客户需求</a>
+            </div>
+
+            <div class="sourcing-table-card">
+                <div class="sourcing-table-toolbar">
+                    <div><h3>候选采购方案 <span>@(rows.Count + standaloneInquiries.Count)</span></h3><p>@quoteCount / @(rows.Count + standaloneInquiries.Count) 已收到报价</p></div>
+                    <div class="sourcing-table-actions">
+                        <label class="sourcing-search"><i class="bi bi-search"></i><input type="search" placeholder="搜索候选供应商或产品" data-candidate-filter></label>
+                        <button class="btn btn-sm btn-outline-primary" type="button" data-open-compare data-plan-item-id="@item.Id" @(quoteCount < 2 ? "disabled" : null)><i class="bi bi-columns-gap"></i> 比较报价</button>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-open-sample-drawer data-plan-item-id="@item.Id" data-plan-item-name="@item.ProductName"><i class="bi bi-box-seam"></i> 样品 @samples.Count</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table sourcing-candidate-table align-middle mb-0">
+                        <thead><tr><th>供应商 / 产品</th><th>报价</th><th>MOQ</th><th>交期</th><th>有效期</th><th>状态</th><th class="text-end">操作</th></tr></thead>
+                        <tbody>
+                        @foreach (var row in rows)
+                        {
+                            var inquiry = row.Inquiry;
+                            var expired = inquiry?.ValidUntil is DateTime validUntil && validUntil.Date < DateTime.Today;
+                            var state = inquiry?.IsSelected == true ? "已选择" : expired ? "已过期" : inquiry?.Status == "quoted" && inquiry.UnitPrice > 0 ? "已报价" : "待报价";
+                            var tone = inquiry?.IsSelected == true ? "success" : expired ? "danger" : inquiry?.Status == "quoted" && inquiry.UnitPrice > 0 ? "info" : "warning";
+                            var supplierId = row.Candidate.SupplierId;
+                            var sampleCount = samples.Count(x => x.SupplierId == supplierId);
+                            <tr class="@(inquiry?.IsSelected == true ? "is-selected" : null)" data-source-row data-search-text="@($"{row.Candidate.SupplierName} {row.Candidate.ProductName}")" data-plan-item-id="@item.Id" data-plan-item-name="@item.ProductName" data-supplier-id="@supplierId" data-supplier-name="@row.Candidate.SupplierName" data-product-name="@row.Candidate.ProductName" data-inquiry-id="@inquiry?.Id" data-currency="@inquiry?.Currency" data-unit-price="@(inquiry?.UnitPrice?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-moq="@(inquiry?.Moq?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-lead-days="@inquiry?.LeadDays" data-valid-until="@(inquiry?.ValidUntil?.ToString("yyyy-MM-dd"))" data-length-cm="@(inquiry?.LengthCm?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-width-cm="@(inquiry?.WidthCm?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-height-cm="@(inquiry?.HeightCm?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-weight-kg="@(inquiry?.WeightKg?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-color="@inquiry?.Color" data-size-details="@inquiry?.SizeDetails" data-parameter-details="@inquiry?.ParameterDetails" data-terms="@inquiry?.Terms" data-notes="@inquiry?.Notes" data-quantity="@item.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-unit="@item.Unit" data-selected="@(inquiry?.IsSelected == true ? "true" : "false")">
+                                <td><strong>@Display(row.Candidate.SupplierName)</strong><span>@row.Candidate.ProductName</span>@if (!string.IsNullOrWhiteSpace(row.Candidate.ReferenceUrl)){<a href="@ProcurementUi.SafeExternalUrl(row.Candidate.ReferenceUrl)" target="_blank" rel="noopener">参考资料</a>}</td>
+                                <td class="numeric">@(inquiry?.UnitPrice > 0 ? $"{inquiry.Currency} {inquiry.UnitPrice:N4}" : "—")</td>
+                                <td>@(inquiry?.Moq?.ToString("0.###") ?? "—")</td>
+                                <td>@(inquiry?.LeadDays is uint days ? $"{days} 天" : "—")</td>
+                                <td>@(inquiry?.ValidUntil?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                <td><span class="ui-status ui-status-@tone"><i></i>@state</span>@if(sampleCount>0){<small class="candidate-sample-count">样品 @sampleCount</small>}</td>
+                                <td class="text-end">
+                                    <div class="candidate-row-actions">
+                                        @if (editable && supplierId.HasValue){<button class="btn btn-sm btn-outline-primary" type="button" data-open-quote-drawer>录入@(inquiry is null ? null : "/更新")报价</button>}
+                                        @if (selectable && inquiry?.Status == "quoted" && inquiry.UnitPrice > 0 && !inquiry.IsSelected){<form asp-action="SelectPlanInquiry" asp-route-planId="@plan.Id" method="post" data-plan-select-inquiry><input type="hidden" name="PlanItemId" value="@item.Id"><input type="hidden" name="InquiryId" value="@inquiry.Id"><button class="btn btn-sm btn-primary" type="submit">选择方案</button></form>}
+                                        <a class="btn btn-sm btn-link" asp-action="Suppliers" asp-route-keyword="@row.Candidate.SupplierName" aria-label="查看供应商"><i class="bi bi-box-arrow-up-right"></i></a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var inquiry in standaloneInquiries)
+                        {
+                            var expired = inquiry.ValidUntil is DateTime validUntil && validUntil.Date < DateTime.Today;
+                            var state = inquiry.IsSelected ? "已选择" : expired ? "已过期" : inquiry.Status == "quoted" && inquiry.UnitPrice > 0 ? "已报价" : "待报价";
+                            var tone = inquiry.IsSelected ? "success" : expired ? "danger" : inquiry.Status == "quoted" && inquiry.UnitPrice > 0 ? "info" : "warning";
+                            var sampleCount = samples.Count(x => x.SupplierId == inquiry.SupplierId);
+                            <tr class="@(inquiry.IsSelected ? "is-selected" : null)" data-source-row data-search-text="@($"{inquiry.SupplierName} {inquiry.OfferedProductName}")" data-plan-item-id="@item.Id" data-plan-item-name="@item.ProductName" data-supplier-id="@inquiry.SupplierId" data-supplier-name="@inquiry.SupplierName" data-product-name="@inquiry.OfferedProductName" data-inquiry-id="@inquiry.Id" data-currency="@inquiry.Currency" data-unit-price="@(inquiry.UnitPrice?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-moq="@(inquiry.Moq?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-lead-days="@inquiry.LeadDays" data-valid-until="@(inquiry.ValidUntil?.ToString("yyyy-MM-dd"))" data-length-cm="@(inquiry.LengthCm?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-width-cm="@(inquiry.WidthCm?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-height-cm="@(inquiry.HeightCm?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-weight-kg="@(inquiry.WeightKg?.ToString(System.Globalization.CultureInfo.InvariantCulture))" data-color="@inquiry.Color" data-size-details="@inquiry.SizeDetails" data-parameter-details="@inquiry.ParameterDetails" data-terms="@inquiry.Terms" data-notes="@inquiry.Notes" data-quantity="@item.Quantity.ToString(System.Globalization.CultureInfo.InvariantCulture)" data-unit="@item.Unit" data-selected="@(inquiry.IsSelected ? "true" : "false")">
+                                <td><strong>@inquiry.SupplierName</strong><span>@Display(inquiry.OfferedProductName)</span></td>
+                                <td class="numeric">@(inquiry.UnitPrice > 0 ? $"{inquiry.Currency} {inquiry.UnitPrice:N4}" : "—")</td><td>@(inquiry.Moq?.ToString("0.###") ?? "—")</td><td>@(inquiry.LeadDays is uint days ? $"{days} 天" : "—")</td><td>@(inquiry.ValidUntil?.ToString("yyyy-MM-dd") ?? "—")</td>
+                                <td><span class="ui-status ui-status-@tone"><i></i>@state</span>@if(sampleCount>0){<small class="candidate-sample-count">样品 @sampleCount</small>}</td>
+                                <td class="text-end"><div class="candidate-row-actions">@if(editable){<button class="btn btn-sm btn-outline-primary" type="button" data-open-quote-drawer>更新报价</button>}@if(selectable&&inquiry.Status=="quoted"&&inquiry.UnitPrice>0&&!inquiry.IsSelected){<form asp-action="SelectPlanInquiry" asp-route-planId="@plan.Id" method="post" data-plan-select-inquiry><input type="hidden" name="PlanItemId" value="@item.Id"><input type="hidden" name="InquiryId" value="@inquiry.Id"><button class="btn btn-sm btn-primary" type="submit">选择方案</button></form>}<a class="btn btn-sm btn-link" asp-action="Suppliers" asp-route-keyword="@inquiry.SupplierName"><i class="bi bi-box-arrow-up-right"></i></a></div></td>
+                            </tr>
+                        }
+                        @if (rows.Count == 0 && standaloneInquiries.Count == 0)
+                        {
+                            <tr class="sourcing-empty-row"><td colspan="7"><div class="sourcing-empty-state"><i class="bi bi-search"></i><strong>尚未添加采购候选</strong><span>从供应商库选择供应商并记录本次候选产品，开始询价和采购比较。</span>@if(editable){<button class="btn btn-sm btn-primary" type="button" data-open-candidate-drawer data-plan-item-id="@item.Id">添加第一个候选</button>}</div></td></tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+                <footer class="sourcing-summary-bar">
+                    <div><span>已收到报价</span><strong>@quoteCount / @(rows.Count + standaloneInquiries.Count)</strong></div>
+                    <div><span>最低报价</span><strong>@(inquiries.Where(x => x.Status == "quoted" && x.UnitPrice > 0).OrderBy(x => x.UnitPrice).FirstOrDefault() is { } lowest ? $"{lowest.Currency} {lowest.UnitPrice:N4}" : "—")</strong></div>
+                    <div><span>已选择方案</span><strong>@(selected is null ? "—" : $"{selected.SupplierName} / {Display(selected.OfferedProductName)}")</strong></div>
+                </footer>
+            </div>
+        </section>
+    }
+
+    @if (editable)
+    {
+        <div class="offcanvas offcanvas-end sourcing-drawer" tabindex="-1" id="candidateDrawer">
+            <div class="offcanvas-header"><div><h2 class="offcanvas-title">添加采购候选</h2><p>先加入候选，收到报价后再补充询价结果。</p></div><button class="btn-close" type="button" data-bs-dismiss="offcanvas"></button></div>
+            <form asp-action="SavePlanCandidate" asp-route-planId="@plan.Id" method="post" data-plan-candidate-form class="offcanvas-body sourcing-drawer-form">
+                <div class="alert alert-danger d-none" data-plan-form-error></div><input type="hidden" name="Status" value="candidate"><input type="hidden" name="PlanItemId" data-candidate-plan-item required>
+                <div class="drawer-context" data-candidate-context></div>
+                <label class="form-label" for="supplierSearch">搜索供应商</label><div class="sourcing-drawer-search"><i class="bi bi-search"></i><input class="form-control" id="supplierSearch" type="search" placeholder="供应商名称、编码或联系人" data-supplier-search></div>
+                <div class="supplier-search-results" data-supplier-results>
+                    @foreach (var supplier in data.Suppliers.Where(x => x.Status == "active"))
+                    {
+                        <label data-supplier-option data-search-text="@($"{supplier.Name} {supplier.Code} {supplier.ContactName} {supplier.ContactPhone}")"><input type="radio" name="SupplierId" value="@supplier.Id" required><span><strong>@supplier.Name</strong><small>@Display(supplier.Code) · @Display(supplier.ContactName) · @Display(supplier.ContactPhone)</small></span><i class="bi bi-check-circle"></i></label>
+                    }
+                </div>
+                <button class="btn btn-link px-0 align-self-start" type="button" data-open-supplier-modal><i class="bi bi-plus-lg"></i> 没有找到？新增供应商</button>
+                <hr>
+                <label class="form-label">本次候选产品名称</label><input class="form-control" name="ProductName" required placeholder="供应商提供或拟询价的产品、型号">
+                <label class="form-label">参考链接（可选）</label><input class="form-control" name="ReferenceUrl" type="url" placeholder="https://">
+                <label class="form-label">规格说明（可选）</label><textarea class="form-control" name="SpecificationDetails" rows="4" placeholder="型号、材质、功能、包装或其他规格要求"></textarea>
+                <div class="sourcing-drawer-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="offcanvas">取消</button><button class="btn btn-primary" type="submit">加入候选</button></div>
+            </form>
+        </div>
+
+        <div class="offcanvas offcanvas-end sourcing-drawer" tabindex="-1" id="quoteDrawer">
+            <div class="offcanvas-header"><div><h2 class="offcanvas-title">录入供应商报价</h2><p>报价只属于当前采购计划，不会覆盖供应商档案。</p></div><button class="btn-close" type="button" data-bs-dismiss="offcanvas"></button></div>
+            <form asp-action="SavePlanInquiry" asp-route-planId="@plan.Id" method="post" data-plan-inquiry-form class="offcanvas-body sourcing-drawer-form">
+                <div class="alert alert-danger d-none" data-plan-form-error></div><input type="hidden" name="Id"><input type="hidden" name="PlanItemId"><input type="hidden" name="SupplierId"><input type="hidden" name="Status" value="quoted">
+                <div class="drawer-context" data-quote-context></div><label class="form-label">供应商产品</label><input class="form-control" name="OfferedProductName" required>
+                <div class="row g-3"><div class="col-6"><label class="form-label">币种</label><select class="form-select" name="Currency"><option>CNY</option><option>USD</option></select></div><div class="col-6"><label class="form-label">单价</label><input class="form-control" name="UnitPrice" type="number" min="0" step=".0001" required></div><div class="col-6"><label class="form-label">MOQ</label><input class="form-control" name="Moq" type="number" min="0" step=".001"></div><div class="col-6"><label class="form-label">交期（天）</label><input class="form-control" name="LeadDays" type="number" min="0"></div><div class="col-12"><label class="form-label">有效期</label><input class="form-control" name="ValidUntil" type="date"></div></div>
+                <details class="sourcing-quote-details"><summary>补充产品参数和条款</summary><div class="row g-3 pt-3"><div class="col-4"><label class="form-label">长 cm</label><input class="form-control" name="LengthCm" type="number" min="0" step=".01"></div><div class="col-4"><label class="form-label">宽 cm</label><input class="form-control" name="WidthCm" type="number" min="0" step=".01"></div><div class="col-4"><label class="form-label">高 cm</label><input class="form-control" name="HeightCm" type="number" min="0" step=".01"></div><div class="col-6"><label class="form-label">重量 kg</label><input class="form-control" name="WeightKg" type="number" min="0" step=".001"></div><div class="col-6"><label class="form-label">颜色</label><input class="form-control" name="Color"></div><div class="col-12"><label class="form-label">尺寸说明</label><input class="form-control" name="SizeDetails"></div><div class="col-12"><label class="form-label">参数详情</label><textarea class="form-control" name="ParameterDetails" rows="2"></textarea></div><div class="col-12"><label class="form-label">条款</label><textarea class="form-control" name="Terms" rows="2"></textarea></div></div></details>
+                <label class="form-label">备注</label><textarea class="form-control" name="Notes" rows="3"></textarea>
+                <div class="sourcing-drawer-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="offcanvas">取消</button><button class="btn btn-primary" type="submit">保存报价</button></div>
+            </form>
+        </div>
+
+        <div class="offcanvas offcanvas-end sourcing-drawer" tabindex="-1" id="sampleDrawer">
+            <div class="offcanvas-header"><div><h2 class="offcanvas-title">样品记录</h2><p>样品是当前采购计划的辅助环节。</p></div><button class="btn-close" type="button" data-bs-dismiss="offcanvas"></button></div>
+            <div class="offcanvas-body"><div class="sample-drawer-list" data-sample-list>@foreach(var sample in data.Samples){<article data-sample-plan-item="@sample.PlanItemId"><div><strong>@sample.ProductName</strong><span>@Display(sample.SupplierName)</span></div><dl><div><dt>数量</dt><dd>@sample.Quantity.ToString("0.###")</dd></div><div><dt>状态</dt><dd>@sample.Status</dd></div><div><dt>成本</dt><dd>CNY @sample.CostCny.ToString("N2")</dd></div></dl><small>@Display(sample.TrackingNumber) · @Display(sample.Notes)</small></article>}</div><hr><form asp-action="SavePlanSample" asp-route-planId="@plan.Id" method="post" data-plan-sample-form class="sourcing-drawer-form"><div class="alert alert-danger d-none" data-plan-form-error></div><input type="hidden" name="PlanItemId"><div class="drawer-context" data-sample-context></div><label class="form-label">供应商（可选）</label><select class="form-select" name="SupplierId"><option value="">未指定</option>@foreach(var supplier in data.Suppliers.Where(x=>x.Status=="active")){<option value="@supplier.Id">@supplier.Name</option>}</select><div class="row g-3"><div class="col-4"><label class="form-label">数量</label><input class="form-control" name="Quantity" type="number" min=".001" step=".001" value="1" required></div><div class="col-4"><label class="form-label">状态</label><select class="form-select" name="Status"><option value="requested">已申请</option><option value="received">已收到</option><option value="approved">已确认</option><option value="rejected">不合格</option></select></div><div class="col-4"><label class="form-label">成本 CNY</label><input class="form-control" name="CostCny" type="number" min="0" step=".01" value="0"></div></div><label class="form-label">物流单号</label><input class="form-control" name="TrackingNumber"><label class="form-label">说明</label><textarea class="form-control" name="Notes" rows="2"></textarea><div class="sourcing-drawer-footer"><button class="btn btn-primary" type="submit">保存样品</button></div></form></div>
+        </div>
+
+        <div class="modal fade" id="supplierModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form asp-action="CreatePlanSupplier" asp-route-planId="@plan.Id" method="post" data-plan-supplier-form><div class="modal-header"><div><h2 class="modal-title fs-5">新增供应商</h2><p class="mb-0 text-muted">保存后加入公共供应商库，并自动关联当前采购计划。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="alert alert-danger d-none" data-plan-form-error></div><div class="row g-3"><div class="col-md-6"><label class="form-label">供应商名称</label><input class="form-control" name="Name" required></div><div class="col-md-6"><label class="form-label">供应商编码（可选）</label><input class="form-control" name="Code"></div><div class="col-12"><label class="form-label">地址</label><input class="form-control" name="Address"></div><div class="col-md-6"><label class="form-label">法人</label><input class="form-control" name="LegalRepresentative"></div><div class="col-md-6"><label class="form-label">联系人</label><input class="form-control" name="ContactName"></div><div class="col-md-6"><label class="form-label">联系电话</label><input class="form-control" name="ContactPhone"></div><div class="col-md-6"><label class="form-label">网址</label><input class="form-control" name="Website" type="url" placeholder="https://"></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存</button></div></form></div></div></div>
+    }
+
+    <div class="modal fade" id="quoteCompareModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><div class="modal-header"><div><h2 class="modal-title fs-5">报价比较</h2><p class="mb-0 text-muted">按同一计划产品客观比较已收到的报价。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body" data-quote-comparison></div></div></div></div>
 </div>
-<div class="alert alert-light border plan-boundary-note"><i class="bi bi-info-circle"></i><span>当前数据库尚无公司级“供应商产品”主数据表；这里的候选产品与报价产品是本次计划快照，不会覆盖供应商长期档案。</span><a asp-action="Suppliers">打开供应商目录</a></div>
-<div class="plan-sourcing-summary">
- <span><strong>@plan.Items.Count</strong> 个计划产品</span>
- <span><strong>@relatedSupplierIds.Count</strong> 家已使用供应商</span>
- <span><strong>@data.Inquiries.Count(x=>x.Status=="quoted")</strong> 条有效报价</span>
- <span><strong>@data.Inquiries.Count(x=>x.IsSelected)</strong> 条已选报价</span>
-</div>
-<div class="plan-sourcing-products">
-@foreach(var item in plan.Items)
-{
- var candidates=data.Candidates.Where(x=>x.PlanItemId==item.Id).ToList();
- var inquiries=data.Inquiries.Where(x=>x.PlanItemId==item.Id).ToList();
- var selected=inquiries.FirstOrDefault(x=>x.IsSelected);
- <article class="sourcing-product-card">
-  <header class="sourcing-product-header">
-   <div><span class="ui-version">计划产品</span><h3>@item.ProductName</h3><p>@item.Quantity.ToString("0.###") @item.Unit · 规格 @Display(item.Specifications) · 包装 @Display(item.PackagingRequirements)</p></div>
-   <div class="sourcing-product-state"><strong>@inquiries.Count</strong><span>Supplier Quotes</span><span class="ui-status ui-status-@(selected is null?"warning":"success")"><i></i>@(selected is null?"待选择":"已选择")</span></div>
-  </header>
-  @if(candidates.Count>0){
-   <div class="candidate-strip"><span>已绑定候选</span>@foreach(var candidate in candidates){<div><i class="bi bi-building"></i><strong>@Display(candidate.SupplierName)</strong><span>@candidate.ProductName</span>@if(!string.IsNullOrWhiteSpace(candidate.ReferenceUrl)){<a href="@ProcurementUi.SafeExternalUrl(candidate.ReferenceUrl)" target="_blank" rel="noopener">参考链接</a>}</div>}</div>
-  }
-  <div class="supplier-quote-grid">
-  @foreach(var inquiry in inquiries)
-  {
-   <section class="supplier-quote-card @(inquiry.IsSelected?"is-selected":null)">
-    <div class="supplier-quote-title"><div><strong>@inquiry.SupplierName</strong><span>@Display(inquiry.OfferedProductName)</span></div>@if(inquiry.IsSelected){<span class="ui-status ui-status-success"><i></i>最终选用</span>}else{<span class="ui-status ui-status-@(inquiry.Status=="quoted"?"warning":"neutral")"><i></i>@InquiryStatus(inquiry.Status)</span>}</div>
-    <div class="supplier-quote-price"><strong>@inquiry.Currency @(inquiry.UnitPrice?.ToString("N4")??"—")</strong><span>/ @item.Unit</span></div>
-    <dl><div><dt>MOQ</dt><dd>@(inquiry.Moq?.ToString("0.###")??"—")</dd></div><div><dt>交期</dt><dd>@(inquiry.LeadDays.HasValue?$"{inquiry.LeadDays} 天":"—")</dd></div><div><dt>有效期</dt><dd>@(inquiry.ValidUntil?.ToString("yyyy-MM-dd")??"—")</dd></div></dl>
-    <p>@Display(inquiry.Terms)</p>
-    <footer><a asp-action="Suppliers" asp-route-keyword="@inquiry.SupplierName">查看供应商</a>@if(Model.CanExecuteProcurement&&plan.Status==2&&inquiry.Status=="quoted"&&inquiry.UnitPrice>0&&!inquiry.IsSelected){<form asp-action="SelectPlanInquiry" asp-route-planId="@plan.Id" method="post"><input type="hidden" name="PlanItemId" value="@inquiry.PlanItemId"><input type="hidden" name="InquiryId" value="@inquiry.Id"><button class="btn btn-sm btn-primary" type="submit">选为采购依据</button></form>}</footer>
-   </section>
-  }
-  @if(inquiries.Count==0){<div class="compact-empty"><i class="bi bi-receipt-cutoff"></i><span>该产品尚无询价记录。</span></div>}
-  </div>
-  @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){<div class="sourcing-product-actions"><button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#bindSupplierModal" data-bind-plan-item="@item.Id">绑定供应商</button><button class="btn btn-sm btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#inquiryModal" data-inquiry-plan-item="@item.Id">录入报价</button></div>}
- </article>
-}
-</div>
-<section class="ui-panel p-4 mt-3">
- <div class="er-section-header"><div><h2>样品记录</h2><p>样品是当前计划的可选采购环节，文件请在“文件”Tab 上传。</p></div><span class="ui-version">@data.Samples.Count 条</span></div>
- <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>产品</th><th>供应商</th><th>数量</th><th>状态</th><th>成本 CNY</th><th>物流单号</th><th>说明</th></tr></thead><tbody>
- @foreach(var sample in data.Samples){<tr><td>@sample.ProductName</td><td>@Display(sample.SupplierName)</td><td>@sample.Quantity.ToString("0.###")</td><td>@sample.Status</td><td>@sample.CostCny.ToString("N2")</td><td>@Display(sample.TrackingNumber)</td><td>@Display(sample.Notes)</td></tr>}
- @if(data.Samples.Count==0){<tr><td colspan="7"><div class="compact-empty"><i class="bi bi-box-seam"></i><span>当前计划没有样品记录。</span></div></td></tr>}
- </tbody></table></div>
- @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){<div class="mt-3 text-end"><button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#sampleModal">添加样品</button></div>}
-</section>
-@if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){
- <div class="modal fade" id="bindSupplierModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form asp-action="SavePlanCandidate" asp-route-planId="@plan.Id" method="post"><div class="modal-header"><div><h2 class="modal-title fs-5">绑定公司供应商</h2><p class="mb-0 text-muted">为计划产品记录本次候选供应商和候选产品。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><input type="hidden" name="Status" value="candidate"><div class="row g-3"><div class="col-md-6"><label class="form-label">计划产品</label><select class="form-select" name="PlanItemId" data-bind-plan-item-select required><option value="">请选择</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName · @item.Quantity.ToString("0.###") @item.Unit</option>}</select></div><div class="col-md-6"><label class="form-label">公司供应商</label><select class="form-select" name="SupplierId" required><option value="">从公共供应商库选择</option>@foreach(var supplier in data.Suppliers.Where(x=>x.Status=="active")){<option value="@supplier.Id">@supplier.Name</option>}</select></div><div class="col-12"><label class="form-label">本次候选产品名称</label><input class="form-control" name="ProductName" required placeholder="供应商本次提供或拟询价的产品"></div><div class="col-12"><label class="form-label">参考链接（可选）</label><input class="form-control" name="ReferenceUrl" type="url" placeholder="https://"></div><div class="col-12"><label class="form-label">规格 JSON（可选）</label><textarea class="form-control" name="SpecificationJson" rows="3" placeholder='例如 {"model":"Outdoor Speaker A","color":"black"}'></textarea><div class="form-text">当前字段为既有 JSON 列，仅记录本次计划候选快照。</div></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">确认绑定</button></div></form></div></div></div>
- <div class="modal fade" id="supplierModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form asp-action="CreatePlanSupplier" asp-route-planId="@plan.Id" method="post" data-plan-supplier-form><div class="modal-header"><div><h2 class="modal-title fs-5">新增公司供应商</h2><p class="mb-0 text-muted">保存到公司公共供应商库；随后可绑定到计划产品或录入报价。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="alert alert-danger d-none" data-supplier-form-error></div><div class="row g-3"><div class="col-md-6"><label class="form-label">供应商名称</label><input class="form-control" name="Name" required></div><div class="col-md-6"><label class="form-label">供应商编码（可选）</label><input class="form-control" name="Code"></div><div class="col-12"><label class="form-label">地址</label><input class="form-control" name="Address"></div><div class="col-md-6"><label class="form-label">法人</label><input class="form-control" name="LegalRepresentative"></div><div class="col-md-6"><label class="form-label">联系人</label><input class="form-control" name="ContactName"></div><div class="col-md-6"><label class="form-label">联系电话</label><input class="form-control" name="ContactPhone"></div><div class="col-md-6"><label class="form-label">网址</label><input class="form-control" name="Website" type="url" placeholder="https://"></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存到公共供应商库</button></div></form></div></div></div>
- <div class="modal fade" id="inquiryModal" tabindex="-1"><div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable"><div class="modal-content"><form asp-action="SavePlanInquiry" asp-route-planId="@plan.Id" method="post"><div class="modal-header"><div><h2 class="modal-title fs-5">录入本次供应商报价</h2><p class="mb-0 text-muted">报价属于当前计划，不会覆盖供应商长期资料。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">计划产品</label><select class="form-select" name="PlanItemId" data-inquiry-plan-item-select required><option value="">请选择</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName · @item.Quantity.ToString("0.###") @item.Unit</option>}</select></div><div class="col-md-6"><label class="form-label">公司供应商</label><select class="form-select" name="SupplierId" required><option value="">从公共供应商库选择</option>@foreach(var supplier in data.Suppliers.Where(x=>x.Status=="active")){<option value="@supplier.Id">@supplier.Name</option>}</select></div><div class="col-md-6"><label class="form-label">本次报价产品</label><input class="form-control" name="OfferedProductName"></div><div class="col-md-2"><label class="form-label">长 cm</label><input class="form-control" name="LengthCm" type="number" min="0" step=".01"></div><div class="col-md-2"><label class="form-label">宽 cm</label><input class="form-control" name="WidthCm" type="number" min="0" step=".01"></div><div class="col-md-2"><label class="form-label">高 cm</label><input class="form-control" name="HeightCm" type="number" min="0" step=".01"></div><div class="col-md-3"><label class="form-label">重量 kg</label><input class="form-control" name="WeightKg" type="number" min="0" step=".001"></div><div class="col-md-3"><label class="form-label">颜色</label><input class="form-control" name="Color"></div><div class="col-md-3"><label class="form-label">尺寸说明</label><input class="form-control" name="SizeDetails"></div><div class="col-md-3"><label class="form-label">币种</label><select class="form-select" name="Currency"><option>CNY</option><option>USD</option></select></div><div class="col-md-4"><label class="form-label">单价</label><input class="form-control" name="UnitPrice" type="number" min="0" step=".0001"></div><div class="col-md-4"><label class="form-label">MOQ</label><input class="form-control" name="Moq" type="number" min="0" step=".001"></div><div class="col-md-4"><label class="form-label">交期/天</label><input class="form-control" name="LeadDays" type="number" min="0"></div><div class="col-md-4"><label class="form-label">有效日期</label><input class="form-control" name="ValidUntil" type="date"></div><div class="col-md-4"><label class="form-label">状态</label><select class="form-select" name="Status"><option value="draft">草稿</option><option value="sent">已询价</option><option value="quoted">已报价</option><option value="closed">已关闭</option></select></div><div class="col-md-4"><label class="form-label">条款</label><input class="form-control" name="Terms"></div><div class="col-12"><label class="form-label">参数详情</label><textarea class="form-control" name="ParameterDetails" rows="2"></textarea></div><div class="col-12"><label class="form-label">备注</label><textarea class="form-control" name="Notes" rows="2"></textarea></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存本次报价</button></div></form></div></div></div>
- <div class="modal fade" id="sampleModal" tabindex="-1"><div class="modal-dialog modal-lg modal-dialog-centered"><div class="modal-content"><form asp-action="SavePlanSample" asp-route-planId="@plan.Id" method="post"><div class="modal-header"><div><h2 class="modal-title fs-5">添加样品记录</h2><p class="mb-0 text-muted">样品记录仅属于当前采购计划。</p></div><button class="btn-close" type="button" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="row g-3"><div class="col-md-6"><label class="form-label">计划产品</label><select class="form-select" name="PlanItemId" required><option value="">请选择</option>@foreach(var item in plan.Items){<option value="@item.Id">@item.ProductName</option>}</select></div><div class="col-md-6"><label class="form-label">公司供应商（可选）</label><select class="form-select" name="SupplierId"><option value="">未指定</option>@foreach(var supplier in data.Suppliers.Where(x=>x.Status=="active")){<option value="@supplier.Id">@supplier.Name</option>}</select></div><div class="col-md-4"><label class="form-label">数量</label><input class="form-control" name="Quantity" type="number" min=".001" step=".001" value="1" required></div><div class="col-md-4"><label class="form-label">状态</label><select class="form-select" name="Status"><option value="requested">已申请</option><option value="received">已收到</option><option value="approved">已确认</option><option value="rejected">不合格</option></select></div><div class="col-md-4"><label class="form-label">成本 CNY</label><input class="form-control" name="CostCny" type="number" min="0" step=".01" value="0"></div><div class="col-md-6"><label class="form-label">物流单号</label><input class="form-control" name="TrackingNumber"></div><div class="col-md-6"><label class="form-label">说明</label><input class="form-control" name="Notes"></div></div></div><div class="modal-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">取消</button><button class="btn btn-primary" type="submit">保存样品</button></div></form></div></div></div>
-}

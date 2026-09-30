@@ -6,7 +6,7 @@
         <span class="brand-copy"><strong>EggRack</strong><small>Operations</small></span>
     </a>
     <nav class="sidebar-nav" aria-label="主导航">
-        <span class="nav-section-label">Workspace</span>
+        <span class="nav-section-label">工作区</span>
         @foreach (var item in Model.Items)
         {
             if (item.Children is { Count: > 0 })
@@ -40,7 +40,7 @@
     <div class="sidebar-footer">
         <a class="sidebar-user" href="/account" title="@Model.DisplayName">
             <span class="avatar">@avatarText</span>
-            <span class="sidebar-user-copy"><strong>@Model.DisplayName</strong><small>Operations user</small></span>
+            <span class="sidebar-user-copy"><strong>@Model.DisplayName</strong><small>运营人员</small></span>
             <i class="bi bi-chevron-right" aria-hidden="true"></i>
         </a>
         <button class="sidebar-control" id="sidebarToggle" type="button" aria-label="切换导航">

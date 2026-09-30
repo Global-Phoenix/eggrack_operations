@@ -86,8 +86,18 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     }
 
     [HttpGet("sourcing")]
-    public async Task<IActionResult> Sourcing(CancellationToken token) =>
-        View("Sourcing",new SourcingPageViewModel(await procurement.GetPlansAsync(token)));
+    public async Task<IActionResult> Sourcing(CancellationToken token)
+    {
+        var plansTask=procurement.GetPlansAsync(token);
+        var authorizationTask=currentStaff.LoadAsync(token);
+        await Task.WhenAll(plansTask,authorizationTask);
+        var authorization=await authorizationTask;
+        bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
+        return View("Sourcing",new SourcingPageViewModel(
+            await plansTask,
+            Has("wholesale.purchase-quote.review"),
+            Has("wholesale.purchase-quote.final-approve")));
+    }
 
     [HttpGet("suppliers")]
     public async Task<IActionResult> SupplierDirectory([FromQuery]string? keyword,CancellationToken token) =>

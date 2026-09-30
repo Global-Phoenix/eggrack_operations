@@ -7,6 +7,11 @@ namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
 
 public sealed partial class ProcurementDataService
 {
+    private sealed class PlanSupplierLink
+    {
+        public uint SupplierId { get; set; }
+    }
+
     private sealed record PlanStatusRow(byte Status);
     private sealed record ProductCostTotal(decimal ProductCostCny);
     private sealed record PlanFileAccess(uint Id,string OriginalName,string StoragePath,string MimeType,uint FileSize,string VisibilityCode);
@@ -33,7 +38,8 @@ public sealed partial class ProcurementDataService
               (SELECT COUNT(*) FROM procurement_suppliers s WHERE
                 EXISTS(SELECT 1 FROM procurement_inquiries q JOIN purchase_plan_items qi ON qi.id=q.plan_item_id WHERE qi.plan_id=p.id AND q.supplier_id=s.id AND q.is_current=1)
                 OR EXISTS(SELECT 1 FROM procurement_candidate_products c JOIN purchase_plan_items ci ON ci.id=c.plan_item_id WHERE ci.plan_id=p.id AND c.supplier_id=s.id)
-                OR EXISTS(SELECT 1 FROM procurement_samples x JOIN purchase_plan_items xi ON xi.id=x.plan_item_id WHERE xi.plan_id=p.id AND x.supplier_id=s.id)) SupplierCount,
+                OR EXISTS(SELECT 1 FROM procurement_samples x JOIN purchase_plan_items xi ON xi.id=x.plan_item_id WHERE xi.plan_id=p.id AND x.supplier_id=s.id)
+                OR EXISTS(SELECT 1 FROM procurement_workflow_events e WHERE e.plan_id=p.id AND e.event_code='supplier.created-from-plan' AND e.entity_type='supplier' AND e.entity_id=s.id)) SupplierCount,
               (SELECT COUNT(DISTINCT q.plan_item_id) FROM procurement_inquiries q JOIN purchase_plan_items qi ON qi.id=q.plan_item_id WHERE qi.plan_id=p.id AND q.is_current=1 AND q.unit_price_cny IS NOT NULL) QuotedProductCount,
               (SELECT COUNT(*) FROM procurement_selected_inquiries x JOIN purchase_plan_items xi ON xi.id=x.plan_item_id WHERE xi.plan_id=p.id) SelectedQuoteCount,
               (SELECT COUNT(*) FROM purchase_plan_files f WHERE f.plan_id=p.id AND f.status=1) FileCount,
@@ -149,12 +155,17 @@ public sealed partial class ProcurementDataService
             FROM procurement_samples x
             JOIN purchase_plan_items i ON i.id=x.plan_item_id
             LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id
-            WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC
+            WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC;
+            SELECT DISTINCT s.id SupplierId
+            FROM procurement_workflow_events e
+            JOIN procurement_suppliers s ON s.id=e.entity_id AND s.status='active'
+            WHERE e.plan_id=@PlanId AND e.event_code='supplier.created-from-plan' AND e.entity_type='supplier'
             """,async rows=>new PurchasePlanSourcingData(
                 (await rows.ReadAsync<SupplierListItem>()).ToList(),
                 (await rows.ReadAsync<CandidateProductItem>()).ToList(),
                 (await rows.ReadAsync<InquiryItem>()).ToList(),
-                (await rows.ReadAsync<SampleItem>()).ToList()),
+                (await rows.ReadAsync<SampleItem>()).ToList(),
+                (await rows.ReadAsync<PlanSupplierLink>()).Select(x=>x.SupplierId).ToList()),
             new{PlanId=planId},cancellationToken:token);
     }
 
@@ -192,15 +203,11 @@ public sealed partial class ProcurementDataService
             FROM procurement_samples x JOIN purchase_plan_items i ON i.id=x.plan_item_id
             LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id
             WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC;
-            SELECT id Id,type_code Code,type_name Name,description Description,
-              allowed_extensions AllowedExtensions,max_file_size_mb MaxFileSizeMb
-            FROM procurement_file_types WHERE is_active=1 ORDER BY sort_order,id
             """,async rows=>new PurchasePlanFilesData(
                 (await rows.ReadAsync<PurchasePlanFileDetail>()).ToList(),
                 (await rows.ReadAsync<SupplierListItem>()).ToList(),
                 (await rows.ReadAsync<InquiryItem>()).ToList(),
-                (await rows.ReadAsync<SampleItem>()).ToList(),
-                (await rows.ReadAsync<ProcurementManagedOption>()).ToList()),
+                (await rows.ReadAsync<SampleItem>()).ToList()),
             new{PlanId=planId},cancellationToken:token);
     }
 
@@ -425,7 +432,7 @@ public sealed partial class ProcurementDataService
                 "SELECT id Id,request_id RequestId,request_version_id RequestVersionId,total_cost_usd TotalCostUsd,profit_rate ProfitRate,status Status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",
                 new{PlanId=planId},cancellationToken:transactionToken);
             var plan=plans.SingleOrDefault()??throw new BusinessRuleException("采购计划不存在。","procurement.plan.missing");
-            if(plan.Status!=4)throw new BusinessRuleException("只有 Boss 已确认的采购计划可以生成 PI。","procurement.pi.plan-state");
+            if(plan.Status!=4)throw new BusinessRuleException("只有最终报价审核通过的采购计划可以生成 PI。","procurement.pi.plan-state");
             var quote=(await db.QueryAsync<decimal>(
                 "SELECT approved_quote_amount_usd FROM purchase_plans WHERE id=@PlanId",
                 new{PlanId=planId},cancellationToken:transactionToken)).Single();
@@ -472,7 +479,7 @@ public sealed partial class ProcurementDataService
             if(command.DiscountAmount>lineAmounts.Sum()+command.PackagingFee+command.ShippingFee+command.OtherFee)
                 throw new BusinessRuleException("折扣不能大于 PI 小计。","procurement.pi.discount-invalid");
             if(Math.Abs(totals.TotalAmount-header.ApprovedQuoteUsd)>.01m)
-                throw new BusinessRuleException($"PI 总额必须等于 Boss 已确认报价 USD {header.ApprovedQuoteUsd:N2}。","procurement.pi.total-mismatch");
+                throw new BusinessRuleException($"PI 总额必须等于最终审核确认报价 USD {header.ApprovedQuoteUsd:N2}。","procurement.pi.total-mismatch");
             long? validUntil=command.ValidUntil.HasValue
                 ?new DateTimeOffset(DateTime.SpecifyKind(command.ValidUntil.Value.Date,DateTimeKind.Utc)).ToUnixTimeSeconds():null;
             await db.ExecuteAsync("""

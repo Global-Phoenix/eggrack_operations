@@ -6,22 +6,25 @@
 }
 <section class="proc purchase-plan-detail" data-procurement-plan-details data-plan-id="@plan.Id">
 @await Component.InvokeAsync("PageHeader",new{title=plan.PlanNumber,subtitle=$"{plan.CustomerName} · {plan.RequestNumber} V{plan.RequestVersion} · 更新于 {plan.UpdatedAtUtc.ToLocalTime():yyyy-MM-dd HH:mm}",parentTitle="采购计划",parentUrl=Url.Action("Sourcing"),statusText=status.Text,statusTone=status.Tone})
-@if(TempData["Success"] is string success){<div class="alert alert-success">@success</div>}
+@if(TempData["Success"] is string success){<div class="d-none" data-plan-flash data-kind="success" data-message="@success"></div>}
 @if(TempData["Warning"] is string warning){<div class="alert alert-warning">@warning</div>}
 @if(TempData["Error"] is string error){<div class="alert alert-danger">@error</div>}
 <ul class="nav nav-tabs request-detail-tabs" role="tablist">
  <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#planOverview" type="button" data-plan-tab="overview">概览</button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planSourcing" type="button" data-plan-tab="sourcing">供应商与询价 <span>@plan.InquiryCount</span></button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planSourcing" type="button" data-plan-tab="sourcing">寻源与询价 <span>@plan.InquiryCount</span></button></li>
  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planProducts" type="button" data-plan-tab="products">产品采购 <span>@plan.Items.Count</span></button></li>
  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planFiles" type="button" data-plan-tab="files">文件 <span>@plan.FileCount</span></button></li>
- <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planCost" type="button" data-plan-tab="cost">成本与报价</button></li>
+ <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planCost" type="button" data-plan-tab="cost">成本与报价
+  @if(plan.Status==3){<span class="plan-tab-state">待部门审核</span>}
+  else if(plan.Status==6){<span class="plan-tab-state">待最终审核</span>}
+ </button></li>
  <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#planActivity" type="button" data-plan-tab="activity">记录 <span>@plan.EventCount</span></button></li>
 </ul>
 <div class="tab-content request-detail-content">
  <div class="tab-pane fade show active" id="planOverview">
-  @{var missingPrices=plan.Items.Count(x=>!x.PurchaseUnitPriceCny.HasValue);var sourcingDone=plan.Items.Count>0&&plan.SelectedQuoteCount==plan.Items.Count;var procurementDone=plan.Items.Count>0&&missingPrices==0;var costDone=plan.TotalCostCny>0;var bossDone=plan.Status is 4 or 5 or 8;}
+  @{var missingPrices=plan.Items.Count(x=>!x.PurchaseUnitPriceCny.HasValue);var sourcingDone=plan.Items.Count>0&&plan.SelectedQuoteCount==plan.Items.Count;var procurementDone=plan.Items.Count>0&&missingPrices==0;var costDone=plan.TotalCostCny>0;var finalApprovalDone=plan.Status is 4 or 5 or 8;}
   <div class="plan-dashboard-head">
-   <div><span class="ui-eyebrow">Purchase Plan Dashboard</span><h2>@plan.CustomerName</h2><p><a href="/wholesale/procurement/requests/@plan.RequestId/details">@plan.RequestNumber · V@(plan.RequestVersion)</a> · @plan.CustomerEmail</p></div>
+   <div><h2>@plan.CustomerName</h2><p><a href="/wholesale/procurement/requests/@plan.RequestId/details">@plan.RequestNumber · V@(plan.RequestVersion)</a> · @plan.CustomerEmail</p></div>
    <dl><div><dt>采购负责人</dt><dd>@Display(plan.AssignedBuyerName)</dd></div><div><dt>优先级</dt><dd>@plan.Priority</dd></div><div><dt>计划说明</dt><dd>@Display(plan.InternalNote)</dd></div></dl>
   </div>
   <div class="plan-dashboard-metrics">
@@ -30,7 +33,7 @@
    <div class="@(missingPrices>0?"needs-action":null)"><i class="bi bi-currency-yen"></i><span>待确认采购价</span><strong>@missingPrices</strong></div>
    <div><i class="bi bi-folder2-open"></i><span>采购文件</span><strong>@plan.FileCount</strong></div>
    <div><i class="bi bi-calculator"></i><span>成本</span><strong>@(costDone?"已完成":"未完成")</strong></div>
-   <div><i class="bi bi-person-check"></i><span>Boss 审核</span><strong>@(bossDone?"已确认":plan.Status==6?"待确认":"未提交")</strong></div>
+   <div><i class="bi bi-person-check"></i><span>最终审核</span><strong>@(finalApprovalDone?"已确认":plan.Status==6?"待确认":"未提交")</strong></div>
   </div>
   <section class="ui-panel plan-progress-panel">
    <div class="er-section-header"><div><h2>采购进度</h2><p>当前状态与下一步工作。</p></div></div>
@@ -39,7 +42,7 @@
     <li class="@(sourcingDone?"done":plan.InquiryCount>0?"active":null)"><i class="bi @(sourcingDone?"bi-check":"bi-search")"></i><span>供应商询价</span></li>
     <li class="@(procurementDone?"done":sourcingDone?"active":null)"><i class="bi @(procurementDone?"bi-check":"bi-cart-check")"></i><span>产品采购确认</span></li>
     <li class="@(costDone?"done":procurementDone?"active":null)"><i class="bi @(costDone?"bi-check":"bi-calculator")"></i><span>成本与报价</span></li>
-    <li class="@(bossDone?"done":plan.Status==6?"active":null)"><i class="bi @(bossDone?"bi-check":"bi-person-check")"></i><span>Boss 确认</span></li>
+    <li class="@(finalApprovalDone?"done":plan.Status==6?"active":null)"><i class="bi @(finalApprovalDone?"bi-check":"bi-person-check")"></i><span>最终确认</span></li>
     <li class="@(plan.LatestInvoiceStatus==3?"done":plan.LatestInvoiceStatus.HasValue?"active":null)"><i class="bi @(plan.LatestInvoiceStatus==3?"bi-check":"bi-receipt")"></i><span>PI</span></li>
    </ol>
   </section>
@@ -47,29 +50,29 @@
    <section class="ui-panel overflow-hidden">
     <div class="er-section-header p-3 mb-0"><div><h2>产品状态</h2><p>按计划产品查看询价、采购价、负责人和文件完整度。</p></div><button class="btn btn-sm btn-outline-primary" type="button" data-open-plan-tab="products">进入产品采购</button></div>
     <div class="table-responsive"><table class="table align-middle mb-0"><thead><tr><th>计划产品</th><th>询价</th><th>选中供应商</th><th>采购单价</th><th>采购人员</th><th>文件</th><th></th></tr></thead><tbody>
-    @foreach(var item in plan.Items){<tr><td><strong>@item.ProductName</strong><small class="ui-cell-secondary">@item.Quantity.ToString("0.###") @item.Unit</small></td><td>@item.QuoteCount 条</td><td>@Display(item.SelectedSupplierName)<small class="ui-cell-secondary">@Display(item.SelectedSupplierProductName)</small></td><td>@(item.PurchaseUnitPriceCny.HasValue?$"CNY {item.PurchaseUnitPriceCny:N4}":"待确认")</td><td>@Display(item.BuyerName)</td><td>@item.FileCount</td><td class="text-end"><button class="btn btn-sm btn-link" type="button" data-open-plan-tab="@(item.PurchaseUnitPriceCny.HasValue?"sourcing":"products")">处理</button></td></tr>}
+    @foreach(var item in plan.Items){<tr><td><strong>@item.ProductName</strong><small class="ui-cell-secondary">@item.Quantity.ToString("0.###") @item.Unit</small></td><td>@item.QuoteCount 条</td><td>@Display(item.SelectedSupplierName)<small class="ui-cell-secondary">@Display(item.SelectedSupplierProductName)</small></td><td>@(item.PurchaseUnitPriceCny.HasValue?$"CNY {item.PurchaseUnitPriceCny:N4}":"待确认")</td><td>@Display(item.BuyerName)</td><td>@item.FileCount</td><td class="text-end"><button class="btn btn-sm btn-link" type="button" data-open-plan-tab="@(string.IsNullOrWhiteSpace(item.SelectedSupplierName)?"sourcing":"products")">处理</button></td></tr>}
     </tbody></table></div>
    </section>
    <aside class="ui-action-rail">
-    <section><h3>下一步</h3>@if(plan.InquiryCount==0){<p>先为计划产品绑定供应商并录入询价。</p><button class="btn btn-primary w-100" type="button" data-open-plan-tab="sourcing">开始供应商询价</button>}else if(!procurementDone){<p>还有 @missingPrices 个产品未确认最终采购价。</p><button class="btn btn-primary w-100" type="button" data-open-plan-tab="products">确认产品采购</button>}else if(!costDone){<p>产品采购已确认，可以完成计划级成本核算。</p><button class="btn btn-primary w-100" type="button" data-open-plan-tab="cost">核算成本与报价</button>}else{<p>当前阶段数据已准备，请按审批状态继续处理。</p><button class="btn btn-outline-primary w-100" type="button" data-open-plan-tab="cost">查看报价流程</button>}</section>
+    <section><h3>下一步</h3>@if(plan.Status==6){<p>部门审核已通过，当前等待最终销售价格确认。</p><button class="btn @(Model.CanFinalApprove?"btn-primary":"btn-outline-primary") w-100" type="button" data-open-plan-tab="cost">@(Model.CanFinalApprove?"审核最终价格":"查看终审进度")</button>@if(!Model.CanFinalApprove){<small class="ui-action-hint">当前账号没有最终审核权限，请由具备该权限的人员处理。</small>}}else if(plan.Status==3){<p>成本已提交，当前等待部门负责人审核建议报价。</p><button class="btn @(Model.CanReviewQuote?"btn-primary":"btn-outline-primary") w-100" type="button" data-open-plan-tab="cost">@(Model.CanReviewQuote?"进行部门审核":"查看审核进度")</button>}else if(plan.InquiryCount==0){<p>先为计划产品绑定供应商并录入询价。</p><button class="btn btn-primary w-100" type="button" data-open-plan-tab="sourcing">开始供应商询价</button>}else if(!procurementDone){<p>还有 @missingPrices 个产品未确认最终采购价。</p><button class="btn btn-primary w-100" type="button" data-open-plan-tab="products">确认产品采购</button>}else if(!costDone){<p>产品采购已确认，可以完成计划级成本核算。</p><button class="btn btn-primary w-100" type="button" data-open-plan-tab="cost">核算成本与报价</button>}else{<p>当前阶段数据已准备，请按审批状态继续处理。</p><button class="btn btn-outline-primary w-100" type="button" data-open-plan-tab="cost">查看报价流程</button>}</section>
     <section><h3>当前金额</h3><dl class="prototype-facts"><div><dt>产品成本 CNY</dt><dd>@(plan.ProductCostCny>0?plan.ProductCostCny.ToString("N2"):"—")</dd></div><div><dt>计划总成本 CNY</dt><dd>@(plan.TotalCostCny>0?plan.TotalCostCny.ToString("N2"):"—")</dd></div><div><dt>最终报价 USD</dt><dd>@(plan.ApprovedQuoteUsd>0?plan.ApprovedQuoteUsd.ToString("N2"):"—")</dd></div></dl></section>
    </aside>
   </div>
  </div>
- <div class="tab-pane fade" id="planSourcing" data-plan-lazy-pane data-url="@Url.Action("PlanTab",new{planId=plan.Id,tab="sourcing"})">@await Html.PartialAsync("_PlanTabLoading", "供应商与询价")</div>
+ <div class="tab-pane fade" id="planSourcing" data-plan-lazy-pane data-url="@Url.Action("PlanTab",new{planId=plan.Id,tab="sourcing"})">@await Html.PartialAsync("_PlanTabLoading", "寻源与询价")</div>
  <div class="tab-pane fade" id="planProducts">
   <div class="er-section-header"><div><h2>产品采购</h2><p>客户需求为只读参考；采购人员、采购单价和备注属于采购计划数据。</p></div></div>
   <div class="plan-product-procurement-list">
   @foreach(var item in plan.Items){
-   <article class="plan-product-procurement">
+   <article class="plan-product-procurement" data-product-procurement-item="@item.Id">
     <header><div><span class="ui-version">@(item.RequestItemId.HasValue?"申请快照":"内部新增")</span><h3>@item.ProductName</h3><p>@item.Quantity.ToString("0.###") @item.Unit · SKU @Display(item.Sku) · @Display(item.Brand)</p></div><strong>@(item.LineCostCny.HasValue?$"CNY {item.LineCostCny:N2}":"待录入采购价")</strong></header>
     <div class="customer-requirement-snapshot"><strong>客户需求快照</strong><span>规格：@Display(item.Specifications)</span><span>颜色：@Display(item.Color)</span><span>尺寸：@Display(item.Size)</span><span>包装：@Display(item.PackagingRequirements)</span><span>定制：@Display(item.CustomizationRequirements)</span><span>客户说明：@Display(item.CustomerNote)</span></div>
-    <div class="selected-supplier-reference"><span>Selected Supplier</span><strong>@Display(item.SelectedSupplierName)</strong><span>@Display(item.SelectedSupplierProductName)</span><span>@(item.SelectedSupplierUnitPrice.HasValue?$"{item.SelectedSupplierCurrency} {item.SelectedSupplierUnitPrice:N4}":"尚未选择供应商报价")</span></div>
+    <div class="selected-supplier-reference"><span>已选择采购方案</span><strong data-selected-supplier>@Display(item.SelectedSupplierName)</strong><span data-selected-product>@Display(item.SelectedSupplierProductName)</span><span data-selected-quote>@(item.SelectedSupplierUnitPrice.HasValue?$"{item.SelectedSupplierCurrency} {item.SelectedSupplierUnitPrice:N4}":"尚未选择供应商报价")</span><button class="btn btn-sm btn-link" type="button" data-open-plan-tab="sourcing">查看询价</button></div>
     @if(Model.CanExecuteProcurement&&plan.Status is 1 or 2 or 7){
     <form asp-action="SavePlanItemProcurement" asp-route-planId="@plan.Id" method="post" class="row g-3 mt-1">
      <input type="hidden" name="ItemId" value="@item.Id">
      <div class="col-md-4"><label class="form-label">采购人员</label><select class="form-select" name="BuyerId" required><option value="">请选择采购人员</option>@foreach(var buyer in Model.Buyers){if(item.BuyerId==buyer.Id){<option value="@buyer.Id" selected>@buyer.Name</option>}else{<option value="@buyer.Id">@buyer.Name</option>}}</select></div>
-     <div class="col-md-3"><label class="form-label">最终采购单价 CNY</label><input class="form-control" name="PurchaseUnitPriceCny" type="number" min="0" step="0.0001" value="@item.PurchaseUnitPriceCny" required></div>
+     <div class="col-md-3"><label class="form-label">最终采购单价 CNY</label><input class="form-control" name="PurchaseUnitPriceCny" type="number" min="0" step="0.0001" value="@item.PurchaseUnitPriceCny" data-purchase-unit-price required></div>
      <div class="col-md-5"><label class="form-label">备注</label><input class="form-control" name="InternalNote" value="@item.InternalNote"></div>
      <div class="col-12"><button class="btn btn-primary" type="submit">保存产品采购信息</button></div>
     </form>}else{<dl class="ui-fact-grid compact mt-3"><div><dt>采购人员</dt><dd>@Display(item.BuyerName)</dd></div><div><dt>采购单价</dt><dd>@(item.PurchaseUnitPriceCny.HasValue?$"CNY {item.PurchaseUnitPriceCny:N4}":"—")</dd></div><div><dt>备注</dt><dd>@Display(item.InternalNote)</dd></div></dl>}
