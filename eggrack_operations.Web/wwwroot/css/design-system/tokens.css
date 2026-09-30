@@ -29,6 +29,11 @@
   --er-radius-sm:5px;
   --er-radius-md:8px;
   --er-radius-lg:12px;
+  --er-gap-2:2px;
+  --er-gap-4:4px;
+  --er-gap-8:8px;
+  --er-gap-16:16px;
+  --er-gap-32:32px;
   --er-space-1:4px;
   --er-space-2:8px;
   --er-space-3:12px;
@@ -49,7 +54,7 @@
   --er-line-body:1.6;
   --er-control-height:40px;
   --er-table-row-height:62px;
-  --er-content-padding:28px;
+  --er-content-padding:16px;
   --er-content-max:1760px;
   --er-sidebar-expanded:256px;
   --er-sidebar-collapsed:76px;

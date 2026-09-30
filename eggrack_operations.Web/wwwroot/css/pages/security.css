@@ -19,3 +19,12 @@
 .staff-panel-empty{min-height:300px;padding:32px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;color:#94a3b8;text-align:center}.staff-panel-empty i{width:46px;height:46px;margin-bottom:4px;display:grid;place-items:center;border-radius:12px;background:#f1f5f9;font-size:20px}.staff-panel-empty strong{color:#475569;font-size:13px}.staff-panel-empty span{font-size:11px}
 @media(max-width:991.98px){.staff-workspace{grid-template-columns:1fr}.staff-department-nav{border-right:0;border-bottom:1px solid #e7ecf2}.staff-department-nav-header{height:48px}.staff-department-nav-list{overflow-x:auto;flex-direction:row}.staff-department-link{min-width:180px}.staff-people-header .staff-department-title small{display:block}}
 @media(max-width:767.98px){.staff-department-link{min-width:155px}.staff-people-header{padding:12px 14px}.staff-people-header .staff-department-title small{display:none}.staff-panel-empty{min-height:220px}}
+
+/* Keep the staff workspace aligned with the shared 2 / 4 / 8 / 16 / 32px spacing scale. */
+.staff-toolbar{gap:var(--er-gap-16);margin-bottom:var(--er-gap-16);padding:var(--er-gap-16)}
+.staff-search{gap:var(--er-gap-8);max-width:640px}.staff-search .input-group-text,.staff-search .form-control{height:40px}
+.staff-overview{gap:var(--er-gap-16)}.staff-overview span+span{padding-left:var(--er-gap-16)}.staff-overview strong{margin-right:var(--er-gap-4)}
+.staff-workspace{border-radius:8px}.staff-department-nav-header{height:56px;padding:0 var(--er-gap-16)}.staff-department-nav-list{padding:var(--er-gap-8);gap:var(--er-gap-4)}
+.staff-department-link{min-height:48px;padding:var(--er-gap-8);gap:var(--er-gap-8)}.staff-people-header{min-height:64px;padding:var(--er-gap-8) var(--er-gap-16);gap:var(--er-gap-8)}
+@media(max-width:991.98px){.staff-toolbar{gap:var(--er-gap-8)}.staff-department-nav-header{height:48px}}
+@media(max-width:767.98px){.staff-people-header{padding:var(--er-gap-8)}}
