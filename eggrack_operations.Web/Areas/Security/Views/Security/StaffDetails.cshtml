@@ -1,0 +1,31 @@
+@model StaffDetailsViewModel
+@{
+ ViewData["Title"]=$"{Model.Staff.StaffName} 详情";
+}
+@await Component.InvokeAsync("PageHeader",new{title=Model.Staff.StaffName,subtitle=$"{Model.UserName} · {Model.Staff.StaffRef}",parentTitle="人员",parentUrl=Url.Action("Staff"),statusText=Model.Staff.IsEnabled?"启用":"停用",statusTone=Model.Staff.IsEnabled?"success":"danger"})
+@if(TempData["Success"] is string success){<div class="alert alert-success">@success</div>}
+@if(TempData["Error"] is string error){<div class="alert alert-danger">@error</div>}
+<div class="row g-3">
+ <div class="col-xl-7">
+  <section class="ui-panel p-4">
+   <div class="er-section-header"><div><h2>人员资料</h2><p>维护登录账号、姓名、邮箱与主部门。</p></div></div>
+   <form asp-action="UpdateStaff" method="post" class="row g-3">
+    <input type="hidden" name="StaffId" value="@Model.Staff.Id"><input type="hidden" name="StaffRef" value="@Model.Staff.StaffRef">
+    <div class="col-md-6"><label class="form-label">用户名</label><input class="form-control" name="UserName" value="@Model.UserName" required readonly="@(Model.CanUpdateStaff?null:"readonly")"></div>
+    <div class="col-md-6"><label class="form-label">姓名</label><input class="form-control" name="StaffName" value="@Model.Staff.StaffName" required readonly="@(Model.CanUpdateStaff?null:"readonly")"></div>
+    <div class="col-md-6"><label class="form-label">邮箱</label><input class="form-control" type="email" name="Email" value="@Model.Staff.Email" required readonly="@(Model.CanUpdateStaff?null:"readonly")"></div>
+    <div class="col-md-6"><label class="form-label">主部门</label><select class="form-select" name="PrimaryDepartmentId" disabled="@(Model.CanUpdateStaff?null:"disabled")"><option value="">全局人员</option>@foreach(var department in Model.Departments){if(Model.Staff.PrimaryDepartmentId==department.Id){<option value="@department.Id" selected>@department.Name</option>}else{<option value="@department.Id">@department.Name</option>}}</select></div>
+    @if(Model.CanUpdateStaff){<div class="col-12"><button class="btn btn-primary" type="submit">保存人员资料</button></div>}
+   </form>
+  </section>
+ </div>
+ <div class="col-xl-5">
+  <section class="ui-panel p-4">
+   <div class="er-section-header"><div><h2>角色与部门</h2><p>角色授权仍在人员列表统一维护。</p></div><a asp-action="Staff">管理授权</a></div>
+   <div>
+   @foreach(var assignment in Model.Assignments){<div class="d-flex justify-content-between border-bottom py-3"><span><strong class="d-block">@assignment.RoleName</strong><small class="text-secondary">@assignment.RoleCode</small></span><span>@(assignment.DepartmentName??"全局")</span></div>}
+   @if(Model.Assignments.Count==0){<div class="compact-empty"><i class="bi bi-shield-exclamation"></i><span>该人员尚未分配角色。</span></div>}
+   </div>
+  </section>
+ </div>
+</div>

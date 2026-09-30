@@ -2,45 +2,47 @@
 @using System.Text.Json
 @{
     ViewData["Title"] = "文件中心";
-    var purchaseData = Model.PurchaseFiles.Select(file => new object[]
+    var purchaseData = Model.PurchaseFiles.Select(file => new
     {
-        file.OriginalName,
-        file.FileType,
-        file.FileSizeText,
-        file.CategoryName,
-        file.SourceNumber,
-        file.UploadedBy,
-        file.UploadedAtUtc.ToString("yyyy-MM-dd"),
-        file.StatusLabel,
-        file.SourceKind,
-        file.FileId,
-        file.PreviewKind
+        name = file.OriginalName,
+        type = file.FileType,
+        size = file.FileSizeText,
+        customer = file.CategoryName,
+        sourceNumber = file.SourceNumber,
+        sourceLabel = file.SourceLabel,
+        uploadedBy = file.UploadedBy,
+        uploadedDate = file.UploadedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+        sourceKind = file.SourceKind,
+        fileId = file.FileId,
+        previewKind = file.PreviewKind,
+        visibility = file.VisibilityLabel,
+        businessUrl = file.BusinessUrl
     });
 }
 
 @await Component.InvokeAsync("PageHeader", new {
-    title = "文件中心",
-    subtitle = "按实际会员与部门目录查找客户文件和内部文件",
+    title = "文件管理",
+    subtitle = "统一查询采购申请和采购计划附件；上传、分类及可见性在对应采购计划中管理",
     parentTitle = "业务管理",
     parentUrl = "/",
-    statusText = "只读",
-    statusTone = "secondary"
+    statusText = "采购业务文件",
+    statusTone = "primary"
 })
 
 
 <section class="file-center" data-file-center>
     <aside class="fc-sidebar">
         <div class="fc-sidebar-header">
-            <span><i class="bi bi-diagram-3"></i><span data-tree-title>客户</span></span>
+            <span><i class="bi bi-diagram-3"></i>客户</span>
             <small class="text-secondary">分类</small>
         </div>
         <div class="fc-category-list" data-categories></div>
     </aside>
 
     <div class="fc-content">
-        <div class="fc-tabs" role="tablist">
-            <button class="fc-tab active" type="button" data-mode="customer"><i class="bi bi-person-vcard"></i>客户文件</button>
-            <button class="fc-tab" type="button" data-mode="internal"><i class="bi bi-shield-lock"></i>内部文件</button>
+        <div class="fc-content-head">
+            <span><i class="bi bi-folder2-open"></i>采购业务文件</span>
+            <small>共 @Model.PurchaseFiles.Count 个有效文件</small>
         </div>
 
         <div class="ui-toolbar">
@@ -54,14 +56,11 @@
             <select class="form-select ui-filter" data-range aria-label="文件日期">
                 <option value="">全部日期</option><option value="week">近 7 天</option><option value="month">近 30 天</option>
             </select>
-            <button class="btn btn-outline-secondary fc-policy" type="button" data-policy>
-                <i class="bi bi-clock-history"></i> 清理策略
-            </button>
         </div>
 
         <div class="ui-data-table">
             <table class="table table-hover align-middle">
-                <thead><tr><th>文件</th><th data-group-head>来源单号</th><th>上传信息</th><th class="text-end"></th></tr></thead>
+                <thead><tr><th>文件</th><th>业务来源</th><th>上传信息</th><th class="text-end"></th></tr></thead>
                 <tbody data-rows></tbody>
             </table>
             <div class="fc-empty" data-empty>
@@ -85,7 +84,8 @@
             <div data-detail-meta></div>
         </div>
         <div class="fc-detail-actions">
-            <button class="btn btn-outline-secondary flex-fill" type="button" data-secondary disabled><i class="bi bi-link-45deg"></i> 复制链接</button>
+            <button class="btn btn-outline-secondary flex-fill" type="button" data-open-source disabled><i class="bi bi-box-arrow-up-right"></i> 打开业务</button>
+            <button class="btn btn-outline-secondary flex-fill" type="button" data-secondary disabled><i class="bi bi-link-45deg"></i> 复制内部链接</button>
             <button class="btn btn-primary flex-fill" type="button" data-primary disabled><i class="bi bi-download"></i> 下载</button>
         </div>
     </aside>

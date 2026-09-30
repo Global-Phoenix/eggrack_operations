@@ -13,7 +13,30 @@ public sealed record StaffIndexViewModel(
     IReadOnlyList<StaffListItem> Staff,
     IReadOnlyList<RoleListItem> Roles,
     IReadOnlyList<DepartmentOption> Departments,
-    IReadOnlyList<StaffRoleAssignment> Assignments);
+    IReadOnlyList<StaffRoleAssignment> Assignments,
+    bool CanCreateStaff,
+    bool CanUpdateStaff,
+    bool CanAssignRole,
+    bool CanRevokeRole,
+    bool CanDisableStaff);
+
+public sealed record StaffDetailsViewModel(
+    StaffListItem Staff,
+    string UserName,
+    IReadOnlyList<RoleListItem> Roles,
+    IReadOnlyList<DepartmentOption> Departments,
+    IReadOnlyList<StaffRoleAssignment> Assignments,
+    bool CanUpdateStaff);
+
+public sealed class UpdateStaffInput
+{
+    public long StaffId { get; set; }
+    [Required] public string StaffRef { get; set; } = string.Empty;
+    [Required, StringLength(128)] public string UserName { get; set; } = string.Empty;
+    [Required, StringLength(128)] public string StaffName { get; set; } = string.Empty;
+    [Required, EmailAddress, StringLength(190)] public string Email { get; set; } = string.Empty;
+    public long? PrimaryDepartmentId { get; set; }
+}
 
 public sealed class AssignRoleInput
 {
@@ -58,7 +81,7 @@ public sealed class RevokeRoleInput
     public long AssignmentId { get; set; }
 }
 
-public sealed record DepartmentIndexViewModel(IReadOnlyList<DepartmentListItem> Departments);
+public sealed record DepartmentIndexViewModel(IReadOnlyList<DepartmentListItem> Departments,bool CanManage);
 
 public sealed class SaveDepartmentInput
 {
@@ -79,7 +102,8 @@ public sealed record DepartmentFormViewModel(string Code,string Name,long? Paren
 public sealed record RoleIndexViewModel(
     IReadOnlyList<RoleListItem> Roles,
     IReadOnlyList<PermissionListItem> Permissions,
-    IReadOnlyList<RolePermissionGrant> Grants);
+    IReadOnlyList<RolePermissionGrant> Grants,
+    bool CanManage);
 
 public sealed class SaveRolePermissionsInput
 {

@@ -1,25 +1,44 @@
 using System.Text.Json;
 using Dapper;
 using Eggrack.Operations.Application.Modules.Security;
+using Eggrack.Operations.Domain.Modules.Security;
 using Eggrack.Operations.Infrastructure.Database;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Security;
 
-public sealed class SecurityAdminService(DatabaseSessionFactory databases)
+public sealed class SecurityAdminService(DatabaseSessionFactory databases,CurrentAuthorizationContext authorizationContext)
 {
     private const string DatabaseName = "Eggrack";
+
+    public async Task EnsureStaffRefMatchesAsync(long staffId,string staffRef,CancellationToken cancellationToken=default)
+    {
+        if(staffId<=0||string.IsNullOrWhiteSpace(staffRef))throw new InvalidOperationException("人员标识无效");
+        await using var session=await databases.OpenMySqlAsync(DatabaseName,cancellationToken);
+        var count=(await session.QueryAsync<CountRow>(
+            "SELECT COUNT(*) Value FROM eggrack_auth_staff WHERE id=@StaffId AND staff_ref=@StaffRef AND deleted_at IS NULL",
+            new{StaffId=staffId,StaffRef=staffRef.Trim()},cancellationToken:cancellationToken)).Single().Value;
+        if(count!=1)throw new InvalidOperationException("人员编号与登录账号不匹配，请刷新后重试");
+    }
 
     public async Task<SecurityDashboard> GetDashboardAsync(CancellationToken cancellationToken = default)
     {
         const string sql = """
             SELECT
-              (SELECT COUNT(*) FROM eggrack_auth_staff WHERE deleted_at IS NULL) StaffCount,
-              (SELECT COUNT(*) FROM eggrack_auth_staff WHERE status=1 AND deleted_at IS NULL) EnabledStaffCount,
-              (SELECT COUNT(*) FROM eggrack_auth_department WHERE status=1 AND deleted_at IS NULL) DepartmentCount,
+              (SELECT COUNT(*) FROM eggrack_auth_staff s WHERE s.deleted_at IS NULL
+                AND (@AllowAll=1 OR (@AllowSelf=1 AND s.id=@CurrentStaffId)
+                  OR EXISTS(SELECT 1 FROM eggrack_auth_staff_department sd
+                    WHERE sd.staff_id=s.id AND sd.department_id IN @DepartmentIds))) StaffCount,
+              (SELECT COUNT(*) FROM eggrack_auth_staff s WHERE s.status=1 AND s.deleted_at IS NULL
+                AND (@AllowAll=1 OR (@AllowSelf=1 AND s.id=@CurrentStaffId)
+                  OR EXISTS(SELECT 1 FROM eggrack_auth_staff_department sd
+                    WHERE sd.staff_id=s.id AND sd.department_id IN @DepartmentIds))) EnabledStaffCount,
+              (SELECT COUNT(*) FROM eggrack_auth_department d WHERE d.status=1 AND d.deleted_at IS NULL
+                AND (@AllowAll=1 OR d.id IN @DepartmentIds)) DepartmentCount,
               (SELECT COUNT(*) FROM eggrack_auth_role WHERE status=1) RoleCount
             """;
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
-        return (await session.QueryAsync<SecurityDashboard>(sql, cancellationToken: cancellationToken)).Single();
+        var scope=Scope();
+        return (await session.QueryAsync<SecurityDashboard>(sql,new{scope.AllowAll,scope.AllowSelf,scope.CurrentStaffId,scope.DepartmentIds},cancellationToken: cancellationToken)).Single();
     }
 
     public async Task<IReadOnlyList<StaffListItem>> GetStaffAsync(string? keyword, CancellationToken cancellationToken = default)
@@ -27,6 +46,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         const string sql = """
             SELECT CAST(s.id AS SIGNED) Id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
               s.status=1 IsEnabled,
+              MAX(CASE WHEN sd.is_primary=1 THEN CAST(d.id AS SIGNED) END) PrimaryDepartmentId,
               COALESCE(MAX(CASE WHEN sd.is_primary=1 THEN d.department_name END),MIN(d.department_name),'全局人员') PrimaryDepartment,
               COALESCE(GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR '、'),'—') Departments,
               COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_level SEPARATOR '、'),'未授权') Roles
@@ -38,6 +58,9 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
               AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
             LEFT JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.status=1
             WHERE s.deleted_at IS NULL
+              AND (@AllowAll=1 OR (@AllowSelf=1 AND s.id=@CurrentStaffId)
+                OR EXISTS(SELECT 1 FROM eggrack_auth_staff_department scope_sd
+                  WHERE scope_sd.staff_id=s.id AND scope_sd.department_id IN @DepartmentIds))
               AND (@Keyword IS NULL OR s.staff_name LIKE CONCAT('%',@Keyword,'%')
                    OR s.staff_ref LIKE CONCAT('%',@Keyword,'%'))
             GROUP BY s.id,s.staff_ref,s.staff_name,s.email,s.status
@@ -45,7 +68,8 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
             LIMIT 200
             """;
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
-        return await session.QueryAsync<StaffListItem>(sql, new { Keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim() }, cancellationToken: cancellationToken);
+        var scope=Scope();
+        return await session.QueryAsync<StaffListItem>(sql, new { Keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim(),scope.AllowAll,scope.AllowSelf,scope.CurrentStaffId,scope.DepartmentIds }, cancellationToken: cancellationToken);
     }
 
     public async Task<(
@@ -59,6 +83,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         const string sql = """
             SELECT CAST(s.id AS SIGNED) Id, s.staff_ref StaffRef, s.staff_name StaffName, s.email,
               s.status=1 IsEnabled,
+              MAX(CASE WHEN sd.is_primary=1 THEN CAST(d.id AS SIGNED) END) PrimaryDepartmentId,
               COALESCE(MAX(CASE WHEN sd.is_primary=1 THEN d.department_name END),MIN(d.department_name),'全局人员') PrimaryDepartment,
               COALESCE(GROUP_CONCAT(DISTINCT d.department_name ORDER BY d.department_name SEPARATOR '、'),'—') Departments,
               COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.role_level SEPARATOR '、'),'未授权') Roles
@@ -70,6 +95,9 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
               AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
             LEFT JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.status=1
             WHERE s.deleted_at IS NULL
+              AND (@AllowAll=1 OR (@AllowSelf=1 AND s.id=@CurrentStaffId)
+                OR EXISTS(SELECT 1 FROM eggrack_auth_staff_department scope_sd
+                  WHERE scope_sd.staff_id=s.id AND scope_sd.department_id IN @DepartmentIds))
               AND (@Keyword IS NULL OR s.staff_name LIKE CONCAT('%',@Keyword,'%')
                    OR s.staff_ref LIKE CONCAT('%',@Keyword,'%'))
             GROUP BY s.id,s.staff_ref,s.staff_name,s.email,s.status
@@ -89,6 +117,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
             SELECT CAST(id AS SIGNED) Id,department_name Name
             FROM eggrack_auth_department
             WHERE status=1 AND deleted_at IS NULL
+              AND (@AllowAll=1 OR id IN @DepartmentIds)
             ORDER BY sort_order,department_name;
 
             SELECT CAST(sr.id AS SIGNED) Id,CAST(sr.staff_id AS SIGNED) StaffId,
@@ -102,9 +131,10 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
             """;
 
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
+        var scope=Scope();
         var command = new CommandDefinition(
             sql,
-            new { Keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim() },
+            new { Keyword = string.IsNullOrWhiteSpace(keyword) ? null : keyword.Trim(),scope.AllowAll,scope.AllowSelf,scope.CurrentStaffId,scope.DepartmentIds },
             cancellationToken: cancellationToken);
         using var results = await session.Connection.QueryMultipleAsync(command);
         var staff = (await results.ReadAsync<StaffListItem>()).AsList();
@@ -177,7 +207,7 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task SaveRolePermissionsAsync(long roleId, IReadOnlyCollection<long> permissionIds, string operatorRef, CancellationToken cancellationToken = default)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
-        var role = (await session.QueryAsync<RoleRule>("SELECT role_code Code FROM eggrack_auth_role WHERE id=@RoleId AND status=1", new { RoleId = roleId }, cancellationToken: cancellationToken)).SingleOrDefault()
+        var role = (await session.QueryAsync<RoleRule>("SELECT role_code Code,role_level Level FROM eggrack_auth_role WHERE id=@RoleId AND status=1", new { RoleId = roleId }, cancellationToken: cancellationToken)).SingleOrDefault()
             ?? throw new InvalidOperationException("角色不存在或已停用");
         if (role.Code == "super_admin") throw new InvalidOperationException("超级管理员固定拥有全部权限，不能手动删改");
         var distinctIds = permissionIds.Distinct().ToArray();
@@ -217,11 +247,13 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
             LEFT JOIN eggrack_auth_staff_department sd ON sd.department_id=d.id
             LEFT JOIN eggrack_auth_staff_role sr ON sr.department_id=d.id
             WHERE d.deleted_at IS NULL
+              AND (@AllowAll=1 OR d.id IN @DepartmentIds)
             GROUP BY d.id,d.parent_id,d.department_code,d.department_name,p.department_name,d.sort_order,d.status
             ORDER BY d.sort_order,d.department_name
             """;
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
-        return await session.QueryAsync<DepartmentListItem>(sql, cancellationToken: cancellationToken);
+        var scope=Scope();
+        return await session.QueryAsync<DepartmentListItem>(sql,new{scope.AllowAll,scope.DepartmentIds},cancellationToken: cancellationToken);
     }
 
     public async Task SaveDepartmentAsync(long? id, string code, string name, long? parentId, int sortOrder, string operatorRef, CancellationToken cancellationToken = default)
@@ -231,6 +263,27 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         await session.BeginTransactionAsync(cancellationToken: cancellationToken);
         try
         {
+            if(id.HasValue)await EnsureDepartmentInScopeAsync(session,id.Value,cancellationToken);
+            if(parentId.HasValue)await EnsureDepartmentInScopeAsync(session,parentId.Value,cancellationToken);
+            if(!id.HasValue&&!parentId.HasValue&&!Scope().AllowAll)
+                throw new InvalidOperationException("部门范围管理员不能创建根部门");
+            if(parentId.HasValue)
+            {
+                var departments=await session.QueryAsync<DepartmentParent>(
+                    "SELECT CAST(id AS SIGNED) Id,CAST(parent_id AS SIGNED) ParentId,status=1 IsEnabled FROM eggrack_auth_department WHERE deleted_at IS NULL FOR UPDATE",
+                    cancellationToken:cancellationToken);
+                var parentMap=departments.ToDictionary(item=>item.Id,item=>item);
+                if(!parentMap.TryGetValue(parentId.Value,out var parent)||!parent.IsEnabled)
+                    throw new InvalidOperationException("上级部门不存在或已停用");
+                var cursor=(long?)parent.Id;
+                var visited=new HashSet<long>();
+                while(cursor.HasValue)
+                {
+                    if(!visited.Add(cursor.Value))throw new InvalidOperationException("现有部门层级包含循环，请先修复组织数据");
+                    if(id.HasValue&&cursor.Value==id.Value)throw new InvalidOperationException("不能将部门移动到自己的下级部门");
+                    cursor=parentMap.TryGetValue(cursor.Value,out var node)?node.ParentId:null;
+                }
+            }
             if (id.HasValue)
             {
                 var changed = await session.ExecuteAsync("UPDATE eggrack_auth_department SET department_code=@Code,department_name=@Name,parent_id=@ParentId,sort_order=@SortOrder WHERE id=@Id AND deleted_at IS NULL", new { Id = id.Value, Code = code, Name = name, ParentId = parentId, SortOrder = sortOrder }, cancellationToken: cancellationToken);
@@ -249,14 +302,21 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     public async Task SetDepartmentEnabledAsync(long id, bool enabled, string operatorRef, CancellationToken cancellationToken = default)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
-        if (!enabled)
+        await session.BeginTransactionAsync(cancellationToken:cancellationToken);
+        try
         {
-            var usage = (await session.QueryAsync<CountRow>("SELECT (SELECT COUNT(*) FROM eggrack_auth_staff_department WHERE department_id=@Id)+(SELECT COUNT(*) FROM eggrack_auth_staff_role WHERE department_id=@Id)+(SELECT COUNT(*) FROM eggrack_auth_department WHERE parent_id=@Id AND deleted_at IS NULL) Value", new { Id = id }, cancellationToken: cancellationToken)).Single().Value;
-            if (usage > 0) throw new InvalidOperationException("该部门仍有关联人员、角色授权或下级部门，不能停用");
+            await EnsureDepartmentInScopeAsync(session,id,cancellationToken);
+            if (!enabled)
+            {
+                var usage = (await session.QueryAsync<CountRow>("SELECT (SELECT COUNT(*) FROM eggrack_auth_staff_department WHERE department_id=@Id)+(SELECT COUNT(*) FROM eggrack_auth_staff_role WHERE department_id=@Id)+(SELECT COUNT(*) FROM eggrack_auth_department WHERE parent_id=@Id AND deleted_at IS NULL) Value", new { Id = id }, cancellationToken: cancellationToken)).Single().Value;
+                if (usage > 0) throw new InvalidOperationException("该部门仍有关联人员、角色授权或下级部门，不能停用");
+            }
+            var changed = await session.ExecuteAsync("UPDATE eggrack_auth_department SET status=@Status WHERE id=@Id AND deleted_at IS NULL", new { Id = id, Status = enabled ? 1 : 0 }, cancellationToken: cancellationToken);
+            if (changed != 1) throw new InvalidOperationException("部门不存在或已删除");
+            await session.ExecuteAsync("INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.department.status','department',@TargetRef,@AfterData)", new { OperatorRef = operatorRef, TargetRef = id.ToString(), AfterData = JsonSerializer.Serialize(new { enabled }) }, cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
         }
-        var changed = await session.ExecuteAsync("UPDATE eggrack_auth_department SET status=@Status WHERE id=@Id AND deleted_at IS NULL", new { Id = id, Status = enabled ? 1 : 0 }, cancellationToken: cancellationToken);
-        if (changed != 1) throw new InvalidOperationException("部门不存在或已删除");
-        await session.ExecuteAsync("INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,after_data) VALUES(@OperatorRef,'auth.department.status','department',@TargetRef,@AfterData)", new { OperatorRef = operatorRef, TargetRef = id.ToString(), AfterData = JsonSerializer.Serialize(new { enabled }) }, cancellationToken: cancellationToken);
+        catch{await session.RollbackAsync(cancellationToken);throw;}
     }
 
     public async Task<IReadOnlyList<StaffRoleAssignment>> GetRoleAssignmentsAsync(CancellationToken cancellationToken = default)
@@ -278,12 +338,31 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
         var roles = await session.QueryAsync<RoleRule>(
-            "SELECT role_code Code FROM eggrack_auth_role WHERE id=@RoleId AND status=1",
+            "SELECT role_code Code,role_level Level FROM eggrack_auth_role WHERE id=@RoleId AND status=1",
             new { RoleId = roleId }, cancellationToken: cancellationToken);
         var role = roles.SingleOrDefault() ?? throw new InvalidOperationException("角色不存在或已停用");
+        await EnsureStaffInScopeAsync(session,staffId,cancellationToken);
+        await EnsureRoleAssignableAsync(session,role,operatorRef,cancellationToken);
         var globalRole = role.Code is "super_admin" or "boss";
         if (globalRole && departmentId.HasValue) throw new InvalidOperationException("全局角色不能指定部门");
         if (!globalRole && !departmentId.HasValue) throw new InvalidOperationException("部门角色必须指定部门");
+
+        var staffCount=(await session.QueryAsync<CountRow>(
+            "SELECT COUNT(*) Value FROM eggrack_auth_staff WHERE id=@StaffId AND status=1 AND deleted_at IS NULL",
+            new{StaffId=staffId},cancellationToken:cancellationToken)).Single().Value;
+        if(staffCount!=1)throw new InvalidOperationException("目标人员不存在或已停用");
+        if(departmentId.HasValue)
+        {
+            await EnsureDepartmentInScopeAsync(session,departmentId.Value,cancellationToken);
+            var departmentCount=(await session.QueryAsync<CountRow>(
+                "SELECT COUNT(*) Value FROM eggrack_auth_department WHERE id=@DepartmentId AND status=1 AND deleted_at IS NULL",
+                new{DepartmentId=departmentId.Value},cancellationToken:cancellationToken)).Single().Value;
+            if(departmentCount!=1)throw new InvalidOperationException("授权部门不存在或已停用");
+        }
+        var operatorCount=(await session.QueryAsync<CountRow>(
+            "SELECT COUNT(*) Value FROM eggrack_auth_staff WHERE staff_ref=@OperatorRef AND status=1 AND deleted_at IS NULL",
+            new{OperatorRef=operatorRef},cancellationToken:cancellationToken)).Single().Value;
+        if(operatorCount!=1)throw new InvalidOperationException("无法识别当前操作人员");
 
         await session.BeginTransactionAsync(cancellationToken: cancellationToken);
         try
@@ -332,12 +411,15 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
         var roles = await session.QueryAsync<RoleRule>(
-            "SELECT role_code Code FROM eggrack_auth_role WHERE id=@RoleId AND status=1",
+            "SELECT role_code Code,role_level Level FROM eggrack_auth_role WHERE id=@RoleId AND status=1",
             new { RoleId = roleId }, cancellationToken: cancellationToken);
         var role = roles.SingleOrDefault() ?? throw new InvalidOperationException("角色不存在或已停用");
+        await EnsureRoleAssignableAsync(session,role,operatorRef,cancellationToken);
         var globalRole = role.Code is "super_admin" or "boss";
         if (globalRole && departmentId.HasValue) throw new InvalidOperationException("全局角色不能指定部门");
         if (!globalRole && !departmentId.HasValue) throw new InvalidOperationException("部门角色必须指定部门");
+        if(departmentId.HasValue)await EnsureDepartmentInScopeAsync(session,departmentId.Value,cancellationToken);
+        if(!departmentId.HasValue&&!Scope().AllowAll)throw new InvalidOperationException("当前数据范围不能创建全局人员");
 
         await session.BeginTransactionAsync(cancellationToken: cancellationToken);
         try
@@ -386,6 +468,28 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         await session.BeginTransactionAsync(cancellationToken: cancellationToken);
         try
         {
+            await EnsureStaffInScopeAsync(session,staffId,cancellationToken);
+            var target=(await session.QueryAsync<StaffStatusRule>("""
+                SELECT s.staff_ref StaffRef,s.status=1 IsEnabled,
+                  EXISTS(SELECT 1 FROM eggrack_auth_staff_role sr
+                    JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.role_code='super_admin'
+                    WHERE sr.staff_id=s.id AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))) IsSuperAdmin
+                FROM eggrack_auth_staff s WHERE s.id=@StaffId AND s.deleted_at IS NULL FOR UPDATE
+                """,new{StaffId=staffId},cancellationToken:cancellationToken)).SingleOrDefault()
+                ??throw new InvalidOperationException("人员不存在或已删除");
+            if(string.Equals(target.StaffRef,operatorRef,StringComparison.Ordinal))
+                throw new InvalidOperationException("不能变更当前登录账号的启用状态");
+            if(!enabled&&target.IsEnabled&&target.IsSuperAdmin)
+            {
+                var activeAdmins=(await session.QueryAsync<CountRow>("""
+                    SELECT COUNT(DISTINCT s.id) Value FROM eggrack_auth_staff s
+                    JOIN eggrack_auth_staff_role sr ON sr.staff_id=s.id
+                    JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.role_code='super_admin'
+                    WHERE s.status=1 AND s.deleted_at IS NULL
+                      AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+                    """,cancellationToken:cancellationToken)).Single().Value;
+                if(activeAdmins<=1)throw new InvalidOperationException("系统必须至少保留一个启用的超级管理员");
+            }
             var changed = await session.ExecuteAsync(
                 "UPDATE eggrack_auth_staff SET status=@Status,auth_version=auth_version+1 WHERE id=@StaffId AND deleted_at IS NULL",
                 new { StaffId = staffId, Status = enabled ? 1 : 0 }, cancellationToken: cancellationToken);
@@ -399,6 +503,79 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
                     TargetRef = staffId.ToString(),
                     AfterData = JsonSerializer.Serialize(new { enabled })
                 }, cancellationToken: cancellationToken);
+            await session.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await session.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task UpdateStaffAsync(
+        long staffId,string staffName,string email,long? primaryDepartmentId,
+        string operatorRef,CancellationToken cancellationToken=default)
+    {
+        if(string.IsNullOrWhiteSpace(staffName))throw new InvalidOperationException("人员姓名不能为空");
+        if(string.IsNullOrWhiteSpace(email))throw new InvalidOperationException("人员邮箱不能为空");
+        await using var session=await databases.OpenMySqlAsync(DatabaseName,cancellationToken);
+        await session.BeginTransactionAsync(cancellationToken:cancellationToken);
+        try
+        {
+            await EnsureStaffInScopeAsync(session,staffId,cancellationToken);
+            if(primaryDepartmentId.HasValue)
+            {
+                await EnsureDepartmentInScopeAsync(session,primaryDepartmentId.Value,cancellationToken);
+                var departmentCount=(await session.QueryAsync<CountRow>(
+                    "SELECT COUNT(*) Value FROM eggrack_auth_department WHERE id=@Id AND status=1 AND deleted_at IS NULL",
+                    new{Id=primaryDepartmentId.Value},cancellationToken:cancellationToken)).Single().Value;
+                if(departmentCount!=1)throw new InvalidOperationException("所选部门不存在或已停用");
+            }
+            else
+            {
+                var scopedRoles=(await session.QueryAsync<CountRow>("""
+                    SELECT COUNT(*) Value FROM eggrack_auth_staff_role sr
+                    JOIN eggrack_auth_role r ON r.id=sr.role_id
+                    WHERE sr.staff_id=@StaffId AND r.role_code NOT IN('super_admin','boss')
+                      AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+                    """,new{StaffId=staffId},cancellationToken:cancellationToken)).Single().Value;
+                if(scopedRoles>0)throw new InvalidOperationException("人员拥有部门角色，必须指定主部门");
+            }
+
+            var before=(await session.QueryAsync<StaffUpdateAudit>("""
+                SELECT staff_name StaffName,email Email,
+                  (SELECT department_id FROM eggrack_auth_staff_department WHERE staff_id=s.id AND is_primary=1 LIMIT 1) PrimaryDepartmentId
+                FROM eggrack_auth_staff s WHERE s.id=@StaffId AND s.deleted_at IS NULL FOR UPDATE
+                """,new{StaffId=staffId},cancellationToken:cancellationToken)).SingleOrDefault()
+                ??throw new InvalidOperationException("人员不存在或已删除");
+            var changed=await session.ExecuteAsync(
+                "UPDATE eggrack_auth_staff SET staff_name=@StaffName,email=@Email,auth_version=auth_version+1 WHERE id=@StaffId AND deleted_at IS NULL",
+                new{StaffId=staffId,StaffName=staffName.Trim(),Email=email.Trim()},cancellationToken:cancellationToken);
+            if(changed!=1)throw new InvalidOperationException("人员资料更新失败");
+
+            await session.ExecuteAsync(
+                "UPDATE eggrack_auth_staff_department SET is_primary=0 WHERE staff_id=@StaffId",
+                new{StaffId=staffId},cancellationToken:cancellationToken);
+            if(primaryDepartmentId.HasValue)
+            {
+                await session.ExecuteAsync("""
+                    INSERT INTO eggrack_auth_staff_department(staff_id,department_id,is_primary)
+                    VALUES(@StaffId,@DepartmentId,1)
+                    ON DUPLICATE KEY UPDATE is_primary=1
+                    """,new{StaffId=staffId,DepartmentId=primaryDepartmentId.Value},cancellationToken:cancellationToken);
+            }
+            await session.ExecuteAsync("""
+                DELETE sd FROM eggrack_auth_staff_department sd
+                WHERE sd.staff_id=@StaffId AND sd.is_primary=0
+                  AND NOT EXISTS(
+                    SELECT 1 FROM eggrack_auth_staff_role sr
+                    WHERE sr.staff_id=sd.staff_id AND sr.department_id=sd.department_id
+                      AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3)))
+                """,new{StaffId=staffId},cancellationToken:cancellationToken);
+            await session.ExecuteAsync(
+                "INSERT INTO eggrack_auth_audit_log(operator_ref,action_code,target_type,target_ref,before_data,after_data) VALUES(@OperatorRef,'auth.staff.update','staff',@TargetRef,@BeforeData,@AfterData)",
+                new{OperatorRef=operatorRef,TargetRef=staffId.ToString(),BeforeData=JsonSerializer.Serialize(before),AfterData=JsonSerializer.Serialize(new{staffName=staffName.Trim(),email=email.Trim(),primaryDepartmentId})},
+                cancellationToken:cancellationToken);
             await session.CommitAsync(cancellationToken);
         }
         catch
@@ -437,13 +614,15 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
     {
         await using var session = await databases.OpenMySqlAsync(DatabaseName, cancellationToken);
         var rows = await session.QueryAsync<RevocationRule>("""
-            SELECT CAST(sr.staff_id AS SIGNED) StaffId,s.staff_ref StaffRef,r.role_code RoleCode
+            SELECT CAST(sr.staff_id AS SIGNED) StaffId,s.staff_ref StaffRef,r.role_code RoleCode,r.role_level RoleLevel
             FROM eggrack_auth_staff_role sr
             INNER JOIN eggrack_auth_staff s ON s.id=sr.staff_id
             INNER JOIN eggrack_auth_role r ON r.id=sr.role_id
             WHERE sr.id=@AssignmentId
             """, new { AssignmentId = assignmentId }, cancellationToken: cancellationToken);
         var assignment = rows.SingleOrDefault() ?? throw new InvalidOperationException("角色授权不存在");
+        await EnsureStaffInScopeAsync(session,assignment.StaffId,cancellationToken);
+        await EnsureRoleAssignableAsync(session,new RoleRule(assignment.RoleCode,assignment.RoleLevel),operatorRef,cancellationToken);
         if (assignment.RoleCode == "super_admin" && assignment.StaffRef == operatorRef)
             throw new InvalidOperationException("不能撤销当前登录账号自己的超级管理员角色");
         if (assignment.RoleCode == "super_admin")
@@ -477,9 +656,56 @@ public sealed class SecurityAdminService(DatabaseSessionFactory databases)
         }
     }
 
-    private sealed record RoleRule(string Code);
+    private ScopeFilter Scope()
+    {
+        var decision=authorizationContext.Require();
+        return new ScopeFilter(
+            decision.Scope==DataScope.All,
+            decision.Scope is DataScope.Self or DataScope.SelfOrDepartment,
+            decision.StaffId,
+            decision.DepartmentIds.Count==0?[-1]:decision.DepartmentIds.ToArray());
+    }
+
+    private async Task EnsureStaffInScopeAsync(DatabaseSession session,long staffId,CancellationToken cancellationToken)
+    {
+        var scope=Scope();
+        if(scope.AllowAll||(scope.AllowSelf&&scope.CurrentStaffId==staffId))return;
+        var count=(await session.QueryAsync<CountRow>("""
+            SELECT COUNT(*) Value FROM eggrack_auth_staff_department
+            WHERE staff_id=@StaffId AND department_id IN @DepartmentIds
+            """,new{StaffId=staffId,scope.DepartmentIds},cancellationToken:cancellationToken)).Single().Value;
+        if(count==0)throw new InvalidOperationException("目标人员不在当前授权的数据范围内");
+    }
+
+    private async Task EnsureDepartmentInScopeAsync(DatabaseSession session,long departmentId,CancellationToken cancellationToken)
+    {
+        var scope=Scope();
+        if(scope.AllowAll||scope.DepartmentIds.Contains(departmentId))return;
+        await Task.CompletedTask;
+        throw new InvalidOperationException("目标部门不在当前授权的数据范围内");
+    }
+
+    private static async Task EnsureRoleAssignableAsync(DatabaseSession session,RoleRule role,string operatorRef,CancellationToken cancellationToken)
+    {
+        var operatorLevel=(await session.QueryAsync<int>("""
+            SELECT MIN(r.role_level) FROM eggrack_auth_staff s
+            JOIN eggrack_auth_staff_role sr ON sr.staff_id=s.id
+            JOIN eggrack_auth_role r ON r.id=sr.role_id AND r.status=1
+            WHERE s.staff_ref=@OperatorRef AND s.status=1 AND s.deleted_at IS NULL
+              AND (sr.valid_until IS NULL OR sr.valid_until>UTC_TIMESTAMP(3))
+            """,new{OperatorRef=operatorRef},cancellationToken:cancellationToken)).SingleOrDefault();
+        if(operatorLevel<=0)throw new InvalidOperationException("无法识别当前操作人员的有效角色");
+        if(operatorLevel!=10&&operatorLevel>=role.Level)
+            throw new InvalidOperationException("不能授予或撤销同级及更高权限角色");
+    }
+
+    private sealed record RoleRule(string Code,int Level);
     private sealed record InsertedId(long Id);
-    private sealed record RevocationRule(long StaffId, string StaffRef, string RoleCode);
+    private sealed record RevocationRule(long StaffId, string StaffRef, string RoleCode,int RoleLevel);
     private sealed record CountRow(long Value);
+    private sealed record StaffUpdateAudit(string StaffName,string? Email,long? PrimaryDepartmentId);
+    private sealed record StaffStatusRule(string StaffRef,bool IsEnabled,bool IsSuperAdmin);
+    private sealed record DepartmentParent(long Id,long? ParentId,bool IsEnabled);
+    private sealed record ScopeFilter(bool AllowAll,bool AllowSelf,long CurrentStaffId,long[] DepartmentIds);
 }
 

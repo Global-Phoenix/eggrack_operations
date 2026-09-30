@@ -1,6 +1,7 @@
 using eggrack_operations.Areas.Security.Models;
 using Eggrack.Operations.Infrastructure.Modules.Security;
 using Eggrack.Operations.Infrastructure.Modules.Security.Identity;
+using Eggrack.Operations.Application.Modules.Security;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +13,7 @@ namespace eggrack_operations.Areas.Security.Controllers;
 public sealed class SecurityController(
     SecurityAdminService admin,
     CurrentStaffAccessor currentStaff,
+    PermissionEvaluator permissionEvaluator,
     UserManager<InternalIdentityUser> users) : Controller
 {
     [HttpGet("")]
@@ -33,12 +35,79 @@ public sealed class SecurityController(
     public async Task<IActionResult> Staff(string? keyword, CancellationToken cancellationToken)
     {
         var data = await admin.GetStaffAdministrationAsync(keyword, cancellationToken);
+        var authorization=await currentStaff.LoadAsync(cancellationToken);
+        bool Has(string permission)=>authorization is not null&&permissionEvaluator.Evaluate(authorization,permission).Allowed;
         return View(new StaffIndexViewModel(
             keyword,
             data.Staff,
             data.Roles,
             data.Departments,
-            data.Assignments));
+            data.Assignments,
+            Has("auth.staff.create"),Has("auth.staff.update"),Has("auth.role.assign"),
+            Has("auth.role.revoke"),Has("auth.staff.disable")));
+    }
+
+    [HttpGet("staff/{staffId:long}")]
+    [InternalPermission("auth.staff.read")]
+    public async Task<IActionResult> StaffDetails(long staffId,CancellationToken cancellationToken)
+    {
+        var data=await admin.GetStaffAdministrationAsync(null,cancellationToken);
+        var staff=data.Staff.SingleOrDefault(item=>item.Id==staffId);
+        if(staff is null)return NotFound();
+        var identity=await users.Users.SingleOrDefaultAsync(item=>item.StaffRef==staff.StaffRef,cancellationToken);
+        var authorization=await currentStaff.LoadAsync(cancellationToken);
+        var canUpdate=authorization is not null&&permissionEvaluator.Evaluate(authorization,"auth.staff.update").Allowed;
+        ViewData["Title"]=$"{staff.StaffName} 详情";
+        return View(new StaffDetailsViewModel(
+            staff,identity?.UserName??staff.StaffRef,data.Roles,data.Departments,
+            data.Assignments.Where(item=>item.StaffId==staffId).ToArray(),canUpdate));
+    }
+
+    [HttpPost("staff/update")]
+    [ValidateAntiForgeryToken]
+    [InternalPermission("auth.staff.update")]
+    public async Task<IActionResult> UpdateStaff(UpdateStaffInput input,CancellationToken cancellationToken)
+    {
+        if(!ModelState.IsValid)
+        {
+            TempData["Error"]="请填写有效的用户名、姓名和邮箱。";
+            return RedirectToAction(nameof(StaffDetails),new{staffId=input.StaffId});
+        }
+        var operatorRef=currentStaff.GetStaffRef();
+        if(string.IsNullOrWhiteSpace(operatorRef))return Challenge();
+        try{await admin.EnsureStaffRefMatchesAsync(input.StaffId,input.StaffRef,cancellationToken);}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;return RedirectToAction(nameof(Staff));}
+        var user=await users.Users.SingleOrDefaultAsync(item=>item.StaffRef==input.StaffRef,cancellationToken);
+        if(user is null)
+        {
+            TempData["Error"]="未找到对应登录账号。";
+            return RedirectToAction(nameof(StaffDetails),new{staffId=input.StaffId});
+        }
+        var previous=(UserName:user.UserName,Email:user.Email,DisplayName:user.DisplayName);
+        user.UserName=input.UserName.Trim();
+        user.Email=input.Email.Trim();
+        user.DisplayName=input.StaffName.Trim();
+        user.NormalizedUserName=users.NormalizeName(user.UserName);
+        user.NormalizedEmail=users.NormalizeEmail(user.Email);
+        var identityResult=await users.UpdateAsync(user);
+        if(!identityResult.Succeeded)
+        {
+            TempData["Error"]=string.Join("；",identityResult.Errors.Select(item=>item.Description));
+            return RedirectToAction(nameof(StaffDetails),new{staffId=input.StaffId});
+        }
+        try
+        {
+            await admin.UpdateStaffAsync(input.StaffId,input.StaffName,input.Email,input.PrimaryDepartmentId,operatorRef,cancellationToken);
+            TempData["Success"]="人员资料和主部门已更新。";
+        }
+        catch(Exception error) when(error is InvalidOperationException or MySqlConnector.MySqlException)
+        {
+            user.UserName=previous.UserName;user.Email=previous.Email;user.DisplayName=previous.DisplayName;
+            user.NormalizedUserName=users.NormalizeName(user.UserName);user.NormalizedEmail=users.NormalizeEmail(user.Email);
+            await users.UpdateAsync(user);
+            TempData["Error"]=$"人员资料更新失败，登录资料已回滚：{error.Message}";
+        }
+        return RedirectToAction(nameof(StaffDetails),new{staffId=input.StaffId});
     }
 
     [HttpGet("roles")]
@@ -46,14 +115,24 @@ public sealed class SecurityController(
     public async Task<IActionResult> Roles(CancellationToken cancellationToken)
     {
         var roles=admin.GetRolesAsync(cancellationToken);var permissions=admin.GetPermissionsAsync(cancellationToken);var grants=admin.GetRolePermissionGrantsAsync(cancellationToken);
-        await Task.WhenAll(roles,permissions,grants);
-        return View(new RoleIndexViewModel(await roles,await permissions,await grants));
+        var authorizationTask=currentStaff.LoadAsync(cancellationToken);
+        await Task.WhenAll(roles,permissions,grants,authorizationTask);
+        var authorization=await authorizationTask;
+        var canManage=authorization is not null&&permissionEvaluator.Evaluate(authorization,"auth.permission.manage").Allowed;
+        return View(new RoleIndexViewModel(await roles,await permissions,await grants,canManage));
     }
 
     [HttpGet("departments")]
     [InternalPermission("auth.department.read")]
-    public async Task<IActionResult> Departments(CancellationToken cancellationToken) =>
-        View(new DepartmentIndexViewModel(await admin.GetDepartmentListAsync(cancellationToken)));
+    public async Task<IActionResult> Departments(CancellationToken cancellationToken)
+    {
+        var departmentsTask=admin.GetDepartmentListAsync(cancellationToken);
+        var authorizationTask=currentStaff.LoadAsync(cancellationToken);
+        await Task.WhenAll(departmentsTask,authorizationTask);
+        var authorization=await authorizationTask;
+        return View(new DepartmentIndexViewModel(await departmentsTask,
+            authorization is not null&&permissionEvaluator.Evaluate(authorization,"auth.department.manage").Allowed));
+    }
 
     [HttpGet("audit")]
     [InternalPermission("auth.audit.read")]
@@ -151,6 +230,9 @@ public sealed class SecurityController(
             TempData["Error"] = "不能停用或启用当前登录账号。";
             return RedirectToAction(nameof(Staff));
         }
+
+        try{await admin.EnsureStaffRefMatchesAsync(input.StaffId,input.StaffRef,cancellationToken);}
+        catch(InvalidOperationException error){TempData["Error"]=error.Message;return RedirectToAction(nameof(Staff));}
 
         var user = await users.Users.SingleOrDefaultAsync(x => x.StaffRef == input.StaffRef, cancellationToken);
         if (user is null)

@@ -3,6 +3,7 @@ namespace Eggrack.Operations.Application.Modules.Files;
 public sealed record FileCenterFileItem(
     string ItemKey,
     string SourceKind,
+    uint SourceId,
     uint FileId,
     string OriginalName,
     string MimeType,
@@ -10,6 +11,7 @@ public sealed record FileCenterFileItem(
     string SourceNumber,
     string CategoryName,
     string UploadedBy,
+    string VisibilityCode,
     DateTime UploadedAtUtc,
     long Status)
 {
@@ -31,18 +33,15 @@ public sealed record FileCenterFileItem(
     };
 
     public string SourceLabel => SourceKind == "plan" ? "采购计划" : "采购申请";
-    public string StatusLabel => SourceKind == "plan" && Status == 0 ? "已停用" : SourceLabel + "附件";
-    public string PreviewKind => MimeType.ToLowerInvariant() switch
-    {
-        _ when FileType == "XLSX" => "spreadsheet",
-        var mime when mime.StartsWith("image/") => "image",
-        "application/pdf" => "pdf",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => "spreadsheet",
-        var mime when mime.StartsWith("video/") => "video",
-        var mime when mime.StartsWith("text/") => "text",
-        "application/csv" or "application/vnd.ms-excel" when FileType == "CSV" => "text",
-        _ => "download"
-    };
+    public string VisibilityLabel => SourceKind == "request"
+        ? "客户提交"
+        : VisibilityCode.Equals("customer", StringComparison.OrdinalIgnoreCase) ? "客户可见" : "仅内部";
+
+    public string PreviewKind => FilePreviewPolicy.Resolve(OriginalName, MimeType).Kind.ToString().ToLowerInvariant();
+
+    public string BusinessUrl => SourceKind == "plan"
+        ? $"/wholesale/procurement/plans/{SourceId}/details"
+        : $"/wholesale/procurement/requests/{SourceId}/details";
 }
 
 public sealed record FileCenterIndexViewModel(IReadOnlyList<FileCenterFileItem> PurchaseFiles);

@@ -9,7 +9,7 @@
   var enabledStaffCount = Model.Staff.Count(item => item.IsEnabled);
 }
 
-@await Component.InvokeAsync("PageHeader", new { title = "人员权限", subtitle = "按组织架构管理登录人员、角色与数据范围", parentTitle = "权限管理", parentUrl = Url.Action("Index"), primaryText = "新增人员", primaryModalTarget = "#createStaff", secondaryText = "返回概览", secondaryUrl = Url.Action("Index") })
+@await Component.InvokeAsync("PageHeader", new { title = "人员权限", subtitle = "按组织架构管理登录人员、角色与数据范围", parentTitle = "权限管理", parentUrl = Url.Action("Index"), primaryText = Model.CanCreateStaff?"新增人员":null, primaryModalTarget = Model.CanCreateStaff?"#createStaff":null, secondaryText = "返回概览", secondaryUrl = Url.Action("Index") })
 @if (TempData["Success"] is string success) { <div class="alert alert-success">@success</div> }
 @if (TempData["Error"] is string error) { <div class="alert alert-danger">@error</div> }
 
@@ -71,9 +71,10 @@ else
                 <td><span class="staff-status @(item.IsEnabled ? "is-enabled" : "is-disabled")"><i></i>@(item.IsEnabled ? "启用" : "停用")</span></td>
                 <td class="text-end pe-4">
                   <div class="staff-actions">
-                    <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">授予角色</button>
-                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#@passwordModalId">重置密码</button>
-                    <form asp-action="SetStaffStatus" method="post"><input type="hidden" name="StaffId" value="@item.Id" /><input type="hidden" name="StaffRef" value="@item.StaffRef" /><input type="hidden" name="Enabled" value="@(!item.IsEnabled)" /><button class="btn btn-sm @(item.IsEnabled ? "btn-outline-danger" : "btn-outline-success")" type="submit">@(item.IsEnabled ? "停用" : "启用")</button></form>
+                    <a class="btn btn-sm btn-outline-primary" asp-action="StaffDetails" asp-route-staffId="@item.Id">详情/编辑</a>
+                    @if(Model.CanAssignRole||Model.CanRevokeRole){<button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#@modalId">管理角色</button>}
+                    @if(Model.CanUpdateStaff){<button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#@passwordModalId">重置密码</button>}
+                    @if(Model.CanDisableStaff){<form asp-action="SetStaffStatus" method="post"><input type="hidden" name="StaffId" value="@item.Id" /><input type="hidden" name="StaffRef" value="@item.StaffRef" /><input type="hidden" name="Enabled" value="@(!item.IsEnabled)" /><button class="btn btn-sm @(item.IsEnabled ? "btn-outline-danger" : "btn-outline-success")" type="submit">@(item.IsEnabled ? "停用" : "启用")</button></form>}
                   </div>
                 </td>
               </tr>
@@ -103,17 +104,17 @@ else
             <div class="mb-3"><label class="form-label">当前授权</label><div class="d-flex flex-column gap-2">
               @foreach (var assignment in currentAssignments)
               {
-                <div class="d-flex align-items-center justify-content-between border rounded px-3 py-2"><span>@assignment.RoleName <small class="text-secondary">@(assignment.DepartmentName ?? "全局")</small></span><button class="btn btn-sm btn-outline-danger" type="submit" formaction="@Url.Action("RevokeRole")" name="AssignmentId" value="@assignment.Id">撤销</button></div>
+                <div class="d-flex align-items-center justify-content-between border rounded px-3 py-2"><span>@assignment.RoleName <small class="text-secondary">@(assignment.DepartmentName ?? "全局")</small></span>@if(Model.CanRevokeRole){<button class="btn btn-sm btn-outline-danger" type="submit" formaction="@Url.Action("RevokeRole")" name="AssignmentId" value="@assignment.Id">撤销</button>}</div>
               }
             </div></div>
           }
-          <label class="form-label">角色</label>
+          @if(Model.CanAssignRole){<label class="form-label">角色</label>
           <select class="form-select mb-3" name="RoleId" required><option value="">请选择角色</option>@foreach (var role in Model.Roles) { <option value="@role.Id">@role.Name（@role.DefaultScope）</option> }</select>
           <label class="form-label">生效部门</label>
           <select class="form-select" name="DepartmentId"><option value="">全局（仅超级管理员、老板）</option>@foreach (var department in Model.Departments) { <option value="@department.Id">@department.Name</option> }</select>
-          <div class="form-text">部门管理员、部门主管、部门员工必须选择部门。</div>
+          <div class="form-text">部门管理员、部门主管、部门员工必须选择部门。</div>}
         </div>
-        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">取消</button><button class="btn btn-dark" type="submit">确认授权</button></div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">关闭</button>@if(Model.CanAssignRole){<button class="btn btn-dark" type="submit">确认授权</button>}</div>
       </form>
     </div></div>
   </div>

@@ -14,6 +14,7 @@ public sealed class StaffListItem
     public string StaffName { get; set; } = string.Empty;
     public string? Email { get; set; }
     public bool IsEnabled { get; set; }
+    public long? PrimaryDepartmentId { get; set; }
     public string PrimaryDepartment { get; set; } = string.Empty;
     public string Departments { get; set; } = string.Empty;
     public string Roles { get; set; } = string.Empty;
