@@ -52,10 +52,16 @@
         <td class="text-end"><a class="btn btn-sm btn-outline-primary" asp-action="Details" asp-route-planId="@item.Id">进入计划</a></td>
        </tr>
    }
+   @if(Model.Plans.Count>0)
+   {
+    <tr class="plan-list-empty-row" data-plan-empty hidden><td colspan="8">@await Component.InvokeAsync("EmptyState",new{title="没有符合条件的采购计划",description="请调整搜索内容或状态筛选后重试。",icon="bi-search"})</td></tr>
+   }
+   else
+   {
+    <tr class="plan-list-empty-row"><td colspan="8">@await Component.InvokeAsync("EmptyState",new{title="暂无采购计划",description="请先从客户采购申请创建内部采购计划。",icon="bi-clipboard2-check",actionText="前往采购申请",actionUrl=Url.Action("PurchaseRequests","Procurement",new{area="Wholesale"})})</td></tr>
+   }
    </tbody>
   </table>
-  <div class="compact-empty" data-plan-empty hidden><i class="bi bi-search"></i><span>没有符合当前条件的采购计划。</span></div>
-  @if(Model.Plans.Count==0){<div class="compact-empty"><i class="bi bi-clipboard2-check"></i><span>暂无采购计划，请先从采购申请创建。</span></div>}
  </div>
 </section>
 </section>

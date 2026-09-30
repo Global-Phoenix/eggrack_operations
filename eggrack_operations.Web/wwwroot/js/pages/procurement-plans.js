@@ -18,7 +18,7 @@
             row.hidden = !show;
             if (show) visible++;
         });
-        empty.hidden = visible > 0 || rows.length === 0;
+        if (empty) empty.hidden = visible > 0;
     };
 
     search.addEventListener('input', render);
