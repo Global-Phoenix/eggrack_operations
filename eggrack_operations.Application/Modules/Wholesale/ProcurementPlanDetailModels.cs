@@ -41,6 +41,7 @@ public sealed class PurchasePlanDetail
 
 public sealed record PurchasePlanSourcingData(
     IReadOnlyList<SupplierListItem> Suppliers,
+    IReadOnlyList<SupplierListItem> RelatedSuppliers,
     IReadOnlyList<InquiryItem> Inquiries,
     IReadOnlyList<SampleItem> Samples);
 

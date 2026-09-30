@@ -56,6 +56,39 @@
         });
     });
 
+    root.addEventListener('submit', async event => {
+        const form = event.target.closest('[data-plan-supplier-form]');
+        if (!form) return;
+        event.preventDefault();
+        const button = event.submitter;
+        const errorBox = form.querySelector('[data-supplier-form-error]');
+        errorBox?.classList.add('d-none');
+        window.Eggrack.ui.setBusy(button, true);
+        try {
+            const response = await window.Eggrack.http.request(form.action, {
+                method: 'POST',
+                body: new FormData(form)
+            });
+            const modalElement = form.closest('.modal');
+            const modal = modalElement && window.bootstrap?.Modal.getOrCreateInstance(modalElement);
+            if (modalElement?.classList.contains('show')) {
+                const hidden = new Promise(resolve => modalElement.addEventListener('hidden.bs.modal', resolve, { once: true }));
+                modal.hide();
+                await hidden;
+            }
+            window.Eggrack.ui.notify(response.message || '供应商已保存并关联当前计划。', 'success');
+            const pane = form.closest('[data-plan-lazy-pane]');
+            await loadPane(pane, true);
+        } catch (error) {
+            if (errorBox) {
+                errorBox.textContent = error.message || '供应商保存失败。';
+                errorBox.classList.remove('d-none');
+            } else window.Eggrack.ui.notify(error.message || '供应商保存失败。');
+        } finally {
+            window.Eggrack.ui.setBusy(button, false);
+        }
+    });
+
     const requested = window.location.hash.slice(1);
     if (requested) {
         const button = root.querySelector(`[data-plan-tab="${CSS.escape(requested)}"]`);

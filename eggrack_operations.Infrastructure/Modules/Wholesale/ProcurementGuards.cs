@@ -22,4 +22,12 @@ public sealed partial class ProcurementDataService
         if(rows.Count!=1) throw new BusinessRuleException("要修改的寻源记录不存在。","procurement.sourcing-record.missing");
         if(rows.Single()!=targetPlanId) throw new BusinessRuleException("不能把寻源记录移动到其他采购计划。","procurement.sourcing-record.cross-plan");
     }
+
+    private static Task LinkPlanSupplierAsync(
+        DatabaseSession db,uint planId,uint supplierId,long? staffId,string sourceCode,long now,CancellationToken token) =>
+        db.ExecuteAsync("""
+            INSERT INTO procurement_plan_suppliers(plan_id,supplier_id,source_code,created_by,created_at)
+            VALUES(@PlanId,@SupplierId,@SourceCode,@StaffId,@Now)
+            ON DUPLICATE KEY UPDATE source_code=source_code
+            """,new{PlanId=planId,SupplierId=supplierId,SourceCode=sourceCode,StaffId=staffId,Now=now},cancellationToken:token);
 }

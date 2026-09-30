@@ -13,14 +13,20 @@ public sealed partial class ProcurementController
     [InternalPermission("wholesale.procurement.execute")]
     public async Task<IActionResult> CreatePlanSupplier(uint planId,[FromForm]CreateSupplierCommand command,CancellationToken token)
     {
+        if(!TryStaffId(out var staffId))return Forbid();
         try
         {
-            _=await procurement.GetPurchasePlanDetailAsync(planId,token);
-            await procurement.CreateSupplierAsync(command,token);
-            TempData["Success"]="供应商已加入档案，可用于当前计划询价。";
+            var supplierId=await procurement.CreatePlanSupplierAsync(planId,command,staffId,token);
+            const string message="供应商已保存并关联当前采购计划。";
+            if(WantsJson())return Json(new{ok=true,supplierId,message});
+            TempData["Success"]=message;
         }
-        catch(InvalidOperationException error){TempData["Error"]=error.Message;}
-        return PlanDetailsRedirect(planId);
+        catch(InvalidOperationException error)
+        {
+            if(WantsJson())return UnprocessableEntity(new{ok=false,message=error.Message});
+            TempData["Error"]=error.Message;
+        }
+        return RedirectToAction(nameof(Details),null,new{planId},"sourcing");
     }
 
     [HttpPost("plans/{planId:long}/inquiries")]

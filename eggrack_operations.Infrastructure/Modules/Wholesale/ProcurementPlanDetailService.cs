@@ -95,6 +95,13 @@ public sealed partial class ProcurementDataService
               contact_name ContactName,contact_phone ContactPhone,website Website,contact_json ContactJson,status Status,
               FROM_UNIXTIME(updated_at) UpdatedAtUtc
             FROM procurement_suppliers ORDER BY supplier_name;
+            SELECT s.id Id,s.supplier_name Name,s.supplier_code Code,s.address Address,
+              s.legal_representative LegalRepresentative,s.contact_name ContactName,
+              s.contact_phone ContactPhone,s.website Website,s.contact_json ContactJson,s.status Status,
+              FROM_UNIXTIME(s.updated_at) UpdatedAtUtc
+            FROM procurement_plan_suppliers ps
+            JOIN procurement_suppliers s ON s.id=ps.supplier_id
+            WHERE ps.plan_id=@PlanId ORDER BY ps.created_at DESC,s.supplier_name;
             SELECT q.id Id,q.plan_item_id PlanItemId,q.supplier_id SupplierId,i.product_name ProductName,
               s.supplier_name SupplierName,q.offered_product_name OfferedProductName,q.length_cm LengthCm,
               q.width_cm WidthCm,q.height_cm HeightCm,q.weight_kg WeightKg,q.color Color,q.size_details SizeDetails,
@@ -113,6 +120,7 @@ public sealed partial class ProcurementDataService
             LEFT JOIN procurement_suppliers s ON s.id=x.supplier_id
             WHERE i.plan_id=@PlanId ORDER BY x.updated_at DESC,x.id DESC
             """,async rows=>new PurchasePlanSourcingData(
+                (await rows.ReadAsync<SupplierListItem>()).ToList(),
                 (await rows.ReadAsync<SupplierListItem>()).ToList(),
                 (await rows.ReadAsync<InquiryItem>()).ToList(),
                 (await rows.ReadAsync<SampleItem>()).ToList()),

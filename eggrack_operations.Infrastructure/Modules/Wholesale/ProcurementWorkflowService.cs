@@ -1,5 +1,6 @@
 using Eggrack.Operations.Application.Modules.Wholesale;
 using Eggrack.Operations.Common.Models;
+using Eggrack.Operations.Infrastructure.Database;
 using System.Data.Common;
 
 namespace Eggrack.Operations.Infrastructure.Modules.Wholesale;
@@ -17,19 +18,55 @@ public sealed partial class ProcurementDataService
 
     public async Task<long> CreateSupplierAsync(CreateSupplierCommand command,CancellationToken token=default)
     {
-        if(string.IsNullOrWhiteSpace(command.Name)) throw new InvalidOperationException("供应商名称不能为空。");
-        if(!string.IsNullOrWhiteSpace(command.Website)&&(!Uri.TryCreate(command.Website,UriKind.Absolute,out var website)||website.Scheme is not("http" or "https")))throw new InvalidOperationException("供应商网址必须是有效的 http 或 https 地址。");
+        ValidateSupplier(command);
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         try
         {
-            await db.ExecuteAsync("INSERT procurement_suppliers(supplier_name,supplier_code,address,legal_representative,contact_name,contact_phone,website,status,created_at,updated_at) VALUES(@Name,@Code,@Address,@LegalRepresentative,@ContactName,@ContactPhone,@Website,'active',@Now,@Now)",new{Name=command.Name.Trim(),Code=Clean(command.Code),Address=Clean(command.Address),LegalRepresentative=Clean(command.LegalRepresentative),ContactName=Clean(command.ContactName),ContactPhone=Clean(command.ContactPhone),Website=Clean(command.Website),Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
+            return await InsertSupplierAsync(db,command,DateTimeOffset.UtcNow.ToUnixTimeSeconds(),token);
         }
         catch(DbException error) when(error.Message.Contains("uk_procurement_supplier_code",StringComparison.OrdinalIgnoreCase)
           || error.Message.Contains("Duplicate entry",StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("供应商编码已存在。",error);
         }
-        return (await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
+    }
+
+    public async Task<uint> CreatePlanSupplierAsync(uint planId,CreateSupplierCommand command,long staffId,CancellationToken token=default)
+    {
+        ValidateSupplier(command);
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
+        await scopePolicy.EnsurePlanAsync(db,planId,token);
+        try
+        {
+            return await db.ExecuteInTransactionAsync<uint>(async transactionToken=>
+            {
+                var status=(await db.QueryAsync<byte>("SELECT status FROM purchase_plans WHERE id=@PlanId FOR UPDATE",new{PlanId=planId},cancellationToken:transactionToken)).SingleOrDefault();
+                if(status is not(1 or 2 or 7))throw new BusinessRuleException("采购计划当前状态不能新增供应商。","procurement.supplier.plan-state");
+                var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                var supplierId=await InsertSupplierAsync(db,command,now,transactionToken);
+                await LinkPlanSupplierAsync(db,planId,supplierId,staffId,"created",now,transactionToken);
+                await AddWorkflowEventAsync(db,planId,"supplier.linked",status,status,"supplier",supplierId,command.Name,staffId,now,transactionToken);
+                return supplierId;
+            },cancellationToken:token);
+        }
+        catch(DbException error) when(error.Message.Contains("uk_procurement_supplier_code",StringComparison.OrdinalIgnoreCase)
+          || error.Message.Contains("Duplicate entry",StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("供应商编码已存在。",error);
+        }
+    }
+
+    private static void ValidateSupplier(CreateSupplierCommand command)
+    {
+        if(string.IsNullOrWhiteSpace(command.Name))throw new InvalidOperationException("供应商名称不能为空。");
+        if(!string.IsNullOrWhiteSpace(command.Website)&&(!Uri.TryCreate(command.Website,UriKind.Absolute,out var website)||website.Scheme is not("http" or "https")))
+            throw new InvalidOperationException("供应商网址必须是有效的 http 或 https 地址。");
+    }
+
+    private static async Task<uint> InsertSupplierAsync(DatabaseSession db,CreateSupplierCommand command,long now,CancellationToken token)
+    {
+        await db.ExecuteAsync("INSERT procurement_suppliers(supplier_name,supplier_code,address,legal_representative,contact_name,contact_phone,website,status,created_at,updated_at) VALUES(@Name,@Code,@Address,@LegalRepresentative,@ContactName,@ContactPhone,@Website,'active',@Now,@Now)",new{Name=command.Name.Trim(),Code=Clean(command.Code),Address=Clean(command.Address),LegalRepresentative=Clean(command.LegalRepresentative),ContactName=Clean(command.ContactName),ContactPhone=Clean(command.ContactPhone),Website=Clean(command.Website),Now=now},cancellationToken:token);
+        return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
 
     public async Task<long> RecordInquiryAsync(RecordInquiryCommand command,CancellationToken token=default)
@@ -37,7 +74,9 @@ public sealed partial class ProcurementDataService
         if(command.UnitPriceCny<0||command.Moq<0||command.LeadDays<0) throw new InvalidOperationException("询价数据不能为负数。");
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);
-        await EnsureSourcingEditableAsync(db,command.PlanItemId,token);
+        var planId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);
+        var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await LinkPlanSupplierAsync(db,planId,command.SupplierId,null,"inquiry",now,token);
         await db.ExecuteAsync("INSERT procurement_inquiries(plan_item_id,supplier_id,unit_price_cny,moq,lead_days,valid_until,terms,created_at) VALUES(@PlanItemId,@SupplierId,@UnitPriceCny,@Moq,@LeadDays,@ValidUntil,@Terms,@Now)",new{command.PlanItemId,command.SupplierId,command.UnitPriceCny,command.Moq,command.LeadDays,ValidUntil=command.ValidUntil?.ToString("yyyy-MM-dd"),command.Terms,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
         return (await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
@@ -47,7 +86,9 @@ public sealed partial class ProcurementDataService
         if(command.CostCny<0) throw new InvalidOperationException("样品成本不能为负数。");
         await using var db=await databases.OpenMySqlAsync(DatabaseName,token);
         await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);
-        await EnsureSourcingEditableAsync(db,command.PlanItemId,token);
+        var planId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);
+        var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if(command.SupplierId.HasValue)await LinkPlanSupplierAsync(db,planId,command.SupplierId.Value,null,"sample",now,token);
         await db.ExecuteAsync("INSERT procurement_samples(plan_item_id,supplier_id,status,cost_cny,tracking_number,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Status,@CostCny,@TrackingNumber,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=DateTimeOffset.UtcNow.ToUnixTimeSeconds()},cancellationToken:token);
         return (await db.QueryAsync<long>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
@@ -140,7 +181,7 @@ public sealed partial class ProcurementDataService
     public async Task<uint> SaveCandidateAsync(SaveCandidateProductCommand command,CancellationToken token=default)
     {
         if(string.IsNullOrWhiteSpace(command.ProductName)) throw new InvalidOperationException("候选产品名称不能为空。");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_candidate_products",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_candidate_products",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();if(command.SupplierId.HasValue)await LinkPlanSupplierAsync(db,editablePlanId,command.SupplierId.Value,null,"candidate",now,token);
         if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_candidate_products SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,product_name=@ProductName,reference_url=@ReferenceUrl,specification_json=@SpecificationJson,status=@Status,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,ProductName=command.ProductName.Trim(),command.ReferenceUrl,command.SpecificationJson,command.Status,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("候选产品不存在。");return command.Id.Value;}
         await db.ExecuteAsync("INSERT procurement_candidate_products(plan_item_id,supplier_id,product_name,reference_url,specification_json,status,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@ProductName,@ReferenceUrl,@SpecificationJson,@Status,@Now,@Now)",new{command.PlanItemId,command.SupplierId,ProductName=command.ProductName.Trim(),command.ReferenceUrl,command.SpecificationJson,command.Status,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
@@ -148,7 +189,7 @@ public sealed partial class ProcurementDataService
     public async Task<uint> SaveInquiryAsync(SaveInquiryCommand command,CancellationToken token=default)
     {
         if(command.UnitPrice<0||command.Moq<0||command.LeadDays<0||command.LengthCm<0||command.WidthCm<0||command.HeightCm<0||command.WeightKg<0)throw new InvalidOperationException("询价数据和产品参数不能为负数。");if(command.Currency is not("CNY" or "USD"))throw new InvalidOperationException("币种仅支持 CNY 或 USD。");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_inquiries",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_inquiries",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();await LinkPlanSupplierAsync(db,editablePlanId,command.SupplierId,null,"inquiry",now,token);
         if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_inquiries SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,offered_product_name=@OfferedProductName,length_cm=@LengthCm,width_cm=@WidthCm,height_cm=@HeightCm,weight_kg=@WeightKg,color=@Color,size_details=@SizeDetails,parameter_details=@ParameterDetails,currency=@Currency,unit_price_cny=@UnitPrice,moq=@Moq,lead_days=@LeadDays,valid_until=@ValidUntil,terms=@Terms,status=@Status,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.OfferedProductName,command.LengthCm,command.WidthCm,command.HeightCm,command.WeightKg,command.Color,command.SizeDetails,command.ParameterDetails,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("询价记录不存在。");return command.Id.Value;}
         await db.ExecuteAsync("INSERT procurement_inquiries(plan_item_id,supplier_id,offered_product_name,length_cm,width_cm,height_cm,weight_kg,color,size_details,parameter_details,currency,unit_price_cny,moq,lead_days,valid_until,terms,status,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@OfferedProductName,@LengthCm,@WidthCm,@HeightCm,@WeightKg,@Color,@SizeDetails,@ParameterDetails,@Currency,@UnitPrice,@Moq,@LeadDays,@ValidUntil,@Terms,@Status,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.OfferedProductName,command.LengthCm,command.WidthCm,command.HeightCm,command.WeightKg,command.Color,command.SizeDetails,command.ParameterDetails,command.Currency,command.UnitPrice,command.Moq,command.LeadDays,command.ValidUntil,command.Terms,command.Status,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
@@ -156,7 +197,7 @@ public sealed partial class ProcurementDataService
     public async Task<uint> SaveSampleAsync(SaveSampleCommand command,CancellationToken token=default)
     {
         if(command.Quantity<=0||command.CostCny<0)throw new InvalidOperationException("样品数量必须大于零，费用不能为负数。");
-        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_samples",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        await using var db=await databases.OpenMySqlAsync(DatabaseName,token);await scopePolicy.EnsurePlanItemAsync(db,command.PlanItemId,token);var editablePlanId=await EnsureSourcingEditableAsync(db,command.PlanItemId,token);if(command.Id.HasValue)await EnsureRecordPlanAsync(db,"procurement_samples",command.Id.Value,editablePlanId,token);var now=DateTimeOffset.UtcNow.ToUnixTimeSeconds();if(command.SupplierId.HasValue)await LinkPlanSupplierAsync(db,editablePlanId,command.SupplierId.Value,null,"sample",now,token);
         if(command.Id.HasValue){var changed=await db.ExecuteAsync("UPDATE procurement_samples SET plan_item_id=@PlanItemId,supplier_id=@SupplierId,quantity=@Quantity,status=@Status,cost_cny=@CostCny,tracking_number=@TrackingNumber,notes=@Notes,updated_at=@Now WHERE id=@Id",new{command.Id,command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);if(changed!=1)throw new InvalidOperationException("样品记录不存在。");return command.Id.Value;}
         await db.ExecuteAsync("INSERT procurement_samples(plan_item_id,supplier_id,quantity,status,cost_cny,tracking_number,notes,created_at,updated_at) VALUES(@PlanItemId,@SupplierId,@Quantity,@Status,@CostCny,@TrackingNumber,@Notes,@Now,@Now)",new{command.PlanItemId,command.SupplierId,command.Quantity,command.Status,command.CostCny,command.TrackingNumber,command.Notes,Now=now},cancellationToken:token);return(await db.QueryAsync<uint>("SELECT LAST_INSERT_ID()",cancellationToken:token)).Single();
     }
