@@ -20,9 +20,16 @@ public sealed partial class ProcurementController(ProcurementDataService procure
     public IActionResult Index() => RedirectToAction(nameof(WholesaleOverview));
 
     [HttpGet("requests")]
-    public async Task<IActionResult> PurchaseRequests(CancellationToken token) =>
-        View("Requests",new PurchaseRequestsPageViewModel(
-            await procurement.GetPurchaseRequestsAsync(null,token)));
+    public async Task<IActionResult> PurchaseRequests(CancellationToken token)
+    {
+        var requestsTask=procurement.GetPurchaseRequestsAsync(null,token);
+        var authorizationTask=currentStaff.LoadAsync(token);
+        await Task.WhenAll(requestsTask,authorizationTask);
+        var authorization=await authorizationTask;
+        var canCreatePlan=authorization is not null&&
+            permissionEvaluator.Evaluate(authorization,"wholesale.purchase-plan.create").Allowed;
+        return View("Requests",new PurchaseRequestsPageViewModel(await requestsTask,canCreatePlan));
+    }
 
     [HttpGet("overview")]
     public async Task<IActionResult> WholesaleOverview(CancellationToken token)
@@ -211,7 +218,7 @@ public sealed partial class ProcurementController(ProcurementDataService procure
         try
         {
             var id=await procurement.CreatePlanAsync(requestId,input,staffId,token);
-            return Json(new{ok=true,id});
+            return Json(new{ok=true,planId=id});
         }
         catch(InvalidOperationException error)
         {

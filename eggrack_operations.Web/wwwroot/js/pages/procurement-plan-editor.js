@@ -157,7 +157,13 @@
         const url = planId ? `/wholesale/procurement/plans/${planId}` : '/wholesale/procurement/plans';
         try {
             const result = await request(url, { method: 'POST', body: new FormData(form) });
-            const savedPlanId = planId || result.id;
+            const responsePlanId = typeof result === 'number' || typeof result === 'string'
+                ? result
+                : result?.planId ?? result?.PlanId ?? result?.id ?? result?.Id;
+            const savedPlanId = planId || responsePlanId;
+            if (!savedPlanId || !/^\d+$/.test(String(savedPlanId))) {
+                throw new Error('采购计划已保存，但服务器未返回有效的计划编号，请返回申请列表后进入计划。');
+            }
             notify(planId ? '采购计划已更新。' : '采购计划已创建。', 'success');
             window.location.href = `/wholesale/procurement/plans/${savedPlanId}/details`;
         } catch (error) {

@@ -16,12 +16,15 @@
   <select class="form-select request-sort" id="requestSort" data-sort aria-label="采购申请排序"><option value="updated-desc">最近更新</option><option value="updated-asc">最早更新</option><option value="customer">客户名称</option><option value="request">申请编号</option></select>
  </div>
 </div>
-<div class="ui-data-table"><table class="table table-hover mb-0"><thead><tr><th>申请</th><th>客户</th><th class="numeric">产品</th><th>版本</th><th>状态</th><th>负责人</th><th>更新时间</th><th aria-label="进入详情"></th></tr></thead><tbody data-rows>
+<div class="ui-data-table"><table class="table table-hover mb-0"><thead><tr><th>申请</th><th>客户</th><th class="numeric">产品</th><th>版本</th><th>状态</th><th>负责人</th><th>更新时间</th><th class="text-end">操作</th></tr></thead><tbody data-rows>
 @foreach(var item in Model.Requests)
 {
  var status=ProcurementUi.RequestStatus(item);
  var filterStatus=item.RequestStatus switch{2=>"purchasing",3=>"quoted",4=>"completed",_=>"submitted"};
  var detailUrl=Url.Action("RequestDetails","Procurement",new{area="Wholesale",requestId=item.Id});
+ var planUrl=item.HasPlan
+    ?Url.Action("Details","Procurement",new{area="Wholesale",planId=item.PlanId})
+    :Url.Action("CreatePlanPage","Procurement",new{area="Wholesale",requestId=item.Id});
  var versionOutdated=item.HasPlan&&item.PlannedVersionId!=item.CurrentVersionId;
  <tr data-row data-status="@filterStatus" data-version-outdated="@versionOutdated.ToString().ToLowerInvariant()" data-updated="@item.UpdatedAtUtc.Ticks" data-customer="@item.CustomerName" data-request="@item.RequestNumber" data-href="@detailUrl" tabindex="0" aria-label="查看申请 @item.RequestNumber">
   <td><a class="row-title" href="@detailUrl">@item.RequestNumber</a>@if(versionOutdated){<small class="cell-attention"><i class="bi bi-exclamation-circle"></i> 客户已提交新版本</small>}else{<small class="ui-cell-secondary">首次提交 @ProcurementUi.RelativeTime(item.CreatedAtUtc)</small>}</td>
@@ -31,7 +34,7 @@
   <td><span class="er-status er-status-@status.Tone"><i></i>@status.Text</span></td>
   <td>@(item.BuyerName??"—")</td>
   <td><time title="@item.UpdatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">@ProcurementUi.RelativeTime(item.UpdatedAtUtc)</time></td>
-  <td><i class="bi bi-chevron-right row-chevron" aria-hidden="true"></i></td>
+  <td class="text-end"><div class="request-row-actions">@if(item.HasPlan){<a class="btn btn-sm btn-outline-primary" href="@planUrl">进入计划</a>}else if(Model.CanCreatePlan){<a class="btn btn-sm btn-primary" href="@planUrl">创建计划</a>}else{<a class="request-detail-link" href="@detailUrl" aria-label="查看申请详情"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>}</div></td>
  </tr>
 }
 @if(Model.Requests.Count==0){<tr><td colspan="8">@await Component.InvokeAsync("EmptyState",new{title="暂无采购申请",description="客户提交申请后会显示在这里。",icon="bi-inbox"})</td></tr>}

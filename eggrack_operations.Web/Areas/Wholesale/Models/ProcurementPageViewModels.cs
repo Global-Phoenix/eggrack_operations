@@ -3,7 +3,8 @@ using Eggrack.Operations.Application.Modules.Wholesale;
 namespace eggrack_operations.Areas.Wholesale.Models;
 
 public sealed record PurchaseRequestsPageViewModel(
-    IReadOnlyList<PurchaseRequestSource> Requests);
+    IReadOnlyList<PurchaseRequestSource> Requests,
+    bool CanCreatePlan);
 
 public sealed record WholesaleOverviewPageViewModel(
     IReadOnlyList<PurchaseRequestSource> Requests,
