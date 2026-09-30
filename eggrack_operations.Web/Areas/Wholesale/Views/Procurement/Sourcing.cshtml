@@ -18,7 +18,7 @@
 
 <section class="ui-panel overflow-hidden">
  <div class="ui-toolbar">
-  <label class="ui-search"><i class="bi bi-search"></i><input class="form-control" type="search" data-plan-search placeholder="搜索计划编号、申请编号、客户、产品或采购人员"></label>
+  <label class="ui-toolbar-search"><i class="bi bi-search" aria-hidden="true"></i><input class="form-control" type="search" data-plan-search placeholder="搜索计划编号、申请编号、客户、产品或采购人员" aria-label="搜索采购计划"></label>
   <div class="status-filters" data-plan-filters>
    <button class="filter-pill active" type="button" data-status="">全部 <span>@Model.Plans.Count</span></button>
    <button class="filter-pill" type="button" data-status="active">采购中 <span>@active</span></button>
